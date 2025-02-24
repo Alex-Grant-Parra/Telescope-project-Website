@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Not Found</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 50px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 72px;
+            color: #e74c3c;
+        }
+        p {
+            font-size: 20px;
+            color: #555;
+        }
+        a {
+            font-size: 18px;
+            color: #3498db;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            background-color: #3498db;
+            color: white;
+        }
+        a:hover {
+            text-decoration: underline;
+            background-color: #2980b9;
+        }
+        .image-container {
+            margin-top: 50px;
+        }
+        img {
+            width: 80%; /* Make the image 80% of the page width */
+            max-width: 600px;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>404</h1>
+    <p>Oops! The page you're looking for could not be found.</p>
+    <p>Here's a photo of Bob the cat to make you feel better...</p>
+    <p><a href="{{ url_for('home.home') }}">Go back to the homepage</a></p>
+</div>
+
+<!-- Image displayed below the error message -->
+<div class="image-container">
+    <img src="https://www.petsfoto.com/wp-content/uploads/Cat82.jpg" alt="Bob the cat">
+</div>
+
+</body>
+</html>

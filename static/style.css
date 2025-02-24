@@ -1,0 +1,19 @@
+/* Basic button styles */
+.btn {
+    transition: all 0.3s ease;  /* Smooth transition effect */
+}
+
+/* Remove any background color change on hover */
+.btn-success,
+.btn-warning {
+    background-color: transparent !important;  /* Remove the background color */
+    color: white;  /* Keep the text white */
+}
+
+/* When hovering over buttons, only apply text color change or subtle effects */
+.btn-success:hover,
+.btn-warning:hover {
+    background-color: transparent !important;  /* Ensure no background color change */
+    color: white;  /* Keep text white */
+    transform: scale(1.05);  /* Slightly increase the size on hover */
+}
