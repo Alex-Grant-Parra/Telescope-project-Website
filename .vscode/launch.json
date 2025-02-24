@@ -1,0 +1,16 @@
+{
+    "name": "Python: Flask",
+    "type": "python",
+    "request": "launch",
+    "program": "${workspaceFolder}/Main/Server.py",
+    "env": {
+        "FLASK_APP": "Server",
+        "FLASK_ENV": "development"
+    },
+    "args": [
+        "run",
+        "--no-debugger",
+        "--no-reload"
+    ],
+    "jinja": true
+}

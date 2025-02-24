@@ -1,0 +1,26 @@
+Garlicgiraffe licence
+
+Version 1.0
+
+This software and any associated files ("the Software") are provided under the following terms and conditions:
+
+No Warranty
+The Software is provided "as is," without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement. In no event shall the author be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the Software or the use or other dealings in the Software.
+
+No Ownership or Patent Rights
+You may not claim ownership of, patent, or otherwise assert exclusive rights over the Software or any derivative works based on it.
+
+Attribution Requirement
+If you use, distribute, or modify the Software, you must provide proper credit to the original author. The credit must be reasonably visible in documentation, UI, or any distributed form of the Software.
+
+No Commercial Use Without Permission
+Commercial use of the Software is not permitted unless expressly authorized through a signed contract with the author.
+
+Modification of Terms
+The author reserves the right to modify this license at any time. Any continued use of the Software after a license modification constitutes acceptance of the new terms.
+
+Final Authority in Disputes
+The author retains the final authority in resolving any disputes or ambiguities regarding this license and its application.
+
+By using the Software, you agree to the terms outlined in this license.
+
