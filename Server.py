@@ -1,6 +1,6 @@
 from flask import Flask, redirect, url_for
 from flask_login import LoginManager
-from flask_mail import Mail, Message
+from flask_mail import Mail
 import os
 from db import db  # Import the db instance from db.py
 
