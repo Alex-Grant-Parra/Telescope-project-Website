@@ -3,16 +3,17 @@ from flask_login import LoginManager
 from flask_mail import Mail
 import os
 from db import db  # Import the db instance from db.py
+import importlib
+import os
 
 # Initialize Flask app
 app = Flask(__name__)
 
+# Load configurations
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY') 
-
-# Set the path to the database relative to the project folder
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))  # Get the base directory of the current script
-DATABASE_PATH = os.path.join(BASE_DIR, 'Data.db')  # Path to Data.db in the same folder
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{DATABASE_PATH}"  # Set the SQLAlchemy URI
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DATABASE_PATH = os.path.join(BASE_DIR, 'Data.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{DATABASE_PATH}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = os.getenv('SQLALCHEMY_TRACK_MODIFICATIONS') == 'True'
 app.config['ENCRYPTION_KEY'] = os.getenv('ENCRYPTION_KEY')
 
@@ -25,24 +26,32 @@ app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = app.config['MAIL_USERNAME']
 
 # Initialize Flask extensions
-db.init_app(app)  # Initialize db with app
-mail = Mail(app)  # Initialize Flask-Mail
+db.init_app(app)
+mail = Mail(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 
-# Import routes
-from controllers.auth import auth_bp
-from controllers.admin import admin_bp
-from controllers.home import home_bp
-from controllers.about import about_bp 
-from controllers.error import error_bp
+# Path to the controllers folder
+controllers_dir = os.path.join(os.path.dirname(__file__), 'controllers')
 
-# Register blueprints
-app.register_blueprint(auth_bp)
-app.register_blueprint(admin_bp)
-app.register_blueprint(home_bp)
-app.register_blueprint(about_bp)
-app.register_blueprint(error_bp)
+# Function to dynamically import and register blueprints
+def register_blueprints():
+    for filename in os.listdir(controllers_dir):
+        if filename.endswith('.py') and filename != '__init__.py':
+            # Generate the blueprint module name
+            module_name = f"controllers.{filename[:-3]}"  # Remove ".py" extension
+            # Import the module dynamically
+            module = importlib.import_module(module_name)
+            
+            # Get the blueprint object dynamically using '_bp' suffix
+            blueprint = getattr(module, f"{filename[:-3]}_bp", None)
+            
+            # Register the blueprint if it exists
+            if blueprint:
+                app.register_blueprint(blueprint)
+
+# Call the function to register all blueprints
+register_blueprints()
 
 # User loader for Flask-Login
 from models.user import User
