@@ -18,7 +18,7 @@ def login():
             session['user_id'] = user.id  # Store user ID in session
             # Generate and send the 2FA code
             totp_code = user.generate_totp_code()
-            print(f"TOTP code sent: {totp_code}")  # Debug statement
+            # print(f"TOTP code sent: {totp_code}")  # Debug statement
             msg = Message("Your 2FA Code", recipients=[user.get_email()])
             msg.body = f"Your 2FA code is {totp_code}. Please enter this code to complete your login."
             current_app.extensions['mail'].send(msg)

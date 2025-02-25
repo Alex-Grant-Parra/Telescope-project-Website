@@ -1,19 +1,39 @@
-/* Basic button styles */
+/* Smooth transition effect for all buttons */
 .btn {
     transition: all 0.3s ease;  /* Smooth transition effect */
 }
 
 /* Remove any background color change on hover */
-.btn-success,
-.btn-warning {
+.nav-link.btn-success,
+.nav-link.btn-warning {
     background-color: transparent !important;  /* Remove the background color */
-    color: white;  /* Keep the text white */
+    color: white !important;  /* Keep the text white */
 }
 
 /* When hovering over buttons, only apply text color change or subtle effects */
-.btn-success:hover,
-.btn-warning:hover {
+.nav-link.btn-success:hover,
+.nav-link.btn-warning:hover {
     background-color: transparent !important;  /* Ensure no background color change */
-    color: white;  /* Keep text white */
+    color: white !important;  /* Keep text white */
     transform: scale(1.05);  /* Slightly increase the size on hover */
+}
+
+html, body {
+    height: 100%;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.content {
+    flex: 1; /* Pushes footer down when content is short */
+}
+
+.footer {
+    width: 100%;
+    background: #343a40; /* Dark Bootstrap background */
+    color: white;
+    text-align: center;
+    padding: 1rem 0;
+    margin-top: auto;  /* Ensures footer sticks to bottom */
 }

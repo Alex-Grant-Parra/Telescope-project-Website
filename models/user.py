@@ -1,11 +1,11 @@
 import os
-import jwt  # Ensure you have jwt installed
+import jwt
 import random
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 from db import db  # Import the db instance
 
-# Fetch the encryption key from environment variables (assuming it's set in Server.py)
+# Fetch the encryption key from environment variables
 encryption_key = os.getenv('ENCRYPTION_KEY').encode()  # Ensure it's in bytes format
 fernet = Fernet(encryption_key)  # Initialize Fernet with the key
 
@@ -14,9 +14,9 @@ class User(db.Model):
     username = db.Column(db.String(150), unique=True, nullable=False)
     email = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(150), nullable=False)
-    AccountType = db.Column(db.String(50), nullable=False)  # Ensure this matches your database column name
-    totp_secret = db.Column(db.String(16))  # Add this field for TOTP secret
-    current_2fa_code = db.Column(db.String(6))  # Add this field to store the current 2FA code
+    AccountType = db.Column(db.String(50), nullable=False)
+    totp_secret = db.Column(db.String(16))
+    current_2fa_code = db.Column(db.String(6))
 
     @property
     def is_admin(self):
@@ -37,7 +37,7 @@ class User(db.Model):
             os.getenv('FLASK_SECRET_KEY', 'default_secret_key'),  # Secret key for JWT (ensure it is in environment)
             algorithm='HS256'
         )
-        return reset_token  # Return the token directly, no need to decode
+        return reset_token
 
     # Verify the reset token
     @staticmethod

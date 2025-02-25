@@ -9,4 +9,4 @@ def page_not_found(e):
 
 @error_bp.app_errorhandler(500)
 def internal_error(e):
-    return render_template("500.html"), 500  # Customize the error page for 500 errors
+    return render_template("500.html"), 500
