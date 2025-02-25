@@ -9,8 +9,4 @@ def home():
 
 @home_bp.route("/interface")
 def interface():
-    return render_template("interface.html")  # Ensure you have interface.html
-
-@home_bp.route("/about")
-def about():
-    return render_template("about.html")  # Ensure you have about.html
+    return render_template("interface.html")

@@ -7,14 +7,13 @@ from db import db  # Import the db instance from db.py
 # Initialize Flask app
 app = Flask(__name__)
 
-# Manually load the environment variables for secret and encryption keys
-app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'default_secret_key')  # Default if the environment variable isn't set
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY') 
 
 # Set the path to the database relative to the project folder
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))  # Get the base directory of the current script
 DATABASE_PATH = os.path.join(BASE_DIR, 'Data.db')  # Path to Data.db in the same folder
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{DATABASE_PATH}"  # Set the SQLAlchemy URI
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = os.getenv('SQLALCHEMY_TRACK_MODIFICATIONS', 'False') == 'True'  # Ensuring boolean conversion for 'True' or 'False'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = os.getenv('SQLALCHEMY_TRACK_MODIFICATIONS') == 'True'
 app.config['ENCRYPTION_KEY'] = os.getenv('ENCRYPTION_KEY')
 
 # Email Configuration (Using Gmail SMTP)
@@ -35,12 +34,14 @@ login_manager.init_app(app)
 from controllers.auth import auth_bp
 from controllers.admin import admin_bp
 from controllers.home import home_bp
+from controllers.about import about_bp 
 from controllers.error import error_bp
 
 # Register blueprints
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(home_bp)
+app.register_blueprint(about_bp)
 app.register_blueprint(error_bp)
 
 # User loader for Flask-Login
@@ -51,7 +52,7 @@ def load_user(user_id):
 
 # Ensure tables exist in the database
 with app.app_context():
-    db.create_all()  # Ensures all tables are created or checked for existence
+    db.create_all() 
 
 # Takes to homepage when just entering IP
 @app.route("/")
