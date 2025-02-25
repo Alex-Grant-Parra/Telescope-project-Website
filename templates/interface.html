@@ -9,22 +9,24 @@
         body {
             font-family: Arial, sans-serif;
             padding: 20px;
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #f4f4f4;
         }
 
         /* Common panel styles */
         .draggable-panel {
             position: absolute;
             width: 300px;
-            height: 200px;
+            height: 400px;
             border: 1px solid #ccc;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
             z-index: 1000;
-
-            /* Prevent text selection while dragging */
             user-select: none;
-
-            /* Rounded corners */
             border-radius: 10px;
+            background-color: white;
+            padding: 10px;
         }
 
         /* Title bar where users will drag */
@@ -33,6 +35,7 @@
             padding: 10px;
             cursor: move;
             text-align: center;
+            background-color: #FF5733;
             border-top-left-radius: 10px;
             border-top-right-radius: 10px;
         }
@@ -42,40 +45,58 @@
             padding: 10px;
             height: calc(100% - 40px);
             overflow-y: auto;
-            border-bottom-left-radius: 10px;
-            border-bottom-right-radius: 10px;
         }
 
-        /* Button inside the panel */
+        /* Button styles */
         .panel-content button {
-            padding: 10px;
+            padding: 5px 10px;
             background-color: #4CAF50;
             color: white;
             border: none;
             cursor: pointer;
+            margin: 5px;
         }
 
-        /* Specific color styles for each panel */
-        #panel-camera { background-color: #FF5733; } /* Camera controls panel */
-        #panel-telescope { background-color: #33A1FF; } /* Telescope controls panel */
-        
+        /* Input box for step size */
+        .step-input {
+            padding: 5px;
+            width: 80px;
+            margin: 5px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        /* Row styles */
+        .control-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .control-label {
+            width: 150px;
+            cursor: help;
+        }
+
+        .control-value {
+            margin-right: 10px;
+        }
+
         /* Static, immovable main panel in the center */
         #panel-main {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 80%;  /* Take 80% of the screen width */
-            height: 75%; /* Increased height to 75% of the screen height */
+            width: 80%;
+            height: 75%;
             background-color: #333;
             color: white;
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            z-index: 999; /* Behind the draggable panels */
-        }
-
-        /* Specific padding for the main panel */
-        #panel-main {
+            z-index: 999;
             padding: 20px;
         }
     </style>
@@ -88,19 +109,50 @@
             <h4>Camera Controls</h4>
         </div>
         <div class="panel-content">
-            <p>Camera control options go here.</p>
-            <button onclick="alert('Camera control clicked!')">Test Camera</button>
-        </div>
-    </div>
+            <!-- Shutter Speed -->
+            <div class="control-row" title="Controls the time the camera sensor is exposed to light (in seconds).">
+                <span class="control-label">Shutter Speed</span>
+                <button onclick="changeValue('shutterSpeed', -1)">-</button>
+                <span class="control-value" id="shutterSpeedValue">1/1000</span>
+                <button onclick="changeValue('shutterSpeed', 1)">+</button>
+                <input type="number" class="step-input" id="shutterSpeedStep" value="1" onmouseover="this.select()" title="Shutter speed increment (e.g., change by 1/1000)">
+            </div>
 
-    <!-- Draggable Telescope Controls Panel -->
-    <div class="draggable-panel" id="panel-telescope">
-        <div class="panel-header" id="header-telescope">
-            <h4>Telescope Controls</h4>
-        </div>
-        <div class="panel-content">
-            <p>Telescope control options go here.</p>
-            <button onclick="alert('Telescope control clicked!')">Test Telescope</button>
+            <!-- ISO -->
+            <div class="control-row" title="Controls the sensitivity of the camera's sensor to light. Higher values give brighter images but introduce noise.">
+                <span class="control-label">ISO</span>
+                <button onclick="changeValue('iso', -1)">-</button>
+                <span class="control-value" id="isoValue">100</span>
+                <button onclick="changeValue('iso', 1)">+</button>
+                <input type="number" class="step-input" id="isoStep" value="100" onmouseover="this.select()" title="ISO increment (e.g., change by 100)">
+            </div>
+
+            <!-- Aperture -->
+            <div class="control-row" title="Controls the size of the camera's aperture. Larger apertures let in more light.">
+                <span class="control-label">Aperture</span>
+                <button onclick="changeValue('aperture', -1)">-</button>
+                <span class="control-value" id="apertureValue">2.8</span>
+                <button onclick="changeValue('aperture', 1)">+</button>
+                <input type="number" class="step-input" id="apertureStep" value="0.1" onmouseover="this.select()" title="Aperture increment (e.g., change by 0.1)">
+            </div>
+
+            <!-- White Balance -->
+            <div class="control-row" title="Adjusts the color balance of the image based on light temperature (Kelvin).">
+                <span class="control-label">White Balance</span>
+                <button onclick="changeValue('whiteBalance', -1)">-</button>
+                <span class="control-value" id="whiteBalanceValue">5000K</span>
+                <button onclick="changeValue('whiteBalance', 1)">+</button>
+                <input type="number" class="step-input" id="whiteBalanceStep" value="1000" onmouseover="this.select()" title="White balance increment (e.g., change by 1000K)">
+            </div>
+
+            <!-- Camera Focus -->
+            <div class="control-row" title="Adjusts the focus of the camera lens.">
+                <span class="control-label">Camera Focus</span>
+                <button onclick="changeValue('focus', -1)">-</button>
+                <span class="control-value" id="focusValue">10</span>
+                <button onclick="changeValue('focus', 1)">+</button>
+                <input type="number" class="step-input" id="focusStep" value="5" onmouseover="this.select()" title="Camera focus increment (e.g., change by 5)">
+            </div>
         </div>
     </div>
 
@@ -111,6 +163,109 @@
     </div>
 
     <script>
+        // These constants are passed from Flask to JavaScript via Jinja templating
+        window.ISO_MIN = {{ ISO_MIN }};
+        window.ISO_MAX = {{ ISO_MAX }};
+        window.SHUTTER_MIN = {{ SHUTTER_MIN }};
+        window.SHUTTER_MAX = {{ SHUTTER_MAX }};
+        window.APERTURE_MIN = {{ APERTURE_MIN }};
+        window.APERTURE_MAX = {{ APERTURE_MAX }};
+        window.WB_MIN = {{ WB_MIN }};
+        window.WB_MAX = {{ WB_MAX }};
+        window.FOCUS_MIN = {{ FOCUS_MIN }};
+        window.FOCUS_MAX = {{ FOCUS_MAX }};
+
+        // Initialize camera settings with default values
+        let cameraSettings = {
+            shutterSpeed: 1000, // 1/1000 sec
+            iso: 100,
+            aperture: 2.8,
+            whiteBalance: 5000, // 5000K
+            focus: 10
+        };
+
+        // Function to update the value for each camera setting
+        function changeValue(setting, delta) {
+            const step = parseFloat(document.getElementById(`${setting}Step`).value);
+
+            // Ensure step is a positive number
+            if (isNaN(step) || step <= 0) {
+                alert("Please enter a valid step size.");
+                return;
+            }
+
+            let newValue;
+
+            if (setting === "shutterSpeed") {
+                newValue = cameraSettings[setting] + (delta * step);
+                newValue = Math.round(newValue * 1000) / 1000; // Rounded for shutter speed
+            } else if (setting === "iso") {
+                newValue = cameraSettings[setting] + (delta * step);
+                newValue = Math.round(newValue); // ISO is an integer
+            } else if (setting === "aperture") {
+                newValue = cameraSettings[setting] + (delta * step);
+                newValue = Math.round(newValue * 10) / 10; // Aperture rounded to one decimal
+            } else if (setting === "whiteBalance") {
+                newValue = cameraSettings[setting] + (delta * step);
+                newValue = Math.round(newValue); // White Balance is an integer
+            } else if (setting === "focus") {
+                newValue = cameraSettings[setting] + (delta * step);
+                newValue = Math.round(newValue); // Focus is rounded to an integer
+            }
+
+            // Enforce ranges
+            if (setting === "iso" && (newValue < window.ISO_MIN || newValue > window.ISO_MAX)) {
+                alert(`ISO value must be between ${window.ISO_MIN} and ${window.ISO_MAX}`);
+                return;
+            }
+            if (setting === "shutterSpeed" && (newValue < window.SHUTTER_MIN || newValue > window.SHUTTER_MAX)) {
+                alert(`Shutter Speed value must be between ${window.SHUTTER_MIN} and ${window.SHUTTER_MAX}`);
+                return;
+            }
+            if (setting === "aperture" && (newValue < window.APERTURE_MIN || newValue > window.APERTURE_MAX)) {
+                alert(`Aperture value must be between ${window.APERTURE_MIN} and ${window.APERTURE_MAX}`);
+                return;
+            }
+            if (setting === "whiteBalance" && (newValue < window.WB_MIN || newValue > window.WB_MAX)) {
+                alert(`White Balance value must be between ${window.WB_MIN} and ${window.WB_MAX}`);
+                return;
+            }
+            if (setting === "focus" && (newValue < window.FOCUS_MIN || newValue > window.FOCUS_MAX)) {
+                alert(`Focus value must be between ${window.FOCUS_MIN} and ${window.FOCUS_MAX}`);
+                return;
+            }
+
+            // Update camera setting value and display
+            cameraSettings[setting] = newValue;
+            document.getElementById(`${setting}Value`).textContent = newValue;
+
+            if (setting === "shutterSpeed") {
+                document.getElementById(`${setting}Value`).textContent = `1/${Math.round(newValue)}`;
+            }
+
+            // Send the updated value to the Flask server via AJAX
+            updateCameraSetting(setting, newValue);
+        }
+
+        // Function to send updated values to Flask backend via AJAX
+        function updateCameraSetting(setting, newValue) {
+            fetch("/update_camera_setting", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    setting: setting,
+                    value: newValue,
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data.message);
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
         // JavaScript for making the panels draggable
         function makeDraggable(panelId, headerId) {
             var panel = document.getElementById(panelId);
@@ -118,27 +273,20 @@
             var offsetX, offsetY;
 
             header.onmousedown = function(e) {
-                // Store the initial mouse position
                 offsetX = e.clientX - panel.offsetLeft;
                 offsetY = e.clientY - panel.offsetTop;
 
-                // Add event listeners to track the mouse movement
                 document.onmousemove = function(e) {
                     var left = e.clientX - offsetX;
                     var top = e.clientY - offsetY;
-
-                    // Prevent the panel from going out of bounds
                     var maxLeft = window.innerWidth - panel.offsetWidth;
                     var maxTop = window.innerHeight - panel.offsetHeight;
                     left = Math.min(Math.max(left, 0), maxLeft);
                     top = Math.min(Math.max(top, 0), maxTop);
-
-                    // Move the panel
                     panel.style.left = left + 'px';
                     panel.style.top = top + 'px';
                 };
 
-                // Stop moving when the mouse button is released
                 document.onmouseup = function() {
                     document.onmousemove = null;
                     document.onmouseup = null;
@@ -148,7 +296,6 @@
 
         // Initialize draggable panels
         makeDraggable('panel-camera', 'header-camera');
-        makeDraggable('panel-telescope', 'header-telescope');
     </script>
 
 </body>
