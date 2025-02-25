@@ -1,14 +1,155 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interface - Telescope Control</title>
+    <style>
+        /* Basic page styles */
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
 
-{% block title %}Interface - Telescope Control{% endblock %}
+        /* Common panel styles */
+        .draggable-panel {
+            position: absolute;
+            width: 300px;
+            height: 200px;
+            border: 1px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
 
-{% block content %}
-<div class="container text-center mt-5">
-    <h1 class="display-4">Telescope Interface</h1>
-    <p class="lead">This page will contain telescope controls and live data.</p>
+            /* Prevent text selection while dragging */
+            user-select: none;
 
-    <div class="alert alert-info mt-4">
-        <strong>Work in Progress</strong> - The interface page is still being built.
+            /* Rounded corners */
+            border-radius: 10px;
+        }
+
+        /* Title bar where users will drag */
+        .panel-header {
+            color: white;
+            padding: 10px;
+            cursor: move;
+            text-align: center;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+        }
+
+        /* Content inside the panel */
+        .panel-content {
+            padding: 10px;
+            height: calc(100% - 40px);
+            overflow-y: auto;
+            border-bottom-left-radius: 10px;
+            border-bottom-right-radius: 10px;
+        }
+
+        /* Button inside the panel */
+        .panel-content button {
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        /* Specific color styles for each panel */
+        #panel-camera { background-color: #FF5733; } /* Camera controls panel */
+        #panel-telescope { background-color: #33A1FF; } /* Telescope controls panel */
+        
+        /* Static, immovable main panel in the center */
+        #panel-main {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;  /* Take 80% of the screen width */
+            height: 75%; /* Increased height to 75% of the screen height */
+            background-color: #333;
+            color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 999; /* Behind the draggable panels */
+        }
+
+        /* Specific padding for the main panel */
+        #panel-main {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Draggable Camera Controls Panel -->
+    <div class="draggable-panel" id="panel-camera">
+        <div class="panel-header" id="header-camera">
+            <h4>Camera Controls</h4>
+        </div>
+        <div class="panel-content">
+            <p>Camera control options go here.</p>
+            <button onclick="alert('Camera control clicked!')">Test Camera</button>
+        </div>
     </div>
-</div>
-{% endblock %}
+
+    <!-- Draggable Telescope Controls Panel -->
+    <div class="draggable-panel" id="panel-telescope">
+        <div class="panel-header" id="header-telescope">
+            <h4>Telescope Controls</h4>
+        </div>
+        <div class="panel-content">
+            <p>Telescope control options go here.</p>
+            <button onclick="alert('Telescope control clicked!')">Test Telescope</button>
+        </div>
+    </div>
+
+    <!-- Static Main Panel (Centered) -->
+    <div id="panel-main">
+        <h4>Main Panel</h4>
+        <p>This is the main panel. It stays in the center and cannot be moved. It spans about 80% of the screen width and 75% of the height, with equal space around it.</p>
+    </div>
+
+    <script>
+        // JavaScript for making the panels draggable
+        function makeDraggable(panelId, headerId) {
+            var panel = document.getElementById(panelId);
+            var header = document.getElementById(headerId);
+            var offsetX, offsetY;
+
+            header.onmousedown = function(e) {
+                // Store the initial mouse position
+                offsetX = e.clientX - panel.offsetLeft;
+                offsetY = e.clientY - panel.offsetTop;
+
+                // Add event listeners to track the mouse movement
+                document.onmousemove = function(e) {
+                    var left = e.clientX - offsetX;
+                    var top = e.clientY - offsetY;
+
+                    // Prevent the panel from going out of bounds
+                    var maxLeft = window.innerWidth - panel.offsetWidth;
+                    var maxTop = window.innerHeight - panel.offsetHeight;
+                    left = Math.min(Math.max(left, 0), maxLeft);
+                    top = Math.min(Math.max(top, 0), maxTop);
+
+                    // Move the panel
+                    panel.style.left = left + 'px';
+                    panel.style.top = top + 'px';
+                };
+
+                // Stop moving when the mouse button is released
+                document.onmouseup = function() {
+                    document.onmousemove = null;
+                    document.onmouseup = null;
+                };
+            };
+        }
+
+        // Initialize draggable panels
+        makeDraggable('panel-camera', 'header-camera');
+        makeDraggable('panel-telescope', 'header-telescope');
+    </script>
+
+</body>
+</html>
