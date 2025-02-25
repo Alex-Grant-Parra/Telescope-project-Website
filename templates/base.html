@@ -16,7 +16,7 @@
                 <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
                     <ul class="navbar-nav">
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('home.home') }}">Home</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('home.interface') }}">Interface</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('interface.interface') }}">Interface</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('about.about') }}">About</a></li>
                         {% if current_user.is_authenticated %}
                             <li class="nav-item"><a class="nav-link btn btn-danger text-white" href="{{ url_for('auth.logout') }}">Logout</a></li>

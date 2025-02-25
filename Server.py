@@ -34,7 +34,7 @@ login_manager.init_app(app)
 # Path to the controllers folder
 controllers_dir = os.path.join(os.path.dirname(__file__), 'controllers')
 
-# Function to dynamically import and register blueprints
+# Function to dynamically import and register blueprints (From the controllers folder)
 def register_blueprints():
     for filename in os.listdir(controllers_dir):
         if filename.endswith('.py') and filename != '__init__.py':

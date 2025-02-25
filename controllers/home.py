@@ -7,6 +7,3 @@ home_bp = Blueprint('home', __name__)
 def home():
     return render_template("home.html")
 
-@home_bp.route("/interface")
-def interface():
-    return render_template("interface.html")
