@@ -19,7 +19,7 @@
         .draggable-panel {
             position: absolute;
             width: 300px;
-            height: 400px;
+            height: 500px; /* Increased height to accommodate new input */
             border: 1px solid #ccc;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
             z-index: 1000;
@@ -153,6 +153,17 @@
                 <button onclick="changeValue('focus', 1)">+</button>
                 <input type="number" class="step-input" id="focusStep" value="5" onmouseover="this.select()" title="Camera focus increment (e.g., change by 5)">
             </div>
+
+            <!-- File Format -->
+            <div class="control-row" title="Select the file format for saving images.">
+                <span class="control-label">File Format</span>
+                <select id="fileFormat" onchange="changeFileFormat()">
+                    <option value="JPEG">JPEG</option>
+                    <option value="PNG">PNG</option>
+                    <option value="TIFF">TIFF</option>
+                    <option value="RAW">RAW</option>
+                </select>
+            </div>
         </div>
     </div>
 
@@ -163,7 +174,7 @@
     </div>
 
     <script>
-        // These constants are passed from Flask to JavaScript via Jinja templating
+        // Constants passed from Flask to JavaScript via Jinja templating
         window.ISO_MIN = {{ ISO_MIN }};
         window.ISO_MAX = {{ ISO_MAX }};
         window.SHUTTER_MIN = {{ SHUTTER_MIN }};
@@ -181,7 +192,8 @@
             iso: 100,
             aperture: 2.8,
             whiteBalance: 5000, // 5000K
-            focus: 10
+            focus: 10,
+            fileFormat: "JPEG" // Default file format
         };
 
         // Function to update the value for each camera setting
@@ -213,7 +225,7 @@
                 newValue = Math.round(newValue); // Focus is rounded to an integer
             }
 
-            // Enforce ranges
+            // Enforce ranges for each setting
             if (setting === "iso" && (newValue < window.ISO_MIN || newValue > window.ISO_MAX)) {
                 alert(`ISO value must be between ${window.ISO_MIN} and ${window.ISO_MAX}`);
                 return;
@@ -264,6 +276,15 @@
                 console.log(data.message);
             })
             .catch(error => console.error('Error:', error));
+        }
+
+        // Function to handle the file format change
+        function changeFileFormat() {
+            const selectedFormat = document.getElementById("fileFormat").value;
+            cameraSettings.fileFormat = selectedFormat;
+
+            // Send the updated file format to Flask backend via AJAX
+            updateCameraSetting('fileFormat', selectedFormat);
         }
 
         // JavaScript for making the panels draggable
