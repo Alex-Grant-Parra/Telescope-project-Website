@@ -43,6 +43,15 @@
             background-color: #FF5733;
             border-top-left-radius: 10px;
             border-top-right-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-header h4 {
+            margin: 0;
+            flex-grow: 1;
+            text-align: center;
         }
 
         /* Content inside the panel */
@@ -101,8 +110,38 @@
             color: white;
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            z-index: 999;
             padding: 20px;
+        }
+
+        .fullscreen-button, .minimize-button, .restore-button {
+            background-color: #FF5733;
+            color: white;
+            border: none;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        .fullscreen-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        .minimized {
+            height: 85px; /* Adjusted height to fully show the title and button */
+            overflow: hidden;
+        }
+        .fullscreen-mode {
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            transform: none;
+            border-radius: 0;
+            pointer-events: none; /* Allow interactions with other panels */
+        }
+        .fullscreen-mode .fullscreen-button {
+            pointer-events: auto; /* Enable interactions with the full-screen button */
         }
     </style>
 </head>
@@ -112,6 +151,7 @@
     <div class="draggable-panel" id="panel-camera">
         <div class="panel-header" id="header-camera">
             <h4>Camera Controls</h4>
+            <button class="minimize-button" onclick="toggleMinimize('panel-camera')">_</button>
         </div>
         <div class="panel-content">
             <!-- Shutter Speed -->
@@ -175,6 +215,9 @@
     <!-- Static Main Panel (Centered) -->
     <div id="panel-main">
         <h4>Main Panel</h4>
+        <button class="fullscreen-button" onclick="toggleFullScreen()">
+            <span id="fullscreen-icon">⛶</span>
+        </button>
         <p>This is the main panel. It stays in the center and cannot be moved. It spans about 80% of the screen width and 75% of the height, with equal space around it.</p>
     </div>
 
@@ -318,6 +361,34 @@
                     document.onmouseup = null;
                 };
             };
+        }
+
+        function toggleFullScreen() {
+            const panel = document.getElementById('panel-main');
+            const icon = document.getElementById('fullscreen-icon');
+            if (!document.fullscreenElement) {
+                panel.requestFullscreen().catch(err => {
+                    alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+                });
+                panel.classList.add('fullscreen-mode');
+                icon.textContent = '⛶'; // Contracted icon
+            } else {
+                document.exitFullscreen();
+                panel.classList.remove('fullscreen-mode');
+                icon.textContent = '⛶'; // Expanded icon
+            }
+        }
+
+        function toggleMinimize(panelId) {
+            const panel = document.getElementById(panelId);
+            const button = panel.querySelector('.minimize-button');
+            if (panel.classList.contains('minimized')) {
+                panel.classList.remove('minimized');
+                button.textContent = '_';
+            } else {
+                panel.classList.add('minimized');
+                button.textContent = '+';
+            }
         }
 
         // Initialize draggable panels
