@@ -3,402 +3,152 @@
 {% block title %}Interface - Telescope Control{% endblock %}
 
 {% block content %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interface - Telescope Control</title>
-    <style>
-        /* Basic page styles */
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            margin: 0;
-            height: 100vh;
-            overflow: hidden;
-            background-color: #f4f4f4;
-        }
-
-        /* Common panel styles */
-        .draggable-panel {
-            position: absolute;
-            width: 300px;
-            height: 500px; /* Increased height to accommodate new input */
-            border: 1px solid #ccc;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            z-index: 1000;
-            user-select: none;
-            border-radius: 10px;
-            background-color: white;
-            padding: 10px;
-        }
-
-        /* Title bar where users will drag */
-        .panel-header {
-            color: white;
-            padding: 10px;
-            cursor: move;
-            text-align: center;
-            background-color: #FF5733;
-            border-top-left-radius: 10px;
-            border-top-right-radius: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .panel-header h4 {
-            margin: 0;
-            flex-grow: 1;
-            text-align: center;
-        }
-
-        /* Content inside the panel */
-        .panel-content {
-            padding: 10px;
-            height: calc(100% - 40px);
-            overflow-y: auto;
-        }
-
-        /* Button styles */
-        .panel-content button {
-            padding: 5px 10px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-            margin: 5px;
-        }
-
-        /* Input box for step size */
-        .step-input {
-            padding: 5px;
-            width: 80px;
-            margin: 5px;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-            text-align: center;
-            cursor: pointer;
-        }
-
-        /* Row styles */
-        .control-row {
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .control-label {
-            width: 150px;
-            cursor: help;
-        }
-
-        .control-value {
-            margin-right: 10px;
-        }
-
-        /* Static, immovable main panel in the center */
-        #panel-main {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 80%;
-            height: 75%;
-            background-color: #333;
-            color: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            padding: 20px;
-        }
-
-        .fullscreen-button, .minimize-button, .restore-button {
-            background-color: #FF5733;
-            color: white;
-            border: none;
-            cursor: pointer;
-            padding: 5px 10px;
-            border-radius: 5px;
-            margin: 5px;
-        }
-        .fullscreen-button {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-        }
-        .minimized {
-            height: 85px; /* Adjusted height to fully show the title and button */
-            overflow: hidden;
-        }
-        .fullscreen-mode {
-            width: 100%;
-            height: 100%;
-            top: 0;
-            left: 0;
-            transform: none;
-            border-radius: 0;
-            pointer-events: none; /* Allow interactions with other panels */
-        }
-        .fullscreen-mode .fullscreen-button {
-            pointer-events: auto; /* Enable interactions with the full-screen button */
-        }
-    </style>
-</head>
-<body>
+<div class="container-fluid">
+    <!-- Main Panel -->
+    <div class="main-panel border rounded p-3 position-relative" id="mainPanel">
+        <button class="fullscreen-toggle btn btn-danger btn-sm position-absolute top-0 end-0 m-2" onclick="toggleFullscreen()">⛶</button>
+        <h2 class="text-center">Main Panel</h2>
+    </div>
 
     <!-- Draggable Camera Controls Panel -->
-    <div class="draggable-panel" id="panel-camera">
-        <div class="panel-header" id="header-camera">
-            <h4>Camera Controls</h4>
-            <button class="minimize-button" onclick="toggleMinimize('panel-camera')">_</button>
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="cameraPanel" style="top: 50px; left: 20px;">
+        <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Camera Controls</div>  <!-- non-selectable title -->
+        <div class="control-row d-flex justify-content-between my-2">
+            <span>Shutter Speed</span>
+            <button class="btn btn-sm btn-primary" onclick="changeShutterSpeed('down')">-</button>
+            <span id="shutterSpeedValue" ondblclick="editShutterSpeed()">1/32</span>
+            <button class="btn btn-sm btn-primary" onclick="changeShutterSpeed('up')">+</button>
         </div>
-        <div class="panel-content">
-            <!-- Shutter Speed -->
-            <div class="control-row" title="Controls the time the camera sensor is exposed to light (in seconds).">
-                <span class="control-label">Shutter Speed</span>
-                <button onclick="changeValue('shutterSpeed', -1)">-</button>
-                <span class="control-value" id="shutterSpeedValue">1/1000</span>
-                <button onclick="changeValue('shutterSpeed', 1)">+</button>
-                <input type="number" class="step-input" id="shutterSpeedStep" value="1" onmouseover="this.select()" title="Shutter speed increment (e.g., change by 1/1000)">
-            </div>
-
-            <!-- ISO -->
-            <div class="control-row" title="Controls the sensitivity of the camera's sensor to light. Higher values give brighter images but introduce noise.">
-                <span class="control-label">ISO</span>
-                <button onclick="changeValue('iso', -1)">-</button>
-                <span class="control-value" id="isoValue">100</span>
-                <button onclick="changeValue('iso', 1)">+</button>
-                <input type="number" class="step-input" id="isoStep" value="100" onmouseover="this.select()" title="ISO increment (e.g., change by 100)">
-            </div>
-
-            <!-- Aperture -->
-            <div class="control-row" title="Controls the size of the camera's aperture. Larger apertures let in more light.">
-                <span class="control-label">Aperture</span>
-                <button onclick="changeValue('aperture', -1)">-</button>
-                <span class="control-value" id="apertureValue">2.8</span>
-                <button onclick="changeValue('aperture', 1)">+</button>
-                <input type="number" class="step-input" id="apertureStep" value="0.1" onmouseover="this.select()" title="Aperture increment (e.g., change by 0.1)">
-            </div>
-
-            <!-- White Balance -->
-            <div class="control-row" title="Adjusts the color balance of the image based on light temperature (Kelvin).">
-                <span class="control-label">White Balance</span>
-                <button onclick="changeValue('whiteBalance', -1)">-</button>
-                <span class="control-value" id="whiteBalanceValue">5000K</span>
-                <button onclick="changeValue('whiteBalance', 1)">+</button>
-                <input type="number" class="step-input" id="whiteBalanceStep" value="1000" onmouseover="this.select()" title="White balance increment (e.g., change by 1000K)">
-            </div>
-
-            <!-- Camera Focus -->
-            <div class="control-row" title="Adjusts the focus of the camera lens.">
-                <span class="control-label">Camera Focus</span>
-                <button onclick="changeValue('focus', -1)">-</button>
-                <span class="control-value" id="focusValue">10</span>
-                <button onclick="changeValue('focus', 1)">+</button>
-                <input type="number" class="step-input" id="focusStep" value="5" onmouseover="this.select()" title="Camera focus increment (e.g., change by 5)">
-            </div>
-
-            <!-- File Format -->
-            <div class="control-row" title="Select the file format for saving images.">
-                <span class="control-label">File Format</span>
-                <select id="fileFormat" onchange="changeFileFormat()">
-                    <option value="JPEG">JPEG</option>
-                    <option value="PNG">PNG</option>
-                    <option value="TIFF">TIFF</option>
-                    <option value="RAW">RAW</option>
-                </select>
-            </div>
+        <div class="control-row d-flex justify-content-between my-2">
+            <span>ISO</span>
+            <button class="btn btn-sm btn-primary" onclick="changeSetting('iso', -100)">-</button>
+            <span id="isoValue">100</span>
+            <button class="btn btn-sm btn-primary" onclick="changeSetting('iso', 100)">+</button>
+        </div>
+        <div class="control-row d-flex justify-content-between my-2">
+            <span>Aperture</span>
+            <button class="btn btn-sm btn-primary" onclick="changeSetting('aperture', -1)">-</button>
+            <span id="apertureValue">f/2.8</span>
+            <button class="btn btn-sm btn-primary" onclick="changeSetting('aperture', 1)">+</button>
+        </div>
+        <div class="control-row my-2">
+            <label for="whiteBalance">White Balance</label>
+            <select class="form-select" id="whiteBalance" onchange="updateSetting()">
+                <option>Auto</option>
+                <option>Daylight</option>
+                <option>Cloudy</option>
+                <option>Tungsten</option>
+                <option>Fluorescent</option>
+            </select>
+        </div>
+        <div class="control-row my-2">
+            <label for="photoFormat">Photo Format</label>
+            <select class="form-select" id="photoFormat" onchange="updateSetting()">
+                <option>JPEG</option>
+                <option>RAW</option>
+            </select>
         </div>
     </div>
+</div>
 
-    <!-- Static Main Panel (Centered) -->
-    <div id="panel-main">
-        <h4>Main Panel</h4>
-        <button class="fullscreen-button" onclick="toggleFullScreen()">
-            <span id="fullscreen-icon">⛶</span>
-        </button>
-        <p>This is the main panel. It stays in the center and cannot be moved. It spans about 80% of the screen width and 75% of the height, with equal space around it.</p>
-    </div>
+<script>
+    // Toggle full screen mode
+    function toggleFullscreen() {
+        let panel = document.getElementById("mainPanel");
+        panel.classList.toggle("fullscreen");
+    }
 
-    <script>
-        // Constants passed from Flask to JavaScript via Jinja templating
-        window.ISO_MIN = {{ ISO_MIN }};
-        window.ISO_MAX = {{ ISO_MAX }};
-        window.SHUTTER_MIN = {{ SHUTTER_MIN }};
-        window.SHUTTER_MAX = {{ SHUTTER_MAX }};
-        window.APERTURE_MIN = {{ APERTURE_MIN }};
-        window.APERTURE_MAX = {{ APERTURE_MAX }};
-        window.WB_MIN = {{ WB_MIN }};
-        window.WB_MAX = {{ WB_MAX }};
-        window.FOCUS_MIN = {{ FOCUS_MIN }};
-        window.FOCUS_MAX = {{ FOCUS_MAX }};
+    // Make the panels draggable
+    document.querySelectorAll(".draggable-panel").forEach(panel => {
+        let header = panel.querySelector(".panel-header");
+        header.addEventListener("mousedown", (event) => {
+            let shiftX = event.clientX - panel.getBoundingClientRect().left;
+            let shiftY = event.clientY - panel.getBoundingClientRect().top;
 
-        // Initialize camera settings with default values
-        let cameraSettings = {
-            shutterSpeed: 1000, // 1/1000 sec
-            iso: 100,
-            aperture: 2.8,
-            whiteBalance: 5000, // 5000K
-            focus: 10,
-            fileFormat: "JPEG" // Default file format
+            function moveAt(pageX, pageY) {
+                panel.style.left = pageX - shiftX + "px";
+                panel.style.top = pageY - shiftY + "px";
+            }
+
+            function onMouseMove(event) {
+                moveAt(event.pageX, event.pageY);
+            }
+
+            document.addEventListener("mousemove", onMouseMove);
+            document.addEventListener("mouseup", () => {
+                document.removeEventListener("mousemove", onMouseMove);
+            }, { once: true });
+        });
+    });
+
+    // Global variable for shutter speed base value
+    let shutterSpeed = 32;  // Start at 1/32
+
+    // Change shutter speed by + or -
+    function changeShutterSpeed(direction) {
+        if (direction === 'up') {
+            shutterSpeed /= 2;  // Double the denominator (faster shutter)
+        } else if (direction === 'down') {
+            shutterSpeed *= 2;  // Halve the denominator (slower shutter)
+        }
+
+        // If the value becomes smaller than 1 (e.g., 1/0.5), show it as an integer
+        let displayValue = shutterSpeed <= 1 ? Math.round(1 / shutterSpeed) : `1/${shutterSpeed}`;
+
+        // Display the new shutter speed
+        document.getElementById("shutterSpeedValue").innerText = displayValue;
+        updateSetting();  // Send updated setting to the server
+    }
+
+    // Edit shutter speed by double-clicking
+    function editShutterSpeed() {
+        let newValue = prompt("Enter shutter speed in fractions (e.g., 1/1000):", `1/${shutterSpeed}`);
+        if (newValue && newValue.startsWith("1/")) {
+            let fraction = parseInt(newValue.slice(2));
+            if (!isNaN(fraction)) {
+                shutterSpeed = 1 / fraction;
+                document.getElementById("shutterSpeedValue").innerText = `1/${fraction}`;
+                updateSetting();  // Send updated setting to the server
+            } else {
+                alert("Invalid value, please enter a valid fraction.");
+            }
+        }
+    }
+
+    // Change other settings
+    function changeSetting(setting, change) {
+        let element = document.getElementById(setting + "Value");
+        if (setting === "iso") {
+            let value = parseInt(element.innerText);
+            value += change;
+            element.innerText = value;
+        } else if (setting === "aperture") {
+            let value = parseFloat(element.innerText.slice(2)) + change;
+            element.innerText = `f/${value}`;
+        }
+
+        updateSetting();  // Send updated data to the backend
+    }
+
+    // Send updated settings to the server
+    function updateSetting() {
+        let data = {
+            shutterSpeed: document.getElementById("shutterSpeedValue").innerText,
+            iso: document.getElementById("isoValue").innerText,
+            aperture: document.getElementById("apertureValue").innerText,
+            whiteBalance: document.getElementById("whiteBalance").value,
+            photoFormat: document.getElementById("photoFormat").value
         };
 
-        // Function to update the value for each camera setting
-        function changeValue(setting, delta) {
-            console.log(`changeValue called with setting: ${setting}, delta: ${delta}`);
-            const step = parseFloat(document.getElementById(`${setting}Step`).value);
+        console.log("Sending Data:", data);  // Log the data before sending it
 
-            // Ensure step is a positive number
-            if (isNaN(step) || step <= 0) {
-                alert("Please enter a valid step size.");
-                return;
-            }
-
-            let newValue;
-
-            if (setting === "shutterSpeed") {
-                newValue = cameraSettings[setting] + (delta * step);
-                newValue = Math.round(newValue * 1000) / 1000; // Rounded for shutter speed
-            } else if (setting === "iso") {
-                newValue = cameraSettings[setting] + (delta * step);
-                newValue = Math.round(newValue); // ISO is an integer
-            } else if (setting === "aperture") {
-                newValue = cameraSettings[setting] + (delta * step);
-                newValue = Math.round(newValue * 10) / 10; // Aperture rounded to one decimal
-            } else if (setting === "whiteBalance") {
-                newValue = cameraSettings[setting] + (delta * step);
-                newValue = Math.round(newValue); // White Balance is an integer
-            } else if (setting === "focus") {
-                newValue = cameraSettings[setting] + (delta * step);
-                newValue = Math.round(newValue); // Focus is rounded to an integer
-            }
-
-            // Print the new value to the console regardless of range
-            console.log(`New value for ${setting}: ${newValue}`);
-
-            // Enforce ranges for each setting
-            if (setting === "iso" && (newValue < window.ISO_MIN || newValue > window.ISO_MAX)) {
-                alert(`ISO value must be between ${window.ISO_MIN} and ${window.ISO_MAX}`);
-                return;
-            }
-            if (setting === "shutterSpeed" && (newValue < window.SHUTTER_MIN || newValue > window.SHUTTER_MAX)) {
-                alert(`Shutter Speed value must be between ${window.SHUTTER_MIN} and ${window.SHUTTER_MAX}`);
-                return;
-            }
-            if (setting === "aperture" && (newValue < window.APERTURE_MIN || newValue > window.APERTURE_MAX)) {
-                alert(`Aperture value must be between ${window.APERTURE_MIN} and ${window.APERTURE_MAX}`);
-                return;
-            }
-            if (setting === "whiteBalance" && (newValue < window.WB_MIN || newValue > window.WB_MAX)) {
-                alert(`White Balance value must be between ${window.WB_MIN} and ${window.WB_MAX}`);
-                return;
-            }
-            if (setting === "focus" && (newValue < window.FOCUS_MIN || newValue > window.FOCUS_MAX)) {
-                alert(`Focus value must be between ${window.FOCUS_MIN} and ${window.FOCUS_MAX}`);
-                return;
-            }
-
-            // Update camera setting value and display
-            cameraSettings[setting] = newValue;
-            document.getElementById(`${setting}Value`).textContent = newValue;
-
-            if (setting === "shutterSpeed") {
-                document.getElementById(`${setting}Value`).textContent = `1/${Math.round(newValue)}`;
-            }
-
-            // Send the updated value to the Flask server via AJAX
-            updateCameraSetting(setting, newValue);
-        }
-
-        // Function to send updated values to Flask backend via AJAX
-        function updateCameraSetting(setting, newValue) {
-            fetch("/update_camera_setting", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    setting: setting,
-                    value: newValue,
-                }),
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log(data.message);
-            })
-            .catch(error => console.error('Error:', error));
-        }
-
-        // Function to handle the file format change
-        function changeFileFormat() {
-            const selectedFormat = document.getElementById("fileFormat").value;
-            cameraSettings.fileFormat = selectedFormat;
-
-            // Send the updated file format to Flask backend via AJAX
-            updateCameraSetting('fileFormat', selectedFormat);
-        }
-
-        // JavaScript for making the panels draggable
-        function makeDraggable(panelId, headerId) {
-            var panel = document.getElementById(panelId);
-            var header = document.getElementById(headerId);
-            var offsetX, offsetY;
-
-            header.onmousedown = function(e) {
-                offsetX = e.clientX - panel.offsetLeft;
-                offsetY = e.clientY - panel.offsetTop;
-
-                document.onmousemove = function(e) {
-                    var left = e.clientX - offsetX;
-                    var top = e.clientY - offsetY;
-                    var maxLeft = window.innerWidth - panel.offsetWidth;
-                    var maxTop = window.innerHeight - panel.offsetHeight;
-                    left = Math.min(Math.max(left, 0), maxLeft);
-                    top = Math.min(Math.max(top, 0), maxTop);
-                    panel.style.left = left + 'px';
-                    panel.style.top = top + 'px';
-                };
-
-                document.onmouseup = function() {
-                    document.onmousemove = null;
-                    document.onmouseup = null;
-                };
-            };
-        }
-
-        function toggleFullScreen() {
-            const panel = document.getElementById('panel-main');
-            const icon = document.getElementById('fullscreen-icon');
-            if (!document.fullscreenElement) {
-                panel.requestFullscreen().catch(err => {
-                    alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
-                });
-                panel.classList.add('fullscreen-mode');
-                icon.textContent = '⛶'; // Contracted icon
-            } else {
-                document.exitFullscreen();
-                panel.classList.remove('fullscreen-mode');
-                icon.textContent = '⛶'; // Expanded icon
-            }
-        }
-
-        function toggleMinimize(panelId) {
-            const panel = document.getElementById(panelId);
-            const button = panel.querySelector('.minimize-button');
-            if (panel.classList.contains('minimized')) {
-                panel.classList.remove('minimized');
-                button.textContent = '_';
-            } else {
-                panel.classList.add('minimized');
-                button.textContent = '+';
-            }
-        }
-
-        // Initialize draggable panels
-        makeDraggable('panel-camera', 'header-camera');
-    </script>
-
-</body>
-</html>
+        fetch("{{ url_for('interface.update_camera') }}", {
+            method: "POST",  // Ensure POST method
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        }).then(response => response.json())
+        .then(data => console.log("Response from server:", data))
+        .catch(error => console.error("Fetch error:", error));
+    }
+</script>
 {% endblock %}

@@ -5,6 +5,7 @@ from models.user import User
 from db import db
 from flask_mail import Message
 
+
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route("/login", methods=['GET', 'POST'])
