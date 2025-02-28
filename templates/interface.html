@@ -55,7 +55,13 @@
     // Toggle full screen mode
     function toggleFullscreen() {
         let panel = document.getElementById("mainPanel");
-        panel.classList.toggle("fullscreen");
+        if (!document.fullscreenElement) {
+            panel.requestFullscreen().catch(err => {
+                alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else {
+            document.exitFullscreen();
+        }
     }
 
     // Make the panels draggable
