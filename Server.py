@@ -4,10 +4,11 @@ from flask_mail import Mail
 import os
 from db import db  # Import the db instance from db.py
 import importlib
-import os
+from dotenv import load_dotenv
 
 # Initialize Flask app
 app = Flask(__name__)
+load_dotenv()
 
 # Load configurations
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY') 
@@ -38,26 +39,30 @@ controllers_dir = os.path.join(os.path.dirname(__file__), 'controllers')
 def register_blueprints():
     for filename in os.listdir(controllers_dir):
         if filename.endswith('.py') and filename != '__init__.py':
-            # Generate the blueprint module name
-            module_name = f"controllers.{filename[:-3]}"  # Remove ".py" extension
-            # Import the module dynamically
+            module_name = f"controllers.{filename[:-3]}"
             module = importlib.import_module(module_name)
-            
-            # Get the blueprint object dynamically using '_bp' suffix
             blueprint = getattr(module, f"{filename[:-3]}_bp", None)
             
-            # Register the blueprint if it exists
             if blueprint:
                 app.register_blueprint(blueprint)
+                print(f"Registered Blueprint: {blueprint.name}")  # Debugging output
+
 
 # Call the function to register all blueprints
 register_blueprints()
+
+# Print all registered routes for debugging
+print("\nRegistered Routes:")
+for rule in app.url_map.iter_rules():
+    print(f"{rule} -> {rule.endpoint}")
+print("")
 
 # User loader for Flask-Login
 from models.user import User
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    # Updated to use db.session.get to avoid deprecation warning in SQLAlchemy 2.0
+    return db.session.get(User, int(user_id))
 
 # Ensure tables exist in the database
 with app.app_context():
