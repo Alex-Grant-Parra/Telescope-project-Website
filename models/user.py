@@ -4,9 +4,16 @@ import random
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 from db import db  # Import the db instance
+from dotenv import load_dotenv  # Import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Fetch the encryption key from environment variables
-encryption_key = os.getenv('ENCRYPTION_KEY').encode()  # Ensure it's in bytes format
+encryption_key = os.getenv('ENCRYPTION_KEY')
+if encryption_key is None:
+    raise ValueError("ENCRYPTION_KEY environment variable is not set")
+encryption_key = encryption_key.encode()  # Ensure it's in bytes format
 fernet = Fernet(encryption_key)  # Initialize Fernet with the key
 
 class User(db.Model):
