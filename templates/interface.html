@@ -246,6 +246,7 @@
 
         // Function to update the value for each camera setting
         function changeValue(setting, delta) {
+            console.log(`changeValue called with setting: ${setting}, delta: ${delta}`);
             const step = parseFloat(document.getElementById(`${setting}Step`).value);
 
             // Ensure step is a positive number
@@ -272,6 +273,9 @@
                 newValue = cameraSettings[setting] + (delta * step);
                 newValue = Math.round(newValue); // Focus is rounded to an integer
             }
+
+            // Print the new value to the console regardless of range
+            console.log(`New value for ${setting}: ${newValue}`);
 
             // Enforce ranges for each setting
             if (setting === "iso" && (newValue < window.ISO_MIN || newValue > window.ISO_MAX)) {
