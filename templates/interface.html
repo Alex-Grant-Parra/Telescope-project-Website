@@ -49,6 +49,16 @@
             </select>
         </div>
     </div>
+
+    <!-- Draggable Telescope Controls Panel -->
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="telescopePanel" style="top: 300px; left: 20px;">
+        <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Telescope Controls</div>  <!-- non-selectable title -->
+        <div class="control-row my-2">
+            <label for="searchObject">Search Object</label>
+            <input type="text" class="form-control" id="searchObject" placeholder="Enter HD, NGC, or IC number">
+            <button class="btn btn-primary mt-2" onclick="searchObject()">Search</button>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -155,6 +165,23 @@
         }).then(response => response.json())
         .then(data => console.log("Response from server:", data))
         .catch(error => console.error("Fetch error:", error));
+    }
+
+    // Function to search for an object
+    function searchObject() {
+        let searchValue = document.getElementById("searchObject").value;
+        if (searchValue) {
+            console.log("Searching for object:", searchValue);
+            fetch("{{ url_for('interface.search_object') }}", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ searchValue: searchValue })
+            }).then(response => response.json())
+            .then(data => console.log("Response from server:", data))
+            .catch(error => console.error("Fetch error:", error));
+        } else {
+            alert("Please enter a valid HD, NGC, or IC number.");
+        }
     }
 </script>
 {% endblock %}
