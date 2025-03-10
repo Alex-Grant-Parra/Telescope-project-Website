@@ -76,7 +76,8 @@ class IndexTable(BaseTable):
     @staticmethod
     def query_by_name(name):
         print(f"Querying IndexTable for name: {name}")
-        result = db.session.query(IndexTable).filter_by(name=name).first()
+        
+        result = db.session.query(IndexTable).filter_by(Name=name).first()
         if result:
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
             return result_data
@@ -92,7 +93,8 @@ class NGCtable(BaseTable):
     @staticmethod
     def query_by_name(name):
         print(f"Querying NGCtable for name: {name}")
-        result = db.session.query(NGCtable).filter_by(name=name).first()
+        
+        result = db.session.query(NGCtable).filter_by(Name=name).first()
         if result:
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
             return result_data

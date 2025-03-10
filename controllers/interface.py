@@ -47,8 +47,9 @@ def search_object():
         print(f"Error during search: {e}")
         return jsonify({"status": "error", "message": "Invalid search format"})
 
+    # If result is found, process the result and return as JSON
     if result:
-        result_data = {column.name: getattr(result, column.name) for column in result.__table__.columns}
+        result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
         print(f"Query result: {result_data}")
         return jsonify({"status": "success", "data": result_data})
     else:
