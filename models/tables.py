@@ -62,6 +62,8 @@ class HDSTARtable(BaseTable):
         result = db.session.query(HDSTARtable).filter_by(Name=name).first()
         if result:
             # Use get_all_fields method to get all columns dynamically
+            if isinstance(result, dict):  # If it's a dictionary, return it directly
+                return result
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
             return result_data
         return None
@@ -71,14 +73,15 @@ class HDSTARtable(BaseTable):
 class IndexTable(BaseTable):
     __tablename__ = 'IndexTable'
 
-    # Reflect and add columns dynamically (called automatically via __init_subclass__)
-    
     @staticmethod
     def query_by_name(name):
         print(f"Querying IndexTable for name: {name}")
         
         result = db.session.query(IndexTable).filter_by(Name=name).first()
         if result:
+            # If it's a model instance, use dynamic reflection
+            if isinstance(result, dict):  # If it's a dictionary, return it directly
+                return result
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
             return result_data
         return None
@@ -88,14 +91,15 @@ class IndexTable(BaseTable):
 class NGCtable(BaseTable):
     __tablename__ = 'NGCtable'
 
-    # Reflect and add columns dynamically (called automatically via __init_subclass__)
-
     @staticmethod
     def query_by_name(name):
         print(f"Querying NGCtable for name: {name}")
         
         result = db.session.query(NGCtable).filter_by(Name=name).first()
         if result:
+            # If it's a model instance, use dynamic reflection
+            if isinstance(result, dict):  # If it's a dictionary, return it directly
+                return result
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
             return result_data
         return None
