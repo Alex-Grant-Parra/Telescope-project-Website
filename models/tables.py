@@ -13,56 +13,47 @@ class BaseTable(db.Model):
         """
         return {column.name: getattr(cls, column.name) for column in cls.__table__.columns}
 
-    @classmethod
-    def get_primary_key(cls):
-        """
-        Dynamically get the primary key column(s) for the model's table.
-        """
-        primary_key_columns = cls.__table__.primary_key
-        return [column.name for column in primary_key_columns]
+    # @classmethod
+    # def get_primary_key(cls):
+    #     """
+    #     Dynamically get the primary key column(s) for the model's table.
+    #     """
+    #     primary_key_columns = cls.__table__.primary_key
+    #     return [column.name for column in primary_key_columns]
 
     @classmethod
     def reflect_table(cls):
         """
         Reflect the table schema from the database and add it to the class.
         """
-        # Ensure we're in the application context before proceeding
-        with app.app_context():  # Make sure the app context is available for reflection
-            # Reflect the table schema from the database
+        with app.app_context():  # Ensure the app context is available for reflection
             cls.__table__ = Table(cls.__tablename__, db.metadata, autoload_with=db.engine)
-
-            # SQLAlchemy handles columns automatically after reflection
-            # We don't need to manually add columns here. Reflection already handles this.
+            # Reflection handles the columns automatically
 
     @classmethod
     def __init_subclass__(cls):
-        """ 
-        This method will be automatically called when a subclass of BaseTable is defined. 
-        This ensures reflection happens for each subclass **after** the app context is initialized.
         """
-        super().__init_subclass__()  # Call the parent class's method (if it exists)
-        # Delay reflection until application context is available
-        cls.reflect_table()  # Trigger reflection for each subclass
+        Automatically called when a subclass is defined. This ensures reflection
+        happens for each subclass after the app context is initialized.
+        """
+        super().__init_subclass__()
+        cls.reflect_table()
 
 
 # HDSTARtable: Define columns dynamically using reflection
 class HDSTARtable(BaseTable):
-    __tablename__ = 'HDSTARTable'  # The actual table name is 'HDSTARTable'
+    __tablename__ = 'HDSTARTable'  # The actual table name in the database
 
-    # Do NOT manually define 'Name' again. Reflection will handle this automatically.
+    # Do NOT manually define 'Name' – reflection will load it.
 
     @staticmethod
     def query_by_name(name):
         print(f"Querying HDSTARtable for name: {name}")
-
-        # Get the primary key dynamically
-        primary_key = HDSTARtable.get_primary_key()
-        print(f"Primary Key: {primary_key}")  # This will print ['Name'] if 'Name' is the primary key
-
-        result = db.session.query(HDSTARtable).filter_by(Name=name).first()
+        # primary_key = HDSTARtable.get_primary_key()
+        # print(f"Primary Key: {primary_key}")  # Expecting ['Name']
+        result = db.session.query(HDSTARtable).filter_by(Name=name[2:]).first()
         if result:
-            # Use get_all_fields method to get all columns dynamically
-            if isinstance(result, dict):  # If it's a dictionary, return it directly
+            if isinstance(result, dict):  # unlikely if reflection returns a model instance
                 return result
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
             return result_data
@@ -76,11 +67,9 @@ class IndexTable(BaseTable):
     @staticmethod
     def query_by_name(name):
         print(f"Querying IndexTable for name: {name}")
-        
         result = db.session.query(IndexTable).filter_by(Name=name).first()
         if result:
-            # If it's a model instance, use dynamic reflection
-            if isinstance(result, dict):  # If it's a dictionary, return it directly
+            if isinstance(result, dict):
                 return result
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
             return result_data
@@ -94,11 +83,9 @@ class NGCtable(BaseTable):
     @staticmethod
     def query_by_name(name):
         print(f"Querying NGCtable for name: {name}")
-        
         result = db.session.query(NGCtable).filter_by(Name=name).first()
         if result:
-            # If it's a model instance, use dynamic reflection
-            if isinstance(result, dict):  # If it's a dictionary, return it directly
+            if isinstance(result, dict):
                 return result
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
             return result_data

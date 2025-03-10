@@ -1,6 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify
 from models.tables import HDSTARtable, IndexTable, NGCtable
-from db import db
 
 interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
@@ -28,7 +27,7 @@ def search_object():
     try:
         # Determine the table based on prefix
         if search_value.startswith("HD"):
-            search_value = "HD" + search_value[2:]  # Ensure full name format
+            # search_value = "HD" + search_value[2:]  # Ensure full name format
             print(f"Querying HDSTARtable for {search_value}")
             result = HDSTARtable.query_by_name(search_value)
 
@@ -62,4 +61,3 @@ def search_object():
     else:
         print("Object not found")
         return jsonify({"status": "error", "message": "Object not found"})
-
