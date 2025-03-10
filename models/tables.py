@@ -1,6 +1,6 @@
 from db import db
 from sqlalchemy import Table, MetaData, Column, String, REAL
-from Server import app  # Adjust the import path based on where your Flask app is defined
+from Server import app
 
 # Base class for reflection to be inherited by all models
 class BaseTable(db.Model):
@@ -44,16 +44,13 @@ class BaseTable(db.Model):
 class HDSTARtable(BaseTable):
     __tablename__ = 'HDSTARTable'  # The actual table name in the database
 
-    # Do NOT manually define 'Name' – reflection will load it.
 
     @staticmethod
     def query_by_name(name):
         print(f"Querying HDSTARtable for name: {name}")
-        # primary_key = HDSTARtable.get_primary_key()
-        # print(f"Primary Key: {primary_key}")  # Expecting ['Name']
         result = db.session.query(HDSTARtable).filter_by(Name=name[2:]).first()
         if result:
-            if isinstance(result, dict):  # unlikely if reflection returns a model instance
+            if isinstance(result, dict):
                 return result
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
             return result_data
