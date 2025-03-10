@@ -49,9 +49,17 @@ def search_object():
 
     # If result is found, process the result and return as JSON
     if result:
-        result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
+        # Check if result is a dictionary
+        if isinstance(result, dict):
+            # If it's a dictionary, return it directly
+            result_data = result
+        else:
+            # If it's an SQLAlchemy model instance, use dynamic reflection
+            result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
+        
         print(f"Query result: {result_data}")
         return jsonify({"status": "success", "data": result_data})
     else:
         print("Object not found")
         return jsonify({"status": "error", "message": "Object not found"})
+
