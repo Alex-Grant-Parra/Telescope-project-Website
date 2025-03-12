@@ -1,5 +1,4 @@
 from flask import Blueprint, render_template, request, jsonify
-from models.tables import HDSTARtable, IndexTable, NGCtable
 
 interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
@@ -17,6 +16,7 @@ def update_camera():
 
 @interface_bp.route("/search_object", methods=["POST"])
 def search_object():
+    from models.tables import HDSTARtable, IndexTable, NGCtable
     data = request.json
     search_value = data.get("searchValue", "").strip()
 

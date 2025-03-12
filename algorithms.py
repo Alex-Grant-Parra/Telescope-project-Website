@@ -287,39 +287,39 @@ def calculateSolarPos(LR_julianDate):
 
 # def removeRefraction():
 
-planetary_data = [ # from J2000, supplied from the Jet Propultion Laboratory
-    ["Name", "Semi-Major Axis", "Eccentricity", "Inclination", "LongitudeAscNode", "LongitudePerihelion", "MeanLongitude"],
-    ["Mercury", 0.38709893, 0.20563069, 7.00487, 48.33167, 77.45645, 252.25084],
-    ["Jupiter", 5.20336301, 0.04839266, 1.30530, 100.55615, 14.75385, 34.40438],
-    ["Earth", 1.00000011, 0.01671022, 0.00005, -11.26064, 102.94719, 100.46435],
-    ["Uranus", 19.19126393, 0.04716771, 0.76986, 74.22988, 170.96424, 313.23218],
-    ]
+# planetary_data = [ # from J2000, supplied from the Jet Propultion Laboratory
+#     ["Name", "Semi-Major Axis", "Eccentricity", "Inclination", "LongitudeAscNode", "LongitudePerihelion", "MeanLongitude"],
+#     ["Mercury", 0.38709893, 0.20563069, 7.00487, 48.33167, 77.45645, 252.25084],
+#     ["Jupiter", 5.20336301, 0.04839266, 1.30530, 100.55615, 14.75385, 34.40438],
+#     ["Earth", 1.00000011, 0.01671022, 0.00005, -11.26064, 102.94719, 100.46435],
+#     ["Uranus", 19.19126393, 0.04716771, 0.76986, 74.22988, 170.96424, 313.23218],
+#     ]
 
 
-def calculatePlanetPos(LR_julianDate, LL_Data, LL_EarthData):
+# def calculatePlanetPos(LR_julianDate, LL_Data, LL_EarthData):
 
-    #Days since epoch
-    LR_daysBetween = LR_julianDate - getJD(2000, 1, 1)
+#     #Days since epoch
+#     LR_daysBetween = LR_julianDate - getJD(2000, 1, 1)
     
 
-    # Primary orbital elements
-    LS_NamePlanet, LS_NameEarth = LL_Data[0], LL_EarthData[0]
-    LR_SemiMajorAxisEarth, LR_SemiMajorAxisPlanet = LL_Data[1], LL_EarthData[1]
-    LR_EccentricityEarth, LR_EccentricityPlanet = LL_Data[2], LL_EarthData[2]
-    LR_InclinationEarth, LR_InclinationPlanet = LL_Data[3], LL_EarthData[3]
-    LR_AscNodeLongitudeEarth, LR_AscNodeLongitudePlanet = LL_Data[4], LL_EarthData[4]
-    LR_PeriLongitudeEarth, LR_PeriLongitudePlanet = LL_Data[5], LL_EarthData[5]
-    LR_MeanLongitudeEarth, LR_MeanLongitudePlanet = LL_Data[6], LL_EarthData[6]
+#     # Primary orbital elements
+#     LS_NamePlanet, LS_NameEarth = LL_Data[0], LL_EarthData[0]
+#     LR_SemiMajorAxisEarth, LR_SemiMajorAxisPlanet = LL_Data[1], LL_EarthData[1]
+#     LR_EccentricityEarth, LR_EccentricityPlanet = LL_Data[2], LL_EarthData[2]
+#     LR_InclinationEarth, LR_InclinationPlanet = LL_Data[3], LL_EarthData[3]
+#     LR_AscNodeLongitudeEarth, LR_AscNodeLongitudePlanet = LL_Data[4], LL_EarthData[4]
+#     LR_PeriLongitudeEarth, LR_PeriLongitudePlanet = LL_Data[5], LL_EarthData[5]
+#     LR_MeanLongitudeEarth, LR_MeanLongitudePlanet = LL_Data[6], LL_EarthData[6]
 
-    # Calculating period using kepler's third law
-    LR_PeriodPlanet, LR_PeriodEarth = (LR_SemiMajorAxisPlanet)**(3/2), (LR_SemiMajorAxisEarth)**(3/2)
-    LR_e_Planet = LR_EccentricityPlanet
-    LR_daysBetween = LR_julianDate - getJD(1990, 1, 0)
+#     # Calculating period using kepler's third law
+#     LR_PeriodPlanet, LR_PeriodEarth = (LR_SemiMajorAxisPlanet)**(3/2), (LR_SemiMajorAxisEarth)**(3/2)
+#     LR_e_Planet = LR_EccentricityPlanet
+#     LR_daysBetween = LR_julianDate - getJD(1990, 1, 0)
     
-    LR_N = ((360/365.242191)*LR_daysBetween)%360
-    LR_MeanAnomalyPlanet = LR_N + LR_MeanLongitudePlanet - LR_PeriLongitudePlanet
+#     LR_N = ((360/365.242191)*LR_daysBetween)%360
+#     LR_MeanAnomalyPlanet = LR_N + LR_MeanLongitudePlanet - LR_PeriLongitudePlanet
 
-    return LR_MeanAnomalyPlanet
+#     return LR_MeanAnomalyPlanet
 
 # print(calculatePlanetPos(getJD(1988, 11, 22.75), planetary_data[2], planetary_data[3]))
 
