@@ -8,15 +8,7 @@
 <div id="starMapPanelContainer" style="display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
     <div id="starMapPanel" style="width: 80%; height: 80%; position: relative; background-color: black;">
         <button id="fullscreenButton" style="position: absolute; top: 10px; right: 10px; padding: 10px; background: rgba(0, 0, 0, 0.7); color: white; border: none; cursor: pointer;">⛶ Full Screen</button>
-        <div id="starLabel" style="
-            position: absolute;
-            color: white;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 5px;
-            font-size: 14px;
-            border-radius: 5px;
-            display: none;">
-        </div>
+        <div id="starLabel" style="position: absolute; color: white; background: rgba(0, 0, 0, 0.7); padding: 5px; font-size: 14px; border-radius: 5px; display: none;"></div>
     </div>
 </div>
 
@@ -35,14 +27,21 @@ document.addEventListener("DOMContentLoaded", function () {
     renderer.setSize(container.offsetWidth, container.offsetHeight);
     container.appendChild(renderer.domElement);
 
-    // Set the camera at the center
-    camera.position.set(0, 0, 600);  // Fixed position, 600 units away from the center
+    // Set the camera at the center of the sphere
+    const radius = 500;  // Radius of the virtual sphere
+    camera.position.set(0, 0, radius);  // Camera stays at the center of the sphere
 
     // Controls (OrbitControls)
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableZoom = false;      // Disable zoom
-    controls.enablePan = false;      // Disable panning (side-to-side)
+    controls.enableZoom = true;       // Enable zooming (camera can zoom in and out)
+    controls.enablePan = false;      // Disable panning (camera stays at the center)
     controls.enableRotate = true;    // Enable rotation around the center
+    controls.screenSpacePanning = false;  // Prevent panning out of the screen
+    controls.target.set(0, 0, 0);   // Always target the center of the sphere
+
+    // Set zoom limits
+    controls.maxDistance = radius;    // Max zoom distance (the surface of the sphere)
+    controls.minDistance = 0;         // Min zoom distance (the center of the sphere)
 
     // Create star group
     const starGroup = new THREE.Group();
@@ -62,9 +61,8 @@ document.addEventListener("DOMContentLoaded", function () {
     starsData.forEach(star => {
         const ra = (star.ra / 360) * Math.PI * 2;  // Convert RA to radians
         const dec = (star.dec / 180) * Math.PI;   // Convert Dec to radians
-        const radius = 500;                       // Distance from the center (virtual dome radius)
 
-        // Calculate 3D positions
+        // Calculate 3D positions (position stars on the surface of the sphere)
         const x = radius * Math.cos(dec) * Math.cos(ra);
         const y = radius * Math.sin(dec);
         const z = radius * Math.cos(dec) * Math.sin(ra);
