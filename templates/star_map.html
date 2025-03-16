@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Star Map{% endblock %}
+
+{% block content %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<div id="starMapPanelContainer" style="display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+    <div id="starMapPanel" style="width: 80%; height: 80%; position: relative; background-color: black;">
+        <button id="fullscreenButton" style="position: absolute; top: 10px; right: 10px; padding: 10px; background: rgba(0, 0, 0, 0.7); color: white; border: none; cursor: pointer;">⛶ Full Screen</button>
+        <div id="starLabel" style="
+            position: absolute;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px;
+            font-size: 14px;
+            border-radius: 5px;
+            display: none;">
+        </div>
+    </div>
+</div>
+
+<script id="stars-data" type="application/json">{{ stars | tojson }}</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const container = document.getElementById("starMapPanel");
+    const label = document.getElementById("starLabel");
+    const fullscreenButton = document.getElementById("fullscreenButton");
+
+    // Set up Three.js Scene
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, container.offsetWidth / container.offsetHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(container.offsetWidth, container.offsetHeight);
+    container.appendChild(renderer.domElement);
+
+    // Set the camera at the center
+    camera.position.set(0, 0, 600);  // Fixed position, 600 units away from the center
+
+    // Controls (OrbitControls)
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableZoom = false;      // Disable zoom
+    controls.enablePan = false;      // Disable panning (side-to-side)
+    controls.enableRotate = true;    // Enable rotation around the center
+
+    // Create star group
+    const starGroup = new THREE.Group();
+    scene.add(starGroup);
+
+    // Raycaster for detecting hover
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    
+    const starsData = JSON.parse(document.getElementById('stars-data').textContent);  // Pass star data from Python to JS
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = [];
+    const sizes = [];
+
+    // Loop through each star and convert RA/Dec to 3D coordinates
+    starsData.forEach(star => {
+        const ra = (star.ra / 360) * Math.PI * 2;  // Convert RA to radians
+        const dec = (star.dec / 180) * Math.PI;   // Convert Dec to radians
+        const radius = 500;                       // Distance from the center (virtual dome radius)
+
+        // Calculate 3D positions
+        const x = radius * Math.cos(dec) * Math.cos(ra);
+        const y = radius * Math.sin(dec);
+        const z = radius * Math.cos(dec) * Math.sin(ra);
+
+        positions.push(x, y, z);
+
+        // Adjust size based on magnitude (brighter stars are larger)
+        const size = Math.max(0.1, 1.5 - (star.mag * 0.1));  // Ensure minimum size is 0.1
+        sizes.push(size);
+    });
+
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+    // Star material (varying size)
+    const material = new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 2,
+        sizeAttenuation: true
+    });
+
+    // Create points (stars) mesh and add it to the scene
+    const starsMesh = new THREE.Points(geometry, material);
+    starGroup.add(starsMesh);
+
+    // Hover Detection
+    function onMouseMove(event) {
+        mouse.x = (event.clientX / container.offsetWidth) * 2 - 1;
+        mouse.y = -(event.clientY / container.offsetHeight) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObject(starGroup.children[0]);
+
+        if (intersects.length > 0) {
+            const index = intersects[0].index;
+            if (index !== undefined && starsData[index]) {
+                label.innerText = starsData[index].name || "Unknown Star";
+                label.style.left = event.clientX + 10 + "px";
+                label.style.top = event.clientY + 10 + "px";
+                label.style.display = "block";
+            }
+        } else {
+            label.style.display = "none";
+        }
+    }
+
+    window.addEventListener("mousemove", onMouseMove);
+
+    // Render Loop
+    function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    // Fullscreen Toggle
+    fullscreenButton.addEventListener("click", function() {
+        if (container.style.width === "100vw" && container.style.height === "100vh") {
+            container.style.width = "80%";
+            container.style.height = "80%";
+        } else {
+            container.style.width = "100vw";
+            container.style.height = "100vh";
+        }
+        renderer.setSize(container.offsetWidth, container.offsetHeight);
+        camera.aspect = container.offsetWidth / container.offsetHeight;
+        camera.updateProjectionMatrix();
+    });
+});
+</script>
+{% endblock %}
