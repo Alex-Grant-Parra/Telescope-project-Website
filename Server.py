@@ -79,7 +79,7 @@ def index():
 print(f"Running on -> {gethostname()}")
 # Run the app
 
-debugMode = True
+debugMode = False
 
 if __name__ == "__main__":
     if gethostname() == "raspberrypi":
