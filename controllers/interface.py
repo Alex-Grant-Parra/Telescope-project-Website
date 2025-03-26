@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, session
 
 interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
@@ -55,9 +55,25 @@ def search_object():
         else:
             # If it's an SQLAlchemy model instance, use dynamic reflection
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
-        
-        print(f"Query result: {result_data}")
+
+        name = result_data.get('Name')
+        ra = float(result_data.get('RA', 0))  # Default to 0 if RA is missing or None
+        dec = float(result_data.get('DEC', 0))  # Default to 0 if DEC is missing or None
+        mag = result_data.get('V-Mag', 0)  # Default to 0 if V-Mag is missing or None
+
+        print(f"\n[TRACKING] {name} at RA: {ra}°, DEC: {dec}° with magnitude {mag}.\n", flush=True)
+
+        session["selectedObject"] = { # Adds to flask's session
+            "name": name,
+            "ra": ra,
+            "dec": dec,
+            "mag": mag
+        }
+
         return jsonify({"status": "success", "data": result_data})
     else:
         print("Object not found")
         return jsonify({"status": "error", "message": "Object not found"})
+    
+
+

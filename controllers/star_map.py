@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request, session
 from models.tables import HDSTARtable, IndexTable, NGCtable
 
 star_map_bp = Blueprint("star_map", __name__)
@@ -83,12 +83,21 @@ def track_star():
     data = request.get_json()
     ra = data.get("ra")
     dec = data.get("dec")
+    name = data.get("name")
+    mag = data.get("mag")
 
     if ra is None or dec is None:
         print("Missing RA/DEC in request")  # Debugging message
         return jsonify({"error": "Missing RA/DEC"}), 400
 
-    print(f"\n[TRACKING] Star at RA: {ra:.4f}°, DEC: {dec:.4f}°\n", flush=True)
+    print(f"\n[TRACKING] {name} at RA: {ra}°, DEC: {dec}° with magnitude {mag}.\n", flush=True)
+
+    session["selectedObject"] = { # Adds to flask's session
+        "name": name,
+        "ra": ra,
+        "dec": dec,
+        "mag": mag
+    }
 
     return jsonify({"status": "tracking", "ra": ra, "dec": dec})
 
