@@ -5,6 +5,7 @@ import os
 from db import db
 import importlib
 from dotenv import load_dotenv
+from socket import gethostname
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -13,8 +14,11 @@ load_dotenv()
 # Load configurations
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY")
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DATABASE_PATH = os.path.join(BASE_DIR, "Data.db")
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DATABASE_PATH}"
+# Using a local db file
+# As sqlite does not like accessing the file over the nas
+# DATABASE_PATH = f"sqlite:///{os.path.join(BASE_DIR, "Data.db")}" # Dynamic storage
+DATABASE_PATH = "sqlite:////home/alex/Data.db" # Local storage
+app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_PATH 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = os.getenv("SQLALCHEMY_TRACK_MODIFICATIONS") == "True"
 app.config["ENCRYPTION_KEY"] = os.getenv("ENCRYPTION_KEY")
 
@@ -72,6 +76,13 @@ with app.app_context():
 def index():
     return redirect(url_for("home.home"))
 
+print(f"Running on -> {gethostname()}")
 # Run the app
+
+debugMode = True
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=25566)
+    if gethostname() == "raspberrypi":
+        app.run(host="0.0.0.0", port=8002, debug=debugMode)
+    elif gethostname() == "AlexTower":
+        app.run(host="0.0.0.0", port=25566, debug=debugMode)
