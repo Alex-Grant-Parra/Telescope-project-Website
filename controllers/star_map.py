@@ -72,7 +72,7 @@ def star_info(star_name):
         if result:
             return jsonify({
                 "name": result.Name,
-                "ra": float(result.RA) * 15 if result.RA is not None else 0,
+                "ra": float(result.RA) if result.RA is not None else 0,
                 "dec": float(result.DEC) if result.DEC is not None else 0,
                 "mag": getattr(result, "V-Mag", 0)
             })
