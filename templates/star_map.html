@@ -20,74 +20,62 @@ document.addEventListener("DOMContentLoaded", function () {
     const label = document.getElementById("starLabel");
     const fullscreenButton = document.getElementById("fullscreenButton");
 
-    // Set up Three.js Scene
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, container.offsetWidth / container.offsetHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer();
     renderer.setSize(container.offsetWidth, container.offsetHeight);
     container.appendChild(renderer.domElement);
 
-    // Set the camera at the center of the sphere
-    const radius = 500;  // Radius of the virtual sphere
-    camera.position.set(0, 0, radius);  // Camera stays at the center of the sphere
+    const radius = 500;
+    camera.position.set(0, 0, radius);
 
-    // Controls (OrbitControls)
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableZoom = true;       // Enable zooming (camera can zoom in and out)
-    controls.enablePan = false;      // Disable panning (camera stays at the center)
-    controls.enableRotate = true;    // Enable rotation around the center
-    controls.screenSpacePanning = false;  // Prevent panning out of the screen
-    controls.target.set(0, 0, 0);   // Always target the center of the sphere
+    controls.enableZoom = true;
+    controls.enablePan = false;
+    controls.enableRotate = true;
+    controls.screenSpacePanning = false;
+    controls.target.set(0, 0, 0);
 
-    // Set zoom limits
-    controls.maxDistance = radius;    // Max zoom distance (the surface of the sphere)
-    controls.minDistance = 0;         // Min zoom distance (the center of the sphere)
+    controls.maxDistance = radius;
+    controls.minDistance = 0;
 
-    // Create star group
     const starGroup = new THREE.Group();
     scene.add(starGroup);
 
-    // Raycaster for detecting hover
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-    
-    const starsData = JSON.parse(document.getElementById('stars-data').textContent);  // Pass star data from Python to JS
+
+    const starsData = JSON.parse(document.getElementById('stars-data').textContent);
 
     const geometry = new THREE.BufferGeometry();
     const positions = [];
     const sizes = [];
 
-    // Loop through each star and convert RA/Dec to 3D coordinates
     starsData.forEach(star => {
-        const ra = (star.ra / 360) * Math.PI * 2;  // Convert RA to radians
-        const dec = (star.dec / 180) * Math.PI;   // Convert Dec to radians
+        const ra = (star.ra / 360) * Math.PI * 2;
+        const dec = (star.dec / 180) * Math.PI;
 
-        // Calculate 3D positions (position stars on the surface of the sphere)
         const x = radius * Math.cos(dec) * Math.cos(ra);
         const y = radius * Math.sin(dec);
         const z = radius * Math.cos(dec) * Math.sin(ra);
 
         positions.push(x, y, z);
 
-        // Adjust size based on magnitude (brighter stars are larger)
-        const size = Math.max(0.1, 1.5 - (star.mag * 0.1));  // Ensure minimum size is 0.1
+        const size = Math.max(0.1, 1.5 - (star.mag * 0.1));
         sizes.push(size);
     });
 
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 
-    // Star material (varying size)
     const material = new THREE.PointsMaterial({
         color: 0xffffff,
         size: 2,
         sizeAttenuation: true
     });
 
-    // Create points (stars) mesh and add it to the scene
     const starsMesh = new THREE.Points(geometry, material);
     starGroup.add(starsMesh);
 
-    // Hover Detection
     function onMouseMove(event) {
         mouse.x = (event.clientX / container.offsetWidth) * 2 - 1;
         mouse.y = -(event.clientY / container.offsetHeight) * 2 + 1;
@@ -109,15 +97,78 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("dblclick", onMouseDoubleClick);
 
-    // Render Loop
+    function onMouseDoubleClick(event) {
+        mouse.x = (event.clientX / container.offsetWidth) * 2 - 1;
+        mouse.y = -(event.clientY / container.offsetHeight) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObject(starGroup.children[0]);
+
+        if (intersects.length > 0) {
+            const index = intersects[0].index;
+            if (index !== undefined && starsData[index]) {
+                const star = starsData[index];
+                fetchStarInfo(star.name);
+            }
+        }
+    }
+
+    function fetchStarInfo(starName) {
+        fetch(`/star_info/${starName}`)
+            .then(response => response.json())
+            .then(data => showStarInfo(data))
+            .catch(error => console.error("Error fetching star info:", error));
+    }
+
+    function showStarInfo(star) {
+        const modal = document.createElement("div");
+        modal.style.position = "fixed";
+        modal.style.top = "50%";
+        modal.style.left = "50%";
+        modal.style.transform = "translate(-50%, -50%)";
+        modal.style.background = "black";
+        modal.style.color = "white";
+        modal.style.padding = "15px";
+        modal.style.borderRadius = "5px";
+        modal.style.boxShadow = "0px 0px 10px rgba(255,255,255,0.5)";
+        modal.style.zIndex = "1000";
+
+        modal.innerHTML = `
+            <h3>${star.name}</h3>
+            <p>RA: ${star.ra}</p>
+            <p>DEC: ${star.dec}</p>
+            <p>Magnitude: ${star.mag}</p>
+            <button id="trackButton">Track</button>
+            <button id="closeButton">Close</button>
+        `;
+
+        document.body.appendChild(modal);
+
+        document.getElementById("trackButton").addEventListener("click", () => trackStar(star.ra, star.dec));
+        document.getElementById("closeButton").addEventListener("click", () => modal.remove());
+    }
+
+    function trackStar(ra, dec) {
+        fetch("/track_star", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ ra: ra, dec: dec })
+        })
+        .then(response => response.json())
+        .then(data => console.log("Tracking:", data))
+        .catch(error => console.error("Error tracking star:", error));
+    }
+
     function animate() {
         requestAnimationFrame(animate);
         renderer.render(scene, camera);
     }
     animate();
 
-    // Fullscreen Toggle
     fullscreenButton.addEventListener("click", function() {
         if (container.style.width === "100vw" && container.style.height === "100vh") {
             container.style.width = "80%";

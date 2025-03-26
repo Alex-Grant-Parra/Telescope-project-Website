@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, render_template
+from flask import Blueprint, jsonify, render_template, request
 from models.tables import HDSTARtable, IndexTable, NGCtable
 
 star_map_bp = Blueprint("star_map", __name__)
@@ -62,3 +62,33 @@ def star_map():
                 print(f"Error processing star {getattr(star, 'Name', 'UNKNOWN')}: {e}")
 
     return render_template("star_map.html", stars=all_stars)
+
+@star_map_bp.route("/star_info/<star_name>")
+def star_info(star_name):
+    tables = [HDSTARtable, IndexTable, NGCtable]
+
+    for table in tables:
+        result = table.query.filter_by(Name=star_name).first()
+        if result:
+            return jsonify({
+                "name": result.Name,
+                "ra": float(result.RA) * 15 if result.RA is not None else 0,
+                "dec": float(result.DEC) if result.DEC is not None else 0,
+                "mag": getattr(result, "V-Mag", 0)
+            })
+    return jsonify({"error": "Star not found"}), 404
+
+@star_map_bp.route("/track_star", methods=["POST"])
+def track_star():
+    data = request.get_json()
+    ra = data.get("ra")
+    dec = data.get("dec")
+
+    if ra is None or dec is None:
+        print("Missing RA/DEC in request")  # Debugging message
+        return jsonify({"error": "Missing RA/DEC"}), 400
+
+    print(f"\n[TRACKING] Star at RA: {ra:.4f}°, DEC: {dec:.4f}°\n", flush=True)
+
+    return jsonify({"status": "tracking", "ra": ra, "dec": dec})
+
