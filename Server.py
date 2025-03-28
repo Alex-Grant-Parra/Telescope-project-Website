@@ -16,8 +16,9 @@ app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY")
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 # Using a local db file
 # As sqlite does not like accessing the file over the nas
-# DATABASE_PATH = f"sqlite:///{os.path.join(BASE_DIR, "Data.db")}" # Dynamic storage
-DATABASE_PATH = "sqlite:////home/alex/Data.db" # Local storage
+print(f"Dir: {BASE_DIR}")
+DATABASE_PATH = f"sqlite:///{os.path.join(BASE_DIR, 'Data.db')}" # Dynamic storage
+# DATABASE_PATH = "sqlite:////home/alex/Data.db" # Local storage
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_PATH 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = os.getenv("SQLALCHEMY_TRACK_MODIFICATIONS") == "True"
 app.config["ENCRYPTION_KEY"] = os.getenv("ENCRYPTION_KEY")
