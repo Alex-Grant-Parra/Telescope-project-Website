@@ -48,7 +48,7 @@ class HDSTARtable(BaseTable):
     @staticmethod
     def query_by_name(name):
         print(f"Querying HDSTARtable for name: {name}")
-        result = db.session.query(HDSTARtable).filter_by(Name=name[2:]).first()
+        result = db.session.query(HDSTARtable).filter_by(Name=name).first()
         if result:
             if isinstance(result, dict):
                 return result

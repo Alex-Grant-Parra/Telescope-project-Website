@@ -56,7 +56,7 @@ def search_object():
             # If it's an SQLAlchemy model instance, use dynamic reflection
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
 
-        name = result_data.get('Name')
+        name = result_data.get('Name', "Null")
         ra = float(result_data.get('RA', 0))  # Default to 0 if RA is missing or None
         dec = float(result_data.get('DEC', 0))  # Default to 0 if DEC is missing or None
         mag = result_data.get('V-Mag', 0)  # Default to 0 if V-Mag is missing or None
