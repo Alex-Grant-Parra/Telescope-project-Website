@@ -26,6 +26,7 @@ app.config["ENCRYPTION_KEY"] = os.getenv("ENCRYPTION_KEY")
 # Initialize SQLAlchemy before any database interaction
 db.init_app(app)
 
+
 # Email Configuration
 app.config["MAIL_SERVER"] = "smtp.gmail.com"
 app.config["MAIL_PORT"] = 587

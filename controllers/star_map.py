@@ -1,10 +1,10 @@
 from flask import Blueprint, jsonify, render_template, request, session
-from models.tables import HDSTARtable, IndexTable, NGCtable
 
 star_map_bp = Blueprint("star_map", __name__)
 
 @star_map_bp.route("/api/stars")
 def get_stars():
+    from models.tables import HDSTARtable, IndexTable, NGCtable
     all_stars = []
     tables = [HDSTARtable, IndexTable, NGCtable]
 
@@ -36,6 +36,7 @@ def get_stars():
 
 @star_map_bp.route("/StarMap")
 def star_map():
+    from models.tables import HDSTARtable, IndexTable, NGCtable
     all_stars = []
     tables = [HDSTARtable, IndexTable, NGCtable]
 
@@ -65,6 +66,7 @@ def star_map():
 
 @star_map_bp.route("/star_info/<star_name>")
 def star_info(star_name):
+    from models.tables import HDSTARtable, IndexTable, NGCtable
     tables = [HDSTARtable, IndexTable, NGCtable]
 
     for table in tables:
