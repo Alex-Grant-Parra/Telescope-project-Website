@@ -152,7 +152,6 @@ def findPlanet(year, month, day, planetChoice):
 
     return result
 
-
 def solveKepler(LR_M, LR_e):
     if LR_e < 0.1:
 
@@ -168,7 +167,7 @@ def solveKepler(LR_M, LR_e):
         print("Eccentricity of orbit must be between 0 and 0.1")
         return -1
     
-def findSun(year, month, day):
+def findSun(year, month, day, usedForMoon=False):
 
     LR_julianDate = SpaceTime.getJD(year, month, day)
 
@@ -182,21 +181,60 @@ def findSun(year, month, day):
     
     LR_e = GD_SUNDATA.get("Eccentricity")
     LR_daysBetween = LR_julianDate - SpaceTime.getJD(1990, 1, 0)
-    # print(f"LR_daysBetween = {LR_daysBetween}")
     LR_N = ((360/365.242191)*LR_daysBetween)%360
-    # print(f"LR_N = {LR_N}")
-    LR_MeanAnomaly = LR_N + GD_SUNDATA.get("Ecliptic longitude (epoch)") - GD_SUNDATA.get("Ecliptic longitude (perigee)")
-    # print(f"LR_MeanAnomaly = {LR_MeanAnomaly}")
-    LR_MeanAnomaly = radians(LR_MeanAnomaly)
-    # print(f"LR_MeanAnomaly = {LR_MeanAnomaly}")
-    LR_E = solveKepler(LR_MeanAnomaly, GD_SUNDATA.get("Eccentricity"))
-    # print(f"LR_E = {LR_E}")  
+    LR_M = LR_N + GD_SUNDATA.get("Ecliptic longitude (epoch)") - GD_SUNDATA.get("Ecliptic longitude (perigee)")
+    LR_M = radians(LR_M)
+    LR_E = solveKepler(LR_M, GD_SUNDATA.get("Eccentricity"))
     LR_V = degrees(atan(((1+LR_e)/(1-LR_e))**(1/2)*tan(LR_E/2))*2)
-    # print(f"LR_V = {LR_V}")  
-    LR_EclLong = (LR_V + GD_SUNDATA.get("Ecliptic longitude (perigee)"))%360
-    # print(f"LR_EclLong = {LR_EclLong}") 
-    return convert.EclipticToEquatorial(convert.DecimalToHrMinSec(0), convert.DecimalToHrMinSec(LR_EclLong), findAxialTilt(LR_julianDate))
+    LR_EclLong = (LR_V + GD_SUNDATA.get("Ecliptic longitude (perigee)"))%360 
+    if usedForMoon == False:
+        return convert.EclipticToEquatorial(convert.DecimalToHrMinSec(0), convert.DecimalToHrMinSec(LR_EclLong), findAxialTilt(LR_julianDate))
+    else:
+        return (degrees(LR_M), LR_EclLong)
 
 
 
-print(findSun(2025, 5, 17.41))
+def findMoon(year, month, day):
+
+    GD_MOONDATA = {
+    "Ecliptic mean longitude": 318.351648,
+    "Ecliptic longitude (perigee)": 36.340410,
+    "Ecliptic longitude node (epoch)": 318.510107,
+    "Inclination": 5.145396,
+    "Eccentricity": 0.054900,
+    "Semi-major axis": 3.84401*10**5,
+    }
+
+    currentJD = SpaceTime.getJD(year, month, day)
+    D = currentJD - SpaceTime.getJD(1990, 1, 0) 
+
+    sunLocationData = findSun(year, month, day, usedForMoon=True)
+    M = sunLocationData[0]
+    LongSun = sunLocationData[1]
+    
+    l = (13.1763966 * D + GD_MOONDATA["Ecliptic mean longitude"])%360
+    Mm = (l - 0.1114041 * D - GD_MOONDATA["Ecliptic longitude (perigee)"])%360
+    N = (GD_MOONDATA["Ecliptic longitude node (epoch)"] - 0.0529539 * D)%360
+    C = l - LongSun
+    Ev = 1.2739 * sin(2 * C - Mm)
+    Ae = 0.1858 * sin(M)
+    A3 = 0.37 * sin(M)
+    MPrimem = Mm + Ev - Ae - A3
+    Ec = 6.2886 * sin(MPrimem)
+    A4 = 0.214 * sin(2 * MPrimem)
+    lPrime = l + Ev + Ec - Ae + A4
+    V = 0.6583 * sin(2 * (lPrime - LongSun))
+    lPrimePrime = lPrime + V
+    NPrime = N - 0.16 * sin(M)
+    y = sin(lPrimePrime - NPrime) * cos(GD_MOONDATA["Inclination"])
+    x = cos(lPrimePrime - NPrime)
+
+    LongMoon = atan2(y, x) + NPrime
+    LatMoon = asin(sin(lPrimePrime - NPrime) * sin(GD_MOONDATA["Inclination"]))
+    
+    hmsLongMoon = convert.DecimalToHrMinSec(LongMoon)
+    hmsLatMoon = convert.DecimalToHrMinSec(LatMoon)
+    
+    return convert.EclipticToEquatorial(hmsLatMoon, hmsLongMoon, findAxialTilt(currentJD))
+
+print(findMoon(2025, 5, 17.84))
