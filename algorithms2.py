@@ -90,21 +90,14 @@ for key, value in data.items():
 # print(planets.get("mars").M) # returns 18.6021
 # print(planets.get("mars").P) # returns 18.6021
 
-def findAxialTilt(LR_julianDate):
-    LR_JD = LR_julianDate-2451545.0 # The constant is the JD for J2000 1.5
-    LR_T = LR_JD/36525.0 # Days in a centuary
-    LR_ChangeInTilt = ((46.815*LR_T)+(0.0006*LR_T**2)-(0.00181*LR_T**3))/3600
-    LR_Tilt = 23.439292-LR_ChangeInTilt
-    return LR_Tilt
+def findAxialTilt(julianDate):
+    JD = julianDate-2451545.0 # The constant is the JD for J2000 1.5
+    T = JD/36525.0 # Days in a centuary
+    ChangeInTilt = ((46.815*T)+(0.0006*T**2)-(0.00181*T**3))/3600
+    Tilt = 23.439292-ChangeInTilt
+    return Tilt
 
 def findPlanet(year, month, day, planetChoice):
-
-    # # Constants for J1990
-    # EarthPeriod = 1.00004
-    # EarthLongAtEpoch = 99.403308
-    # EarthLongOfPeri = 102.768413
-    # EarthEccentricity = 0.016713
-    # EarthSemiMajorAxis = 1
 
     # Constants for J2000
     EarthPeriod = 1.00004
@@ -139,18 +132,71 @@ def findPlanet(year, month, day, planetChoice):
     lPrime = atan2(y, x) + planets.get(planetChoice).N
     rPrime = r * cos(Psi)
     A = atan((rPrime * sin(L - lPrime)) / (R - rPrime * cos(L - lPrime)))
-    EclipLong = (180 + L + A)%360
-    EclipLat = atan((rPrime * tan(Psi) * sin(EclipLong - lPrime)) / (R * sin(lPrime - L)))
 
-    print(EclipLong, EclipLat)
+    if planetChoice == "mercury" or planetChoice == "venus":
+        # ecliptic lat and long for inner planets
+        EclipLong = (180 + L + A)%360
+        EclipLat = atan((rPrime * tan(Psi) * sin(EclipLong - lPrime)) / (R * sin(lPrime - L)))
+
+    else:
+        # ecliptic lat and long for outer planets
+        EclipLong = (atan((R * sin(lPrime - L)) / (rPrime - R * cos (lPrime - L))) + lPrime)%360
+        EclipLat = atan((rPrime * tan(Psi) * sin (EclipLong - lPrime)) / (R * sin(lPrime - L)))
 
     # Convert ecliptic to equatorial coordinates # the converter is brocken, the ecliptic outputs are correct
     hmsLong = convert.DecimalToHrMinSec(EclipLat)
     hmsLat = convert.DecimalToHrMinSec(EclipLong)
 
-    result = convert.EclipticToEquatorial(hmsLat, hmsLong, findAxialTilt(currentJD))
+    result = convert.EclipticToEquatorial(hmsLong, hmsLat, findAxialTilt(currentJD))
+    # result = convert.EclipticToEquatorial(hmsLong, hmsLat, 23.435992)
 
     return result
 
 
-print(findPlanet(1988, 11, 22, "mercury"))
+def solveKepler(LR_M, LR_e):
+    if LR_e < 0.1:
+
+        LR_E0 = LR_M
+        LR_tolerance = 10**-6
+        while True:
+            LR_E1 = LR_E0 - (LR_E0 - LR_e*sin(LR_E0)-LR_M) / (1 - LR_e*cos(LR_E0))
+            if abs(LR_E0 - LR_E1) < LR_tolerance:
+                break
+            LR_E0 = LR_E1
+        return LR_E1
+    else:
+        print("Eccentricity of orbit must be between 0 and 0.1")
+        return -1
+    
+def findSun(year, month, day):
+
+    LR_julianDate = SpaceTime.getJD(year, month, day)
+
+    GD_SUNDATA = {
+    "Ecliptic longitude (epoch)": 279.403303,
+    "Ecliptic longitude (perigee)":282.768422,
+    "Eccentricity":0.016713,
+    "Semi-major axis":1.495985*10**8,
+    "Angular diameter": 0.533128
+    }
+    
+    LR_e = GD_SUNDATA.get("Eccentricity")
+    LR_daysBetween = LR_julianDate - SpaceTime.getJD(1990, 1, 0)
+    # print(f"LR_daysBetween = {LR_daysBetween}")
+    LR_N = ((360/365.242191)*LR_daysBetween)%360
+    # print(f"LR_N = {LR_N}")
+    LR_MeanAnomaly = LR_N + GD_SUNDATA.get("Ecliptic longitude (epoch)") - GD_SUNDATA.get("Ecliptic longitude (perigee)")
+    # print(f"LR_MeanAnomaly = {LR_MeanAnomaly}")
+    LR_MeanAnomaly = radians(LR_MeanAnomaly)
+    # print(f"LR_MeanAnomaly = {LR_MeanAnomaly}")
+    LR_E = solveKepler(LR_MeanAnomaly, GD_SUNDATA.get("Eccentricity"))
+    # print(f"LR_E = {LR_E}")  
+    LR_V = degrees(atan(((1+LR_e)/(1-LR_e))**(1/2)*tan(LR_E/2))*2)
+    # print(f"LR_V = {LR_V}")  
+    LR_EclLong = (LR_V + GD_SUNDATA.get("Ecliptic longitude (perigee)"))%360
+    # print(f"LR_EclLong = {LR_EclLong}") 
+    return convert.EclipticToEquatorial(convert.DecimalToHrMinSec(0), convert.DecimalToHrMinSec(LR_EclLong), findAxialTilt(LR_julianDate))
+
+
+
+print(findSun(2025, 5, 17.41))
