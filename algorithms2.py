@@ -228,6 +228,10 @@ def findMoon(year, month, day):
 
 def get_vmag_for_object(name):
     data = PlanetsTable.query_by_name(name.capitalize())
+    if name.lower() == "moon":
+        # Calculating brightness for the Moon using phase angle could be done later
+        V = -12.73
+        return V
     if data and "V-Mag" in data:
         return data["V-Mag"]
     return None
