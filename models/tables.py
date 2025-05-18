@@ -82,7 +82,7 @@ class PlanetsTable(BaseTable):
     @staticmethod
     def query_by_name(name):
         print(f"Querying PlanetsTable for name: {name}")
-        result = db.session.query(PlanetsTable).filter_by(name=name).first()
+        result = db.session.query(PlanetsTable).filter_by(Name=name).first()
         if result:
             if isinstance(result, dict):
                 return result

@@ -5,6 +5,7 @@ from db import db
 from models.tables import PlanetsTable  
 from algorithms.timeUtils import SpaceTime
 from algorithms.convert import convert
+from models.tables import PlanetsTable
 
 # Overriding trig functions to use degrees
 sin = lambda x: math_sin(radians(x))
@@ -151,21 +152,6 @@ def findPlanet(year, month, day, planetChoice):
     # result = convert.EclipticToEquatorial(hmsLong, hmsLat, 23.435992)
 
     return result
-
-def solveKepler(LR_M, LR_e):
-    if LR_e < 0.1:
-
-        LR_E0 = LR_M
-        LR_tolerance = 10**-6
-        while True:
-            LR_E1 = LR_E0 - (LR_E0 - LR_e*sin(LR_E0)-LR_M) / (1 - LR_e*cos(LR_E0))
-            if abs(LR_E0 - LR_E1) < LR_tolerance:
-                break
-            LR_E0 = LR_E1
-        return LR_E1
-    else:
-        print("Eccentricity of orbit must be between 0 and 0.1")
-        return -1
     
 def findSun(year, month, day, usedForMoon=False):
 
@@ -237,4 +223,39 @@ def findMoon(year, month, day):
     
     return convert.EclipticToEquatorial(hmsLatMoon, hmsLongMoon, findAxialTilt(currentJD))
 
-print(findMoon(2025, 5, 17.84))
+
+
+
+def get_vmag_for_object(name):
+    data = PlanetsTable.query_by_name(name.capitalize())
+    if data and "V-Mag" in data:
+        return data["V-Mag"]
+    return None
+
+
+
+def getAllCelestialData(year, month, day):
+    results = {}
+
+    # Exclude sun and moon from planets loop
+    for planet_name in planets.keys():
+        if planet_name.lower() in ["sun", "moon"]:
+            continue
+        ra, dec = findPlanet(year, month, day, planet_name)
+        vmag = get_vmag_for_object(planet_name)
+        results[planet_name] = {"ra": ra, "dec": dec, "vmag": vmag}
+
+    # Calculate Sun separately
+    ra, dec = findSun(year, month, day)
+    vmag = get_vmag_for_object("sun")
+    results["sun"] = {"ra": ra, "dec": dec, "vmag": vmag}
+
+    # Calculate Moon separately
+    ra, dec = findMoon(year, month, day)
+    vmag = get_vmag_for_object("moon")
+    results["moon"] = {"ra": ra, "dec": dec, "vmag": vmag}
+
+    return results
+
+with app.app_context():
+    print(getAllCelestialData(2025, 5, 18.5))
