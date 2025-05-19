@@ -260,6 +260,3 @@ def getAllCelestialData(year, month, day):
     results["moon"] = {"ra": ra, "dec": dec, "vmag": vmag}
 
     return results
-
-with app.app_context():
-    print(getAllCelestialData(2025, 5, 18.5))
