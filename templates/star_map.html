@@ -53,56 +53,32 @@ document.addEventListener("DOMContentLoaded", function () {
     const sizes = [];
 
     // Convert RA/Dec (deg) to 3D Cartesian on sphere of radius
+    const loader = new THREE.TextureLoader();
     starsData.forEach(star => {
-        const starsData = JSON.parse(document.getElementById('stars-data').textContent);
-        const loader = new THREE.TextureLoader();
+        const raRad = (star.ra / 360) * Math.PI * 2;
+        const decRad = (star.dec / 180) * Math.PI;
 
-        starsData.forEach(star => {
-            const raRad = (star.ra / 360) * Math.PI * 2;
-            const decRad = (star.dec / 180) * Math.PI;
-
-            const x = radius * Math.cos(decRad) * Math.cos(raRad);
-            const y = radius * Math.sin(decRad);
-            const z = radius * Math.cos(decRad) * Math.sin(raRad);
-
-            if (star.icon) {
-                // Render as sprite
-                loader.load(star.icon, texture => {
-                    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
-                    const sprite = new THREE.Sprite(material);
-                    sprite.position.set(x, y, z);
-                    sprite.scale.set(20, 20, 1); // adjust as needed
-                    sprite.userData = { name: star.name };
-                    starGroup.add(sprite);
-                });
-            } else {
-                // Render as regular point
-                const geometry = new THREE.SphereGeometry(0.5, 6, 6);
-                const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
-                const point = new THREE.Mesh(geometry, material);
-                point.position.set(x, y, z);
-                point.userData = { name: star.name };
-                starGroup.add(point);
-            }
-        });
-
-
-        // Convert degrees to radians for math
-        const raRad = (star.ra / 360) * Math.PI * 2; // RA: 0-360 -> 0-2pi
-        const decRad = (star.dec / 180) * Math.PI;    // Dec: -90 to 90 -> -pi/2 to pi/2
-
-        // Spherical to Cartesian coords:
-        // Note: Dec=0 at equator, +90 north pole, -90 south pole
         const x = radius * Math.cos(decRad) * Math.cos(raRad);
         const y = radius * Math.sin(decRad);
         const z = radius * Math.cos(decRad) * Math.sin(raRad);
 
-        positions.push(x, y, z);
-
-        // Size depends on magnitude, clamp min size
-        const size = Math.max(0.1, 1.5 - (star.mag * 0.1));
-        sizes.push(size);
+        if (star.icon) {
+            loader.load(star.icon, texture => {
+                const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+                const sprite = new THREE.Sprite(material);
+                sprite.position.set(x, y, z);
+                sprite.scale.set(20, 20, 1); // adjust as needed
+                sprite.userData = { name: star.name };
+                starGroup.add(sprite);
+            });
+        } else {
+            positions.push(x, y, z);
+            // Optional: Adjust star size by magnitude
+            const size = Math.max(0.1, 1.5 - (star.mag * 0.1));
+            sizes.push(size);
+        }
     });
+
 
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 
