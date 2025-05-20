@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, render_template, request, session
 from datetime import datetime
 from models.tables import HDSTARtable, IndexTable, NGCtable
 
-from algorithms2 import getAllCelestialData
+
 from algorithms.convert import convert
 
 star_map_bp = Blueprint("star_map", __name__)
@@ -40,6 +40,7 @@ def get_stars():
 
 @star_map_bp.route("/StarMap")
 def star_map():
+    from algorithms2 import getAllCelestialData
     all_stars = []
     tables = [HDSTARtable, IndexTable, NGCtable]
     

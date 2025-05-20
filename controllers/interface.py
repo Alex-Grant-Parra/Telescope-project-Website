@@ -1,4 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify, session
+from algorithms.convert import convert
+
+from datetime import datetime
 
 interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
@@ -16,6 +19,7 @@ def update_camera():
 
 @interface_bp.route("/search_object", methods=["POST"])
 def search_object():
+    from algorithms2 import getAllCelestialData
     from models.tables import HDSTARtable, IndexTable, NGCtable
     data = request.json
     search_value = data.get("searchValue", "").strip()
@@ -24,12 +28,14 @@ def search_object():
 
     result = None
 
+    searchableCelestials = ["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"]
     try:
         # Determine the table based on prefix
         if search_value.startswith("HD"):
             # search_value = "HD" + search_value[2:]  # Ensure full name format
             print(f"Querying HDSTARtable for {search_value}")
             result = HDSTARtable.query_by_name(search_value)
+            print(result)
 
         elif search_value.startswith("NGC"):
             print(f"Querying NGCtable for {search_value}")
@@ -38,6 +44,20 @@ def search_object():
         elif search_value.startswith("IC"):
             print(f"Querying IndexTable for {search_value}")
             result = IndexTable.query_by_name(search_value)
+
+
+        elif search_value in searchableCelestials:
+            now = datetime.utcnow()
+            CelestialData = getAllCelestialData(now.year, now.month, now.day)
+
+            if search_value in CelestialData:
+                formattedData = format_celestial_data(search_value, CelestialData[search_value])
+                print(formattedData)
+                result = formattedData
+            else:
+                print("Celestial object not found.")
+
+
 
         else:
             return jsonify({"status": "error", "message": "Invalid prefix"})
@@ -76,4 +96,12 @@ def search_object():
         return jsonify({"status": "error", "message": "Object not found"})
     
 
+
+def format_celestial_data(name, data):
+    return {
+        "Name": name.capitalize(),
+        "RA": convert.HrMinSecToDegrees(data['ra'][0], data['ra'][1], data['ra'][2]),  # Formatting RA
+        "DEC": convert.HrMinSecToDegrees(data['dec'][0], data['dec'][1], data['dec'][2]),  # Formatting DEC
+        "V-Mag": data["vmag"]
+    }
 
