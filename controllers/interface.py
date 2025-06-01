@@ -46,7 +46,8 @@ def search_object():
             result = IndexTable.query_by_name(search_value)
 
 
-        elif search_value in searchableCelestials:
+        elif search_value.lower() in searchableCelestials:
+            search_value = search_value.lower()
             now = datetime.utcnow()
             CelestialData = getAllCelestialData(now.year, now.month, now.day)
 
