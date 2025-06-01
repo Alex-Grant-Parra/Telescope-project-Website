@@ -72,7 +72,7 @@ def star_map():
     all_stars = []
 
     tables = [HDSTARtable, IndexTable, NGCtable]
-    RenderStars = False
+    RenderStars = True
     RenderPlanets = True
 
     if RenderStars:
