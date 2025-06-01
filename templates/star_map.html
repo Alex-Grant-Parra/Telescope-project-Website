@@ -229,7 +229,8 @@ document.addEventListener("DOMContentLoaded", function () {
             <p><b>DEC:</b> ${star.dec}°</p>
             <p><b>Magnitude:</b> ${star.mag}</p>
             <p>${star.description || ''}</p>
-            <button id="closeStarInfo">Close</button>
+            <button id="trackStarBtn" class="btn btn-success" style="margin-right: 8px;">Track</button>
+            <button id="closeStarInfo" class="btn btn-secondary">Close</button>
         `;
 
         document.body.appendChild(modal);
@@ -238,21 +239,27 @@ document.addEventListener("DOMContentLoaded", function () {
             modal.remove();
             console.log("Star info modal closed");
         });
-    }
 
-    fullscreenButton.addEventListener("click", () => {
-        if (!document.fullscreenElement) {
-            container.requestFullscreen().then(() => {
-                console.log("Entered fullscreen");
-                onWindowResize();
+        document.getElementById("trackStarBtn").addEventListener("click", () => {
+            fetch("/track_star", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: star.name,
+                    ra: star.ra,
+                    dec: star.dec,
+                    mag: star.mag
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                modal.remove();
+            })
+            .catch(error => {
+                console.error(error);
             });
-        } else {
-            document.exitFullscreen().then(() => {
-                console.log("Exited fullscreen");
-                onWindowResize();
-            });
-        }
-    });
+        });
+    }
 
     function onWindowResize() {
         camera.aspect = container.offsetWidth / container.offsetHeight;
