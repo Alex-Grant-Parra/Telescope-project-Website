@@ -37,3 +37,10 @@ html, body {
     padding: 1rem 0;
     margin-top: auto;  /* Ensures footer sticks to bottom */
 }
+
+.popup-panel {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border: 1px solid #007bff;
+    background-color: white;
+    max-width: 350px;
+}

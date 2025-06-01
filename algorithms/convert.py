@@ -55,34 +55,29 @@ class convert:
 
     @staticmethod
     def EclipticToEquatorial(LL_EclLat, LL_EclLong, LR_AxialTiltDeg):
+        from math import sin, cos, tan, atan2, asin, radians, degrees
 
+        # Convert input H:M:S to decimal degrees, then to radians
+        LR_EclLong = radians(convert.HrMinSecToDegrees(*LL_EclLong))
+        LR_EclLat = radians(convert.HrMinSecToDegrees(*LL_EclLat))
         LR_AxialTiltRad = radians(LR_AxialTiltDeg)
-        LR_EclLong = radians(convert.HrMinSecToDegrees(LL_EclLong[0], LL_EclLong[1], LL_EclLong[2]))
-        LR_EclLat = radians(convert.HrMinSecToDegrees(LL_EclLat[0], LL_EclLat[1], LL_EclLat[2]))
 
-        LR_DEC = asin(sin(LR_EclLat)*cos(LR_AxialTiltRad)+cos(LR_EclLat)*sin(LR_AxialTiltRad)*sin(LR_EclLong))
+        # Compute declination
+        sinDEC = sin(LR_EclLat)*cos(LR_AxialTiltRad) + cos(LR_EclLat)*sin(LR_AxialTiltRad)*sin(LR_EclLong)
+        LR_DEC = degrees(asin(sinDEC))  # Now safely in [-90°, +90°]
 
-        LR_Y = sin(LR_EclLong)*cos(LR_AxialTiltRad)-tan(LR_EclLat)*sin(LR_AxialTiltRad)
-        LR_X = cos(LR_EclLong)
+        # Compute right ascension
+        Y = sin(LR_EclLong)*cos(LR_AxialTiltRad) - tan(LR_EclLat)*sin(LR_AxialTiltRad)
+        X = cos(LR_EclLong)
+        RA_rad = atan2(Y, X)
+        LR_RA = (degrees(RA_rad) / 15) % 24  # Convert to hours and wrap to [0, 24)
 
-        LR_RA = atan2(LR_Y, LR_X)
-
-        LR_RA = (degrees(LR_RA)/15)%24
-        LR_DEC = degrees(LR_DEC)%360
-        # print(f"LR_DEC = {LR_DEC}")
-
-        LR_RA = convert.DecimalToHrMinSec(LR_RA%24)
-
-        # print(LR_DEC)
-        LR_DEC = LR_DEC%360
-        if LR_DEC > 180:
-            LR_DEC = LR_DEC - 360
-        elif LR_DEC > 90:
-            LR_DEC = 180 - LR_DEC
-
+        # Convert both to H:M:S format
+        LR_RA = convert.DecimalToHrMinSec(LR_RA)
         LR_DEC = convert.DecimalToHrMinSec(LR_DEC)
 
-        return(LR_RA, LR_DEC)
+        return LR_RA, LR_DEC
+
     
     @staticmethod
     def EquatorialToEcliptic(LL_RA, LL_DEC, LR_AxialTilt):
@@ -123,5 +118,6 @@ class convert:
         return result
 
     @staticmethod
-    def HrMinSecToDegrees(LI_hour, LI_minute, LR_second):
-        return LI_hour + LI_minute / 60 + LR_second / 3600
+    def HrMinSecToDegrees(hours, minutes, seconds):
+        sign = -1 if hours < 0 or minutes < 0 or seconds < 0 else 1
+        return sign * (abs(hours) + abs(minutes) / 60 + abs(seconds) / 3600)

@@ -82,14 +82,14 @@ def search_object():
         dec = float(result_data.get('DEC', 0))  # Default to 0 if DEC is missing or None
         mag = result_data.get('V-Mag', 0)  # Default to 0 if V-Mag is missing or None
 
-        print(f"\n[TRACKING] {name} at RA: {ra}°, DEC: {dec}° with magnitude {mag}.\n", flush=True)
+        # print(f"\n[TRACKING] {name} at RA: {ra}°, DEC: {dec}° with magnitude {mag}.\n", flush=True)
 
-        session["selectedObject"] = { # Adds to flask's session
-            "name": name,
-            "ra": ra,
-            "dec": dec,
-            "mag": mag
-        }
+        # session["selectedObject"] = { # Adds to flask's session
+        #     "name": name,
+        #     "ra": ra,
+        #     "dec": dec,
+        #     "mag": mag
+        # }
 
         return jsonify({"status": "success", "data": result_data})
     else:
