@@ -20,6 +20,16 @@ document.addEventListener("DOMContentLoaded", function () {
     const label = document.getElementById("starLabel");
     const fullscreenButton = document.getElementById("fullscreenButton");
 
+    fullscreenButton.addEventListener("click", function () {
+        if (!document.fullscreenElement) {
+            container.requestFullscreen().catch(err => {
+                alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    });
+
     console.log("Initializing THREE.js scene...");
 
     const scene = new THREE.Scene();
