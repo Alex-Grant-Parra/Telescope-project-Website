@@ -2,15 +2,14 @@ from flask import Blueprint, jsonify, render_template, request, session
 from datetime import datetime
 from models.tables import HDSTARtable, IndexTable, NGCtable
 
-
 from algorithms.convert import convert
+from algorithms2 import getAllCelestialData
 
 star_map_bp = Blueprint("star_map", __name__)
 
-@star_map_bp.route("/api/stars")
-def get_stars():
-    all_stars = []
-    
+def get_all_celestial_objects():
+    all_objects = []
+
     tables = [HDSTARtable, IndexTable, NGCtable]
 
     for table in tables:
@@ -27,28 +26,56 @@ def get_stars():
 
                 v_mag = getattr(star, "V-Mag", 0)
 
-                all_stars.append({
+                all_objects.append({
                     "name": getattr(star, "Name"),
                     "ra": ra_decimal,
                     "dec": dec_decimal,
-                    "mag": v_mag
+                    "mag": v_mag,
+                    "type": "star"
                 })
             except Exception as e:
                 print(f"Error processing star {getattr(star, 'Name', 'UNKNOWN')}: {e}")
 
-    return jsonify(all_stars)
+    # Get celestial objects positions for current UTC date
+    now = datetime.utcnow()
+    celestial_data = getAllCelestialData(now.year, now.month, now.day)
+
+    for obj_name, coords in celestial_data.items():
+        ra_h, ra_m, ra_s = coords["ra"]
+        dec_d, dec_m, dec_s = coords["dec"]
+        mag = coords.get("vmag", 0) or 0
+
+        ra_deg = convert.HrMinSecToDegrees(ra_h, ra_m, ra_s) * 15
+        if dec_d < 0:
+            dec_deg = dec_d - dec_m / 60 - dec_s / 3600
+        else:
+            dec_deg = dec_d + dec_m / 60 + dec_s / 3600
+
+        all_objects.append({
+            "name": obj_name.capitalize(),
+            "ra": ra_deg,
+            "dec": dec_deg,
+            "mag": mag,
+            "icon": f"/static/icons/planets/{obj_name.lower()}.png",
+            "type": "planet"
+        })
+
+    return all_objects
+
+@star_map_bp.route("/api/stars")
+def get_stars():
+    all_objects = get_all_celestial_objects()
+    return jsonify(all_objects)
 
 @star_map_bp.route("/StarMap")
 def star_map():
-    from algorithms2 import getAllCelestialData
     all_stars = []
+
     tables = [HDSTARtable, IndexTable, NGCtable]
-    
-    RenderStars = True
+    RenderStars = False
     RenderPlanets = True
-    
-    # Add stars from database tables (no icons here)
-    if RenderStars == True:
+
+    if RenderStars:
         for table in tables:
             stars = table.query.all()
             for star in stars:
@@ -65,12 +92,10 @@ def star_map():
                 except Exception as e:
                     print(f"Error processing star {star.Name}: {e}")
 
-    # Get celestial objects positions for current UTC date
     now = datetime.utcnow()
     celestial_data = getAllCelestialData(now.year, now.month, now.day)
 
-    # Add planets, sun, moon with icon paths
-    if RenderPlanets == True:
+    if RenderPlanets:
         for obj_name, coords in celestial_data.items():
             ra_h, ra_m, ra_s = coords["ra"]
             dec_d, dec_m, dec_s = coords["dec"]
@@ -87,7 +112,7 @@ def star_map():
                 "ra": ra_deg,
                 "dec": dec_deg,
                 "mag": mag,
-                "icon": f"/static/icons/planets/{obj_name.lower()}.png"  # Add icon path here
+                "icon": f"/static/icons/planets/{obj_name.lower()}.png"
             })
 
     return render_template("star_map.html", stars=all_stars)
@@ -103,8 +128,32 @@ def star_info(star_name):
                 "name": result.Name,
                 "ra": float(result.RA) if result.RA is not None else 0,
                 "dec": float(result.DEC) if result.DEC is not None else 0,
-                "mag": getattr(result, "V-Mag", 0) or 0
+                "mag": getattr(result, "V-Mag", 0) or 0,
+                "type": "star"
             })
+
+    celestial_data = getAllCelestialData(datetime.utcnow().year, datetime.utcnow().month, datetime.utcnow().day)
+    obj_name_lower = star_name.lower()
+    if obj_name_lower in celestial_data:
+        coords = celestial_data[obj_name_lower]
+        ra_h, ra_m, ra_s = coords["ra"]
+        dec_d, dec_m, dec_s = coords["dec"]
+        mag = coords.get("vmag", 0) or 0
+
+        ra_deg = convert.HrMinSecToDegrees(ra_h, ra_m, ra_s) * 15
+        if dec_d < 0:
+            dec_deg = dec_d - dec_m / 60 - dec_s / 3600
+        else:
+            dec_deg = dec_d + dec_m / 60 + dec_s / 3600
+
+        return jsonify({
+            "name": star_name.capitalize(),
+            "ra": ra_deg,
+            "dec": dec_deg,
+            "mag": mag,
+            "type": "planet"
+        })
+
     return jsonify({"error": "Star not found"}), 404
 
 @star_map_bp.route("/track_star", methods=["POST"])
