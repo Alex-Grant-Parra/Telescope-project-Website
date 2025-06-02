@@ -1,11 +1,13 @@
 from flask import Flask, redirect, url_for
 from flask_login import LoginManager
 from flask_mail import Mail
-import os
-from db import db
-import importlib
 from dotenv import load_dotenv
+
+import os
+import importlib
 from socket import gethostname
+
+from db import db
 
 # Initialize Flask app
 app = Flask(__name__)
