@@ -7,34 +7,33 @@ from algorithms2 import getAllCelestialData
 
 star_map_bp = Blueprint("star_map", __name__)
 
-def get_all_celestial_objects():
-    all_objects = []
-
-    tables = [HDSTARtable, IndexTable, NGCtable]
-
+def loadStarsFromTables(tables):
+    all_stars = []
     for table in tables:
         stars = table.query.all()
         for star in stars:
             try:
-                # Check if RA or DEC is None and handle it
-                ra_value = star.RA if star.RA is not None else 0
-                dec_value = star.DEC if star.DEC is not None else 0
-
-                # Convert RA (hours) to degrees
-                ra_decimal = float(ra_value) * 15
-                dec_decimal = float(dec_value)
-
-                v_mag = getattr(star, "V-Mag", 0)
-
-                all_objects.append({
+                ra = float(star.RA) * 15 if star.RA is not None else 0
+                dec = float(star.DEC) if star.DEC is not None else 0
+                mag = getattr(star, "V-Mag", 0) or 0
+                all_stars.append({
                     "name": getattr(star, "Name"),
-                    "ra": ra_decimal,
-                    "dec": dec_decimal,
-                    "mag": v_mag,
+                    "ra": ra,
+                    "dec": dec,
+                    "mag": mag,
                     "type": "star"
                 })
             except Exception as e:
                 print(f"Error processing star {getattr(star, 'Name', 'UNKNOWN')}: {e}")
+    return all_stars
+
+
+def get_all_celestial_objects():
+
+    tables = [HDSTARtable, IndexTable, NGCtable]
+
+    all_objects = loadStarsFromTables(tables)
+
 
     # Get celestial objects positions for current UTC date
     now = datetime.utcnow()
@@ -76,21 +75,8 @@ def star_map():
     RenderPlanets = True
 
     if RenderStars:
-        for table in tables:
-            stars = table.query.all()
-            for star in stars:
-                try:
-                    ra_decimal = float(star.RA) * 15
-                    dec_decimal = float(star.DEC)
-                    mag = getattr(star, "V-Mag", 0) or 0
-                    all_stars.append({
-                        "name": star.Name,
-                        "ra": ra_decimal,
-                        "dec": dec_decimal,
-                        "mag": mag
-                    })
-                except Exception as e:
-                    print(f"Error processing star {star.Name}: {e}")
+        all_stars = loadStarsFromTables(tables)
+
 
     now = datetime.utcnow()
     celestial_data = getAllCelestialData(now.year, now.month, now.day)
