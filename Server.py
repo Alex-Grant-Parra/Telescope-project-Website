@@ -88,3 +88,5 @@ if __name__ == "__main__":
         app.run(host="0.0.0.0", port=8002, debug=debugMode)
     elif gethostname() == "AlexTower":
         app.run(host="0.0.0.0", port=25566, debug=debugMode)
+    else:
+        app.run(host="0.0.0.0", port=80, debug=debugMode)
