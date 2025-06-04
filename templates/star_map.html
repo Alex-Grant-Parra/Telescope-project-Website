@@ -10,6 +10,13 @@
         <button id="fullscreenButton" style="position: absolute; top: 10px; right: 10px; padding: 10px; background: rgba(0, 0, 0, 0.7); color: white; border: none; cursor: pointer;">⛶ Full Screen</button>
         <div id="starLabel" style="position: absolute; color: white; background: rgba(0, 0, 0, 0.7); padding: 5px; font-size: 14px; border-radius: 5px; display: none;"></div>
     </div>
+    <!-- Magnitude filter panel -->
+    <div id="magnitudePanel" style="width: 220px; height: 80%; margin-left: 16px; background: #181818; color: #fff; border-radius: 8px; box-shadow: 0 0 8px #000a; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 18px;">
+        <h4 style="margin-bottom: 12px;">Brightness Filter</h4>
+        <label for="magnitudeSlider" style="margin-bottom: 8px;">Show stars brighter than:</label>
+        <input type="range" id="magnitudeSlider" min="0" max="10" step="0.1" value="10" style="width: 90%;">
+        <span id="magnitudeValue" style="margin-top: 8px; font-size: 1.2em;">Mag ≤ 10</span>
+    </div>
 </div>
 
 <script id="stars-data" type="application/json">{{ stars | tojson }}</script>
@@ -30,8 +37,6 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
 
-    console.log("Initializing THREE.js scene...");
-
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, container.offsetWidth / container.offsetHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({antialias: true});
@@ -40,7 +45,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const radius = 500;
     camera.position.set(0, 0, radius);
-    console.log(`Camera positioned at (0, 0, ${radius})`);
 
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableZoom = true;
@@ -53,14 +57,30 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const starGroup = new THREE.Group();
     scene.add(starGroup);
-    console.log("Created starGroup and added to scene.");
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
     // Parse stars + celestial objects from Flask data
     const starsData = JSON.parse(document.getElementById('stars-data').textContent);
-    console.log(`Loaded starsData with ${starsData.length} stars.`);
+
+    // --- Magnitude filter setup ---
+    const magnitudeSlider = document.getElementById("magnitudeSlider");
+    const magnitudeValue = document.getElementById("magnitudeValue");
+
+    // Compute min/max magnitude (exclude null/undefined/NaN)
+    const magStars = starsData.filter(s => typeof s.mag === "number" && !isNaN(s.mag));
+    const minMag = Math.min(...magStars.map(s => s.mag));
+    const maxMag = Math.max(...magStars.map(s => s.mag));
+
+    magnitudeSlider.min = minMag;
+    magnitudeSlider.max = maxMag;
+    magnitudeSlider.value = maxMag;
+    magnitudeValue.textContent = `Mag ≤ ${maxMag}`;
+
+    // --- Caching star objects for filtering ---
+    const starObjects = []; // { type: "sprite"/"point", obj: THREE.Object3D, mag: number, index: number|null }
+    const pointsIndexToStarIndex = []; // filtered index -> original starsData index
 
     // Geometry for stars and planets as points
     const geometry = new THREE.BufferGeometry();
@@ -69,11 +89,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const loader = new THREE.TextureLoader();
 
-    // Track how many sprites added asynchronously
     let spritesAdded = 0;
     let starsWithIconsCount = 0;
 
-    starsData.forEach(star => {
+    // For points, keep a mapping from filtered index to original starsData index
+    starsData.forEach((star, i) => {
         const raRad = (star.ra / 360) * Math.PI * 2;
         const decRad = (star.dec / 180) * Math.PI;
 
@@ -87,18 +107,15 @@ document.addEventListener("DOMContentLoaded", function () {
                 const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
                 const sprite = new THREE.Sprite(material);
                 sprite.position.set(x, y, z);
-                sprite.scale.set(20, 20, 1); // adjust as needed
-                sprite.userData = { name: star.name };
-                sprite.renderOrder = 999; // force render order to front
+                sprite.scale.set(20, 20, 1);
+                sprite.userData = { name: star.name, mag: star.mag };
+                sprite.renderOrder = 999;
 
                 starGroup.add(sprite);
-                spritesAdded++;
-                console.log(`Added sprite #${spritesAdded} for star: ${star.name}`);
-
-                // After last sprite loaded, log total children count
-                if (spritesAdded === starsWithIconsCount) {
-                    console.log(`All sprites loaded. starGroup has ${starGroup.children.length} children.`);
+                if (typeof star.mag === "number" && !isNaN(star.mag)) {
+                    starObjects.push({ type: "sprite", obj: sprite, mag: star.mag, index: null });
                 }
+                spritesAdded++;
             },
             undefined,
             error => {
@@ -106,9 +123,12 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         } else {
             positions.push(x, y, z);
-            // Optional: Adjust star size by magnitude
             const size = Math.max(0.1, 1.5 - (star.mag * 0.1));
             sizes.push(size);
+            if (typeof star.mag === "number" && !isNaN(star.mag)) {
+                starObjects.push({ type: "point", obj: null, mag: star.mag, index: pointsIndexToStarIndex.length });
+            }
+            pointsIndexToStarIndex.push(i);
         }
     });
 
@@ -122,23 +142,79 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const starsMesh = new THREE.Points(geometry, material);
     starGroup.add(starsMesh);
-    console.log("Added starsMesh Points to starGroup.");
 
-    // Utility: get accurate mouse coords relative to renderer canvas
-    function updateMouseCoords(event) {
-        const rect = renderer.domElement.getBoundingClientRect();
-        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-        console.log(`Mouse coords updated: x=${mouse.x.toFixed(3)}, y=${mouse.y.toFixed(3)} (canvas relative)`);
+    // --- Filtering logic ---
+    let visiblePointIndices = [];
+    let allPositions = [];
+    let allPointsIndexToStarIndex = [];
+
+    function buildAllPositions() {
+        allPositions = [];
+        allPointsIndexToStarIndex = [];
+        starsData.forEach((star, i) => {
+            if (!star.icon) {
+                const raRad = (star.ra / 360) * Math.PI * 2;
+                const decRad = (star.dec / 180) * Math.PI;
+                const x = radius * Math.cos(decRad) * Math.cos(raRad);
+                const y = radius * Math.sin(decRad);
+                const z = radius * Math.cos(decRad) * Math.sin(raRad);
+                allPositions.push(x, y, z);
+                allPointsIndexToStarIndex.push(i);
+            }
+        });
     }
+    buildAllPositions();
+
+    // Filtering logic
+    function updateStarVisibility(maxMag) {
+        // Sprites: set visible based on mag
+        starObjects.forEach(starObj => {
+            if (starObj.type === "sprite") {
+                starObj.obj.visible = starObj.mag <= maxMag;
+            }
+        });
+
+        // Points: filter and rebuild geometry
+        visiblePointIndices = [];
+        let filteredPositions = [];
+        allPointsIndexToStarIndex.forEach((starIdx, i) => {
+            const star = starsData[starIdx];
+            if (typeof star.mag === "number" && !isNaN(star.mag) && star.mag <= maxMag && !star.icon) {
+                visiblePointIndices.push(i);
+                filteredPositions.push(
+                    allPositions[i * 3],
+                    allPositions[i * 3 + 1],
+                    allPositions[i * 3 + 2]
+                );
+            }
+        });
+
+        if (filteredPositions.length === 0) {
+            starsMesh.visible = false;
+        } else {
+            starsMesh.visible = true;
+            starsMesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(filteredPositions, 3));
+            starsMesh.geometry.attributes.position.needsUpdate = true;
+            starsMesh.geometry.setDrawRange(0, filteredPositions.length / 3);
+        }
+    }
+
+    // --- Slider event ---
+    magnitudeSlider.addEventListener("input", function () {
+        const val = parseFloat(magnitudeSlider.value);
+        magnitudeValue.textContent = `Mag ≤ ${val}`;
+        updateStarVisibility(val);
+    });
+
+    // --- Initial filter (show all) ---
+    magnitudeValue.textContent = `Mag ≤ ${magnitudeSlider.value}`;
+    updateStarVisibility(parseFloat(magnitudeSlider.value));
 
     function onMouseMove(event) {
         updateMouseCoords(event);
 
         raycaster.setFromCamera(mouse, camera);
         const intersects = raycaster.intersectObjects(starGroup.children, true);
-
-        console.log(`onMouseMove intersects count: ${intersects.length}`);
 
         if (intersects.length > 0) {
             const intersect = intersects[0];
@@ -147,9 +223,12 @@ document.addEventListener("DOMContentLoaded", function () {
             if (intersect.object.type === "Sprite") {
                 starName = intersect.object.userData.name || starName;
             } else if (intersect.object.type === "Points" && intersect.index !== undefined) {
-                starName = starsData[intersect.index]?.name || starName;
+                // Map filtered index back to original starsData index
+                const filteredIdx = intersect.index;
+                // Use visiblePointIndices to map filtered index to allPointsIndexToStarIndex
+                const starIdx = allPointsIndexToStarIndex[visiblePointIndices[filteredIdx]];
+                starName = starsData[starIdx]?.name || starName;
             }
-            console.log(`Hovered over star: ${starName}`);
 
             label.innerText = starName;
             label.style.left = event.clientX + 10 + "px";
@@ -165,7 +244,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
         raycaster.setFromCamera(mouse, camera);
         const intersects = raycaster.intersectObjects(starGroup.children, true);
-        console.log(`onMouseDoubleClick intersects count: ${intersects.length}`);
 
         if (intersects.length > 0) {
             const intersect = intersects[0];
@@ -174,50 +252,41 @@ document.addEventListener("DOMContentLoaded", function () {
             if (intersect.object.type === "Sprite") {
                 const name = intersect.object.userData.name;
                 star = starsData.find(s => s.name === name);
-                console.log(`Double clicked sprite star: ${name}`);
             } else if (intersect.object.type === "Points" && intersect.index !== undefined) {
-                star = starsData[intersect.index];
-                console.log(`Double clicked points star: ${star.name}`);
+                const filteredIdx = intersect.index;
+                const starIdx = allPointsIndexToStarIndex[visiblePointIndices[filteredIdx]];
+                star = starsData[starIdx];
             }
 
             if (star) {
-                console.log(`Fetching info for star: ${star.name}`);
                 fetchStarInfo(star.name);
-            } else {
-                console.warn("Star not found on double click intersection");
             }
-        } else {
-            console.log("No intersected star on double click");
         }
     }
 
+    // Utility: get accurate mouse coords relative to renderer canvas
+    function updateMouseCoords(event) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    }
+
     function fetchStarInfo(starName) {
-        console.log(`Fetching star info for: ${starName}`);
         fetch(`/star_info/${encodeURIComponent(starName)}`)
-            .then(response => {
-                console.log(`Fetch response status: ${response.status}`);
-                return response.json();
-            })
+            .then(response => response.json())
             .then(data => {
                 if (data.error) {
-                    console.warn("No info found for " + starName);
                     alert("No info found for " + starName);
                     return;
                 }
-                console.log("Received star info:", data);
                 showStarInfo(data);
             })
             .catch(error => console.error("Error fetching star info:", error));
     }
 
     function showStarInfo(star) {
-        console.log("Showing star info modal for:", star.name);
-
         const existingModal = document.getElementById("starInfoModal");
-        if (existingModal) {
-            console.log("Removing existing modal");
-            existingModal.remove();
-        }
+        if (existingModal) existingModal.remove();
 
         const modal = document.createElement("div");
         modal.id = "starInfoModal";
@@ -247,7 +316,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
         document.getElementById("closeStarInfo").addEventListener("click", () => {
             modal.remove();
-            console.log("Star info modal closed");
         });
 
         document.getElementById("trackStarBtn").addEventListener("click", () => {
@@ -275,12 +343,18 @@ document.addEventListener("DOMContentLoaded", function () {
         camera.aspect = container.offsetWidth / container.offsetHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(container.offsetWidth, container.offsetHeight);
-        console.log(`Resized renderer to ${container.offsetWidth}x${container.offsetHeight}`);
+    }
+    
+    function debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
     }
 
-    window.addEventListener('resize', () => {
-        onWindowResize();
-    });
+
+    window.addEventListener('resize', debounce(onWindowResize, 200));
 
     container.addEventListener('mousemove', onMouseMove);
     container.addEventListener('dblclick', onMouseDoubleClick);
@@ -292,8 +366,6 @@ document.addEventListener("DOMContentLoaded", function () {
         renderer.render(scene, camera);
     }
     animate();
-
-    console.log("Star map initialization complete.");
 });
 </script>
 {% endblock %}
