@@ -15,7 +15,7 @@ def loadStarsFromTables(tables):
             try:
                 ra = float(star.RA) * 15 if star.RA is not None else 0
                 dec = float(star.DEC) if star.DEC is not None else 0
-                mag = getattr(star, "V-Mag", 0) or 0
+                mag = getattr(star, "V-Mag", 30)
                 all_stars.append({
                     "name": getattr(star, "Name"),
                     "ra": ra,
@@ -42,7 +42,7 @@ def get_all_celestial_objects():
     for obj_name, coords in celestial_data.items():
         ra_h, ra_m, ra_s = coords["ra"]
         dec_d, dec_m, dec_s = coords["dec"]
-        mag = coords.get("vmag", 0) or 0
+        mag = coords.get("vmag", 30)
 
         ra_deg = convert.HrMinSecToDegrees(ra_h, ra_m, ra_s) * 15
         if dec_d < 0:
@@ -85,7 +85,7 @@ def star_map():
         for obj_name, coords in celestial_data.items():
             ra_h, ra_m, ra_s = coords["ra"]
             dec_d, dec_m, dec_s = coords["dec"]
-            mag = coords.get("vmag", 0) or 0
+            mag = coords.get("vmag", 30)
 
             ra_deg = convert.HrMinSecToDegrees(ra_h, ra_m, ra_s) * 15
             if dec_d < 0:
@@ -124,7 +124,7 @@ def star_info(star_name):
         coords = celestial_data[obj_name_lower]
         ra_h, ra_m, ra_s = coords["ra"]
         dec_d, dec_m, dec_s = coords["dec"]
-        mag = coords.get("vmag", 0) or 0
+        mag = coords.get("vmag", 30)
 
         ra_deg = convert.HrMinSecToDegrees(ra_h, ra_m, ra_s) * 15
         if dec_d < 0:
