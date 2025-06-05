@@ -84,11 +84,15 @@ print(f"Running on -> {gethostname()}")
 # Run the app
 
 debugMode = False
+usePort80forAll = True
 
 if __name__ == "__main__":
-    if gethostname() == "raspberrypi":
-        app.run(host="0.0.0.0", port=8002, debug=debugMode)
-    elif gethostname() == "AlexTower":
-        app.run(host="0.0.0.0", port=25566, debug=debugMode)
+    if usePort80forAll:
+        if gethostname() == "raspberrypi":
+            app.run(host="0.0.0.0", port=8002, debug=debugMode)
+        elif gethostname() == "AlexTower":
+            app.run(host="0.0.0.0", port=25566, debug=debugMode)
+        else:
+            app.run(host="0.0.0.0", port=80, debug=debugMode)
     else:
         app.run(host="0.0.0.0", port=80, debug=debugMode)

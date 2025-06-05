@@ -1,5 +1,5 @@
 from math import sin as math_sin, cos as math_cos, tan as math_tan, \
-    asin as math_asin, acos as math_acos, atan as math_atan, atan2 as math_atan2, radians, degrees, sqrt, pi
+    asin as math_asin, acos as math_acos, atan as math_atan, atan2 as math_atan2, radians, degrees, sqrt, pi, log10
 from Server import app
 from db import db
 from models.tables import PlanetsTable  
@@ -224,18 +224,45 @@ def findMoon(year, month, day):
     return convert.EclipticToEquatorial(hmsLatMoon, hmsLongMoon, findAxialTilt(currentJD))
 
 
+def ra_dec_to_vector(ra, dec):
+    print(ra, dec)
+    return (
+    cos(dec) * cos(ra),
+    cos(dec) * sin(ra),
+    sin(dec)
+    )
+
+def dot(v1, v2):
+    return sum(a * b for a, b in zip(v1, v2))
+
+def magnitude(v):
+    return sum(x**2 for x in v) ** 0.5
+
+def phase_angle(ra_moon, dec_moon, ra_sun, dec_sun):
+    v_moon = ra_dec_to_vector(ra_moon, dec_moon)
+    v_sun = ra_dec_to_vector(ra_sun, dec_sun)
+    return acos(dot(v_moon, v_sun) / (magnitude(v_moon) * magnitude(v_sun)))
 
 
-def get_vmag_for_object(name):
+
+def get_vmag_for_object(name, phaseDeg=None):
     data = PlanetsTable.query_by_name(name.capitalize())
+
     if name.lower() == "moon":
-        # Calculating brightness for the Moon using phase angle could be done later
-        V = -12.73
-        return V
+        if phaseDeg is not None:
+            illumination_fraction = 1 - cos(phaseDeg)
+            if illumination_fraction <= 0:
+                return float('inf')  # Invisible at new Moon
+            return -12.7 + 2.5 * log10(illumination_fraction)
+        else:
+            # Default full Moon magnitude
+            magnitude = -12.73
+        return str(magnitude)
+
     if data and "V-Mag" in data:
         return data["V-Mag"]
-    return None
 
+    return None
 
 
 def getAllCelestialData(year, month, day):
@@ -250,13 +277,28 @@ def getAllCelestialData(year, month, day):
         results[planet_name] = {"ra": ra, "dec": dec, "vmag": vmag}
 
     # Calculate Sun separately
-    ra, dec = findSun(year, month, day)
+    ra_sun, dec_sun = findSun(year, month, day)
     vmag = get_vmag_for_object("sun")
-    results["sun"] = {"ra": ra, "dec": dec, "vmag": vmag}
+    results["sun"] = {"ra": ra_sun, "dec": dec_sun, "vmag": vmag}
 
     # Calculate Moon separately
-    ra, dec = findMoon(year, month, day)
-    vmag = get_vmag_for_object("moon")
-    results["moon"] = {"ra": ra, "dec": dec, "vmag": vmag}
+    ra_moon, dec_moon = findMoon(year, month, day)
+    print("Boboboobob")
+    print(ra_moon, dec_moon, ra_sun, dec_sun)
+    ra_moon_deg, dec_moon_deg = convert.HrMinSecToDegrees(ra_moon[0], ra_moon[1], ra_moon[2]), convert.HrMinSecToDegrees(dec_moon[0], dec_moon[1], dec_moon[2])
+    ra_sun_deg, dec_sun_deg = convert.HrMinSecToDegrees(ra_sun[0], ra_sun[1], ra_sun[2]), convert.HrMinSecToDegrees(dec_sun[0], dec_sun[1], dec_sun[2])
+
+    print("skibidi")
+    print(ra_moon_deg, dec_moon_deg, ra_sun_deg, dec_sun_deg)
+
+    phase = phase_angle(ra_moon_deg, dec_moon_deg, ra_sun_deg, dec_sun_deg) # works
+    print("hihihihi")
+    print(ra_moon, dec_moon, phase)
+    vmag = get_vmag_for_object("moon", phaseDeg=phase)
+    print(vmag)
+    results["moon"] = {"ra": ra_moon, "dec": dec_moon, "vmag": vmag}
+
+    print("mag dump")
+    print(results["moon"])
 
     return results
