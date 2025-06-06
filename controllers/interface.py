@@ -1,7 +1,13 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from flask import Blueprint, render_template, request, jsonify, session
 from algorithms.convert import convert
+from camera.cameraController import Camera
 
 from datetime import datetime
+import time
 
 interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
@@ -13,9 +19,28 @@ def interface():
 def update_camera():
     data = request.json
     print("Received Camera Settings:", data)
-    # shutter_speed = data.get("shutterSpeed", "Unknown")
-    # print(f"Shutter Speed: {shutter_speed}")
-    return jsonify({"status": "success", "message": "Settings updated"})
+    response = {"status": "success", "message": "Settings updated"}
+
+    # Set shutter speed if provided
+    shutter_speed = data.get("shutterSpeed")
+    if shutter_speed:
+        try:
+            # Set the shutter speed using Camera class
+            Camera.setSetting("/main/capturesettings/shutterspeed", shutter_speed)
+        except Exception as e:
+            response = {"status": "error", "message": f"Failed to set shutter speed: {e}"}
+            return jsonify(response)
+
+    # Optionally, handle ISO and other settings similarly
+    # iso = data.get("iso")
+    # if iso:
+    #     try:
+    #         Camera.setSetting("/main/imgsettings/iso", iso)
+    #     except Exception as e:
+    #         response = {"status": "error", "message": f"Failed to set ISO: {e}"}
+    #         return jsonify(response)
+
+    return jsonify(response)
 
 @interface_bp.route("/search_object", methods=["POST"])
 def search_object():
@@ -105,4 +130,31 @@ def format_celestial_data(name, data):
         "DEC": convert.HrMinSecToDegrees(data['dec'][0], data['dec'][1], data['dec'][2]),  # Formatting DEC
         "V-Mag": data["vmag"]
     }
+
+@interface_bp.route("/get_camera_choices")
+def get_camera_choices():
+    # Map setting names to gphoto2 config paths
+    settings = {
+        "shutterSpeed": "/main/capturesettings/shutterspeed",
+        "iso": "/main/imgsettings/iso",
+        # Add more settings as needed
+    }
+    choices = {}
+    start = time.time()
+    for label, path in settings.items():
+        result = Camera.getSettingChoices(label, path)
+        choices[label] = result if result else []
+    print(f"get_camera_choices took {time.time() - start:.2f} seconds")
+    return jsonify(choices)
+
+@interface_bp.route("/take_photo", methods=["POST"])
+def take_photo():
+    # Set your camera photos folder path here
+    photos_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "camera_photos")
+    os.makedirs(photos_folder, exist_ok=True)
+    try:
+        filename = Camera.capturePhoto(photos_folder)
+        return jsonify({"status": "success", "filename": filename})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
 

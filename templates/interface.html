@@ -4,10 +4,15 @@
 
 {% block content %}
 <div class="container-fluid">
-    <!-- Main Panel -->
-    <div class="main-panel border rounded p-3 position-relative" id="mainPanel">
-        <button class="fullscreen-toggle btn btn-danger btn-sm position-absolute top-0 end-0 m-2" onclick="toggleFullscreen()">⛶</button>
-        <h2 class="text-center">Main Panel</h2>
+    <!-- Main Panel and Take Photo Button Row -->
+    <div class="d-flex align-items-start" style="position: relative;">
+        <!-- Main Panel -->
+        <div class="main-panel border rounded p-3 position-relative" id="mainPanel">
+            <button class="fullscreen-toggle btn btn-danger btn-sm position-absolute top-0 end-0 m-2" onclick="toggleFullscreen()">⛶</button>
+            <h2 class="text-center">Main Panel</h2>
+        </div>
+        <!-- Take Photo Button just to the right of the main panel -->
+        <button id="takePhotoBtn" class="btn btn-primary btn-sm ms-3 mt-2" style="height: 40px;" onclick="takePhoto()">📷 Take Photo</button>
     </div>
 
     <!-- Draggable Camera Controls Panel -->
@@ -15,21 +20,15 @@
         <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Camera Controls</div>  <!-- non-selectable title -->
         <div class="control-row d-flex justify-content-between my-2">
             <span>Shutter Speed</span>
-            <button class="btn btn-sm btn-primary" onclick="changeShutterSpeed('down')">-</button>
-            <span id="shutterSpeedValue" ondblclick="editShutterSpeed()">1/32</span>
-            <button class="btn btn-sm btn-primary" onclick="changeShutterSpeed('up')">+</button>
+            <select id="shutterSpeedSelect" class="form-select form-select-sm" style="width: auto;" onchange="updateSetting()"></select>
         </div>
         <div class="control-row d-flex justify-content-between my-2">
             <span>ISO</span>
-            <button class="btn btn-sm btn-primary" onclick="changeSetting('iso', -100)">-</button>
-            <span id="isoValue">100</span>
-            <button class="btn btn-sm btn-primary" onclick="changeSetting('iso', 100)">+</button>
+            <select id="isoSelect" class="form-select form-select-sm" style="width: auto;" onchange="updateSetting()"></select>
         </div>
         <div class="control-row d-flex justify-content-between my-2">
             <span>Aperture</span>
-            <button class="btn btn-sm btn-primary" onclick="changeSetting('aperture', -1)">-</button>
             <span id="apertureValue">f/2.8</span>
-            <button class="btn btn-sm btn-primary" onclick="changeSetting('aperture', 1)">+</button>
         </div>
         <div class="control-row my-2">
             <label for="whiteBalance">White Balance</label>
@@ -97,74 +96,74 @@
         });
     });
 
-    // Global variable for shutter speed base value
-    let shutterSpeed = 32;  // Start at 1/32
+    // Fetch camera choices and populate dropdowns
+    function populateCameraChoices() {
+        fetch("{{ url_for('interface.get_camera_choices') }}")
+            .then(response => response.json())
+            .then(data => {
+                // Populate shutter speed
+                let shutterSelect = document.getElementById("shutterSpeedSelect");
+                shutterSelect.innerHTML = "";
+                (data.shutterSpeed || []).forEach(choice => {
+                    let opt = document.createElement("option");
+                    opt.value = choice;
+                    opt.text = choice;
+                    shutterSelect.appendChild(opt);
+                });
 
-    // Change shutter speed by + or -
-    function changeShutterSpeed(direction) {
-        if (direction === 'up') {
-            shutterSpeed /= 2;  // Double the denominator (faster shutter)
-        } else if (direction === 'down') {
-            shutterSpeed *= 2;  // Halve the denominator (slower shutter)
-        }
-
-        // If the value becomes smaller than 1 (e.g., 1/0.5), show it as an integer
-        let displayValue = shutterSpeed <= 1 ? Math.round(1 / shutterSpeed) : `1/${shutterSpeed}`;
-
-        // Display the new shutter speed
-        document.getElementById("shutterSpeedValue").innerText = displayValue;
-        updateSetting();  // Send updated setting to the server
+                // Populate ISO
+                let isoSelect = document.getElementById("isoSelect");
+                isoSelect.innerHTML = "";
+                (data.iso || []).forEach(choice => {
+                    let opt = document.createElement("option");
+                    opt.value = choice;
+                    opt.text = choice;
+                    isoSelect.appendChild(opt);
+                });
+            })
+            .catch(error => {
+                console.error("Failed to fetch camera choices:", error);
+            });
     }
 
-    // Edit shutter speed by double-clicking
-    function editShutterSpeed() {
-        let newValue = prompt("Enter shutter speed in fractions (e.g., 1/1000):", `1/${shutterSpeed}`);
-        if (newValue && newValue.startsWith("1/")) {
-            let fraction = parseInt(newValue.slice(2));
-            if (!isNaN(fraction)) {
-                shutterSpeed = 1 / fraction;
-                document.getElementById("shutterSpeedValue").innerText = `1/${fraction}`;
-                updateSetting();  // Send updated setting to the server
-            } else {
-                alert("Invalid value, please enter a valid fraction.");
-            }
-        }
-    }
+    // Call on page load
+    document.addEventListener("DOMContentLoaded", function() {
+        populateCameraChoices();
+    });
 
-    // Change other settings
-    function changeSetting(setting, change) {
-        let element = document.getElementById(setting + "Value");
-        if (setting === "iso") {
-            let value = parseInt(element.innerText);
-            value += change;
-            element.innerText = value;
-        } else if (setting === "aperture") {
-            let value = parseFloat(element.innerText.slice(2)) + change;
-            element.innerText = `f/${value}`;
-        }
-
-        updateSetting();  // Send updated data to the backend
-    }
-
-    // Send updated settings to the server
+    // Update settings to backend
     function updateSetting() {
         let data = {
-            shutterSpeed: document.getElementById("shutterSpeedValue").innerText,
-            iso: document.getElementById("isoValue").innerText,
+            shutterSpeed: document.getElementById("shutterSpeedSelect").value,
+            iso: document.getElementById("isoSelect").value,
             aperture: document.getElementById("apertureValue").innerText,
             whiteBalance: document.getElementById("whiteBalance").value,
             photoFormat: document.getElementById("photoFormat").value
         };
-
-        console.log("Sending Data:", data);  // Log the data before sending it
-
         fetch("{{ url_for('interface.update_camera') }}", {
-            method: "POST",  // Ensure POST method
+            method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data)
         }).then(response => response.json())
         .then(data => console.log("Response from server:", data))
         .catch(error => console.error("Fetch error:", error));
+    }
+
+    function takePhoto() {
+        fetch("{{ url_for('interface.take_photo') }}", {
+            method: "POST"
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === "success") {
+                alert("Photo taken and saved!");
+            } else {
+                alert("Failed to take photo: " + (data.message || "Unknown error"));
+            }
+        })
+        .catch(error => {
+            alert("Error taking photo: " + error);
+        });
     }
 
     // // Function to search for an object
