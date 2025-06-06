@@ -1,0 +1,71 @@
+from subprocess import run
+from time import sleep
+
+class Camera:
+
+    def ensureConnection(retryCount=3, delaySeconds=2):
+        # Checks for a connected camera using gphoto2.
+        # Retries if not found, and returns True if connected, False otherwise.
+        for attempt in range(1, retryCount + 1):
+            try:
+                result = run(
+                    ["gphoto2", "--auto-detect"],
+                    capture_output=True,
+                    text=True
+                )
+                output = result.stdout.strip()
+                if "usb:" in output.lower():
+                    print("Camera connected.")
+                    return True
+                else:
+                    print(f"No camera detected. Attempt {attempt} of {retryCount}.")
+                    if attempt < retryCount:
+                        sleep(delaySeconds)
+            except Exception as error:
+                print(f"Error checking camera: {error}")
+                return False
+
+        print("Camera connection failed after retries.")
+        return False
+
+    def getSettingChoices(label, path):
+        try:
+            result = run(
+                ["gphoto2", "--get-config", path],
+                capture_output=True,
+                text=True
+            )
+            output = result.stdout
+            choices = []
+
+            for line in output.splitlines():
+                if line.strip().startswith("Choice:"):
+                    parts = line.split(" ", 2)
+                    if len(parts) == 3:
+                        choices.append(parts[2])
+            
+            return choices
+
+        except Exception as error:
+            print(f"Error reading {label}: {error}")
+
+
+
+
+
+
+
+
+
+# Run for each setting if camera connected
+if Camera.ensureConnection():
+        print(Camera.getSettingChoices("Shutter Speed", "/main/capturesettings/shutterspeed"))
+else:
+    print("Please connect your camera and try again.")
+
+
+# Camera settings to list
+settings = {
+    "Shutter Speed": "/main/capturesettings/shutterspeed",
+    "ISO": "/main/imgsettings/iso",
+}
