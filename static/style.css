@@ -36,6 +36,7 @@ html, body {
     text-align: center;
     padding: 1rem 0;
     margin-top: auto;  /* Ensures footer sticks to bottom */
+    font-size: 0.95em;  /* Slightly smaller font size for the footer */
 }
 
 .popup-panel {
@@ -43,4 +44,25 @@ html, body {
     border: 1px solid #007bff;
     background-color: white;
     max-width: 350px;
+}
+
+/* Custom site-wide styles */
+
+body {
+    background-color: #181818;
+    color: #f8f9fa;
+}
+
+.navbar-brand {
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+.photo.selected {
+    border: 2px solid #2196F3 !important;
+}
+
+.star-map-canvas {
+    border-radius: 12px;
+    box-shadow: 0 0 16px #000a;
 }

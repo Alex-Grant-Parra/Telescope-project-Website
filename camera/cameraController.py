@@ -4,6 +4,7 @@ from os import makedirs, path
 from datetime import datetime
 from threading import Thread
 import queue
+from flask_login import current_user
 
 class Camera:
 
@@ -95,8 +96,22 @@ class Camera:
         return max_num
 
     @staticmethod
-    def capturePhoto(save_folder, max_retries=3):
-        makedirs(save_folder, exist_ok=True)
+    def get_user_photo_folder(base_folder):
+        """
+        Returns the folder path for the current user's photos.
+        """
+        if not current_user.is_authenticated:
+            raise Exception("User must be logged in to take photos.")
+        user_folder = path.join(base_folder, str(current_user.get_id()))
+        makedirs(user_folder, exist_ok=True)
+        return user_folder
+
+    @staticmethod
+    def capturePhoto(base_folder, max_retries=3):
+        """
+        Save photo to the current user's folder. Requires user to be logged in.
+        """
+        save_folder = Camera.get_user_photo_folder(base_folder)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         for attempt in range(1, max_retries + 1):
             # Use gphoto2's built-in capture and download
@@ -106,7 +121,7 @@ class Camera:
                     "--capture-image-and-download",
                     "--filename", f"{save_folder}/photo_{timestamp}.%C"
                 ],
-                capture_output=True,
+                capture_output=True, 
                 text=True
             )
             print(f"[DEBUG] Capture and download output: {capture.stdout} {capture.stderr}")
@@ -141,11 +156,11 @@ class Camera:
             Camera.worker_thread.start()
 
     @staticmethod
-    def enqueuePhotoRequest(save_folder, settings):
+    def enqueuePhotoRequest(base_folder, settings):
         """
-        Add a photo request to the queue.
-        settings: dict, e.g. {"Shutter Speed": "1/100", "ISO": "400"}
+        Add a photo request to the queue for the current user.
         """
+        save_folder = Camera.get_user_photo_folder(base_folder)
         Camera.photo_queue.put((save_folder, settings))
         Camera.startWorker()
 
