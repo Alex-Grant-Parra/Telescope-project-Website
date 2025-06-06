@@ -2,6 +2,8 @@ from subprocess import run
 from time import sleep
 from os import makedirs, path
 from datetime import datetime
+from threading import Thread
+import queue
 
 class Camera:
 
@@ -93,45 +95,84 @@ class Camera:
         return max_num
 
     @staticmethod
-    def capturePhoto(save_folder):
+    def capturePhoto(save_folder, max_retries=3):
         makedirs(save_folder, exist_ok=True)
-
-        # Use gphoto2's built-in capture and download
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # Download all files to the save_folder, keeping original names
-        capture = run(
-            [
-                "gphoto2",
-                "--capture-image-and-download",
-                "--filename", f"{save_folder}/photo_{timestamp}_%C.%C"
-            ],
-            capture_output=True,
-            text=True
-        )
-        print(f"[DEBUG] Capture and download output: {capture.stdout} {capture.stderr}")
-        if capture.returncode != 0:
-            raise Exception(f"Capture and download failed: {capture.stderr.strip()}")
+        for attempt in range(1, max_retries + 1):
+            # Use gphoto2's built-in capture and download
+            capture = run(
+                [
+                    "gphoto2",
+                    "--capture-image-and-download",
+                    "--filename", f"{save_folder}/photo_{timestamp}_%C.%C"
+                ],
+                capture_output=True,
+                text=True
+            )
+            print(f"[DEBUG] Capture and download output: {capture.stdout} {capture.stderr}")
+            if capture.returncode == 0:
+                # Collect downloaded filenames from output
+                downloaded_files = []
+                for line in capture.stdout.splitlines():
+                    if "Saving file as" in line:
+                        saved_file = line.split("Saving file as")[-1].strip()
+                        downloaded_files.append(path.basename(saved_file))
+                # Reset camera and wait for device to be free
+                run(["gphoto2", "--reset"], capture_output=True, text=True)
+                sleep(8)  # Increased delay for camera/USB recovery
+                return downloaded_files
+            else:
+                # Check for USB busy error
+                if "Could not claim the USB device" in capture.stderr or "resource busy" in capture.stderr:
+                    print(f"[RETRY] USB device busy, attempt {attempt} of {max_retries}. Waiting before retry...")
+                    sleep(5)
+                    continue
+                else:
+                    raise Exception(f"Capture and download failed: {capture.stderr.strip()}")
+        raise Exception("Failed to capture photo after multiple retries due to USB device busy.")
 
-        # Collect downloaded filenames from output
-        downloaded_files = []
-        for line in capture.stdout.splitlines():
-            if "Saving file as" in line:
-                # Extract the filename from the output
-                saved_file = line.split("Saving file as")[-1].strip()
-                downloaded_files.append(path.basename(saved_file))
+    photo_queue = queue.Queue()
+    worker_thread = None
 
-        # Reset camera and wait for device to be free
-        run(["gphoto2", "--reset"], capture_output=True, text=True)
-        sleep(5)
+    @staticmethod
+    def startWorker():
+        if Camera.worker_thread is None or not Camera.worker_thread.is_alive():
+            Camera.worker_thread = Thread(target=Camera._processQueue, daemon=True)
+            Camera.worker_thread.start()
 
-        return downloaded_files
+    @staticmethod
+    def enqueuePhotoRequest(save_folder, settings):
+        """
+        Add a photo request to the queue.
+        settings: dict, e.g. {"Shutter Speed": "1/100", "ISO": "400"}
+        """
+        Camera.photo_queue.put((save_folder, settings))
+        Camera.startWorker()
 
+    @staticmethod
+    def _processQueue():
+        while True:
+            save_folder, settings = Camera.photo_queue.get()  # blocks until item available
+            try:
+                # Set camera settings before taking photo
+                for label, value in settings.items():
+                    if label in settings_map:
+                        Camera.setSetting(settings_map[label], value)
+                        print(f"[QUEUE] Set {label} to {value}")
+                # Take photo
+                files = Camera.capturePhoto(save_folder)
+                print(f"[QUEUE] Captured files: {files}")
+            except Exception as e:
+                print(f"[QUEUE] Error processing photo request: {e}")
+            Camera.photo_queue.task_done()
 
 
 Camera.ensureConnection()
+Camera.startWorker()
 
-# Camera settings to list
+# Camera settings to list and for mapping label to config path
 settings = {
     "Shutter Speed": "/main/capturesettings/shutterspeed",
     "ISO": "/main/imgsettings/iso",
 }
+settings_map = settings  # For easier reference in queue processing
