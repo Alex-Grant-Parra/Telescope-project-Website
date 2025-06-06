@@ -3,8 +3,10 @@ import jwt
 import random
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
-from db import db  # Import the db instance
+from flask_login import UserMixin, login_required, current_user
+from db import db
 from dotenv import load_dotenv  # Import load_dotenv
+from flask import Blueprint, jsonify
 
 # Load environment variables from .env file
 load_dotenv()
@@ -16,18 +18,31 @@ if encryption_key is None:
 encryption_key = encryption_key.encode()  # Ensure it's in bytes format
 fernet = Fernet(encryption_key)  # Initialize Fernet with the key
 
-class User(db.Model):
+class User(UserMixin, db.Model):
+    __tablename__ = "user"
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     email = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(150), nullable=False)
-    AccountType = db.Column(db.String(50), nullable=False)
+    password = db.Column(db.String(200), nullable=False)
+    AccountType = db.Column(db.String(32), nullable=False, default="Standard")  # "Standard", "Administrator", "Limited", or "None"
     totp_secret = db.Column(db.String(16))
     current_2fa_code = db.Column(db.String(6))
 
     @property
     def is_admin(self):
         return self.AccountType == "Administrator"
+
+    @property
+    def is_standard(self):
+        return self.AccountType == "Standard"
+
+    @property
+    def is_limited(self):
+        return self.AccountType == "Limited"
+
+    @property
+    def is_none(self):
+        return self.AccountType == "None"
 
     # Encrypt email before storing in the database
     def set_email(self, email):
@@ -89,3 +104,14 @@ class User(db.Model):
             self.current_2fa_code = None  # Clear the 2FA code after successful verification
             db.session.commit()
         return result
+
+    def get_account_type(self):
+        return self.AccountType
+
+
+user_bp = Blueprint("user", __name__)
+
+@user_bp.route("/user/account_type")
+@login_required
+def get_account_type_route():
+    return jsonify({"account_type": current_user.get_account_type()})

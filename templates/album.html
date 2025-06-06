@@ -26,6 +26,10 @@
         <!-- Grouped thumbnails will be loaded here -->
     </div>
 </div>
+<!-- Modal for zoomed photo (no close button or gray circle) -->
+<div id="photoModal" class="photo-modal" style="display:none;">
+    <img id="photoModalImg" src="" alt="Zoomed Photo" class="photo-modal-img">
+</div>
 <script>
     let photos = [];
     let selected = [];
@@ -93,6 +97,7 @@
                 div.dataset.idx = photo.idx;
                 div.style.cursor = 'pointer';
                 div.onclick = (e) => handleSelect(e, photo.idx);
+                div.ondblclick = (e) => showPhotoModal(photo.url);
                 div.innerHTML = `<img src="${photo.url}" alt="${photo.name}" class="card-img-top mb-2" style="height:120px;object-fit:cover;">
                     <div class="card-body p-1">
                         <div class="small">${photo.name}</div>
@@ -106,31 +111,25 @@
         document.getElementById('download-btn').disabled = selected.length === 0;
     }
 
-    function handleSelect(e, idx) {
-        if (e.shiftKey && lastSelected !== null) {
-            const [start, end] = [lastSelected, idx].sort((a, b) => a - b);
-            for (let i = start; i <= end; i++) {
-                if (!selected.includes(i)) selected.push(i);
-            }
-        } else if (e.ctrlKey || e.metaKey) {
-            if (selected.includes(idx)) {
-                selected = selected.filter(i => i !== idx);
-            } else {
-                selected.push(idx);
-            }
-            lastSelected = idx;
-        } else {
-            if (selected.length === 1 && selected[0] === idx) {
-                selected = [];
-                lastSelected = null;
-            } else {
-                selected = [idx];
-                lastSelected = idx;
-            }
-        }
-        selected = Array.from(new Set(selected));
-        renderGallery();
+    // Modal logic (no close button, click anywhere to close)
+    function showPhotoModal(url) {
+        const modal = document.getElementById('photoModal');
+        const img = document.getElementById('photoModalImg');
+        modal.style.display = 'flex';
+        img.src = url;
+        img.classList.remove('zoomed');
+        // Trigger reflow for animation
+        void img.offsetWidth;
+        img.classList.add('zoomed');
     }
+
+    function closePhotoModal() {
+        const modal = document.getElementById('photoModal');
+        modal.style.display = 'none';
+        document.getElementById('photoModalImg').src = '';
+    }
+
+    document.getElementById('photoModal').onclick = closePhotoModal;
 
     document.getElementById('sort-date').onclick = () => {
         photos.sort((a, b) => b.datetime - a.datetime);
@@ -166,12 +165,39 @@
             }, 100);
         });
     };
-
     fetchPhotos();
 </script>
 <style>
     .photo.selected {
         border: 2px solid #2196F3 !important;
+    }
+    /* Modal styles (no close button or gray circle) */
+    .photo-modal {
+        position: fixed;
+        z-index: 2000;
+        left: 0; top: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s;
+        cursor: pointer;
+    }
+    .photo-modal-img {
+        position: relative;
+        z-index: 2;
+        max-width: 90vw;
+        max-height: 80vh;
+        border-radius: 12px;
+        box-shadow: 0 0 32px #000a;
+        opacity: 0;
+        transform: scale(0.7);
+        transition: opacity 0.25s, transform 0.25s;
+        cursor: default;
+    }
+    .photo-modal-img.zoomed {
+        opacity: 1;
+        transform: scale(1);
     }
 </style>
 {% endblock %}

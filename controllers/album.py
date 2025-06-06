@@ -4,14 +4,25 @@ from werkzeug.utils import secure_filename
 import zipfile
 import io
 from datetime import datetime
+from flask_login import login_required, current_user
 
 album_bp = Blueprint("album", __name__, template_folder="../templates")
 
-CAMERA_PHOTOS_DIR = os.path.join(os.path.dirname(__file__), "../camera_photos")
+CAMERA_PHOTOS_BASE_DIR = os.path.join(os.path.dirname(__file__), "../camera_photos")
+
+def get_user_photos_dir():
+    if not current_user.is_authenticated:
+        return None
+    user_dir = os.path.join(CAMERA_PHOTOS_BASE_DIR, str(current_user.get_id()))
+    os.makedirs(user_dir, exist_ok=True)
+    return user_dir
 
 def get_jpeg_files():
+    user_dir = get_user_photos_dir()
+    if not user_dir:
+        return []
     files = []
-    for fname in os.listdir(CAMERA_PHOTOS_DIR):
+    for fname in os.listdir(user_dir):
         if fname.lower().endswith(".jpg") or fname.lower().endswith(".jpeg"):
             # Extract date from filename (assume format: IMG_YYYYMMDD_HHMMSS.jpg)
             try:
@@ -23,11 +34,12 @@ def get_jpeg_files():
                 "name": fname,
                 "date": date_str if date else "",
                 "datetime": date.timestamp() if date else 0,
-                "url": f"/album/photo/{secure_filename(fname)}"
+                "url": f"/album/photo/{fname}"
             })
     return files
 
 @album_bp.route("/album")
+@login_required
 def album():
     sort = request.args.get("sort", "date")
     files = get_jpeg_files()
@@ -36,27 +48,32 @@ def album():
     return render_template("album.html", photos=files)
 
 @album_bp.route("/album/photos")
+@login_required
 def album_photos():
     files = get_jpeg_files()
     files.sort(key=lambda x: x["datetime"], reverse=True)
     return jsonify(files)
 
 @album_bp.route("/album/photo/<filename>")
+@login_required
 def album_photo(filename):
-    path = os.path.join(CAMERA_PHOTOS_DIR, filename)
+    user_dir = get_user_photos_dir()
+    path = os.path.join(user_dir, filename)
     if not os.path.isfile(path):
         abort(404)
     return send_file(path)
 
 @album_bp.route("/album/download", methods=["POST"])
+@login_required
 def album_download():
     data = request.json
     files = data.get("files", [])
     if not files:
         abort(400)
+    user_dir = get_user_photos_dir()
     abs_files = []
     for fname in files:
-        jpeg_path = os.path.join(CAMERA_PHOTOS_DIR, fname)
+        jpeg_path = os.path.join(user_dir, fname)
         cr2_path = os.path.splitext(jpeg_path)[0] + ".cr2"
         # Always add the jpeg if it exists
         if os.path.isfile(jpeg_path):
