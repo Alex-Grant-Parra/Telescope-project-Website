@@ -74,88 +74,57 @@ class Camera:
         return True
 
     @staticmethod
-    def capturePhoto(save_folder):
-        """
-        Captures a photo using gphoto2, downloads it to the specified folder,
-        then deletes the photo from the camera if it still exists.
-        Returns the filename of the saved photo.
-        """
-        # Ensure folder exists
-        makedirs(save_folder, exist_ok=True)
-
-        # Generate a unique filename based on timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"photo_{timestamp}.jpg"
-        filepath = path.join(save_folder, filename)
-
-        # Capture image (only capture on camera)
-        capture = run(["gphoto2", "--capture-image"], capture_output=True, text=True)
-        if capture.returncode != 0:
-            raise Exception(f"Capture failed: {capture.stderr.strip()}")
-
-        # List files on camera to find latest file number
-        files_list = run(["gphoto2", "--list-files"], capture_output=True, text=True)
-        if files_list.returncode != 0:
-            raise Exception(f"Failed to list files: {files_list.stderr.strip()}")
-
-        # Parse the latest file number from the list (search from bottom up)
-        lines = files_list.stdout.splitlines()
-        latest_file_number = None
-        for line in reversed(lines):
+    def get_latest_file_number():
+        result = run(["gphoto2", "--list-files"], capture_output=True, text=True)
+        if result.returncode != 0:
+            raise Exception(f"Failed to list files: {result.stderr.strip()}")
+        lines = result.stdout.splitlines()
+        max_num = 0
+        for line in lines:
             if line.strip().startswith("#"):
                 parts = line.split()
                 if len(parts) > 1 and parts[0].startswith("#"):
-                    latest_file_number = parts[0][1:]  # Remove leading #
-                    break
+                    try:
+                        num = int(parts[0][1:])
+                        if num > max_num:
+                            max_num = num
+                    except ValueError:
+                        continue
+        return max_num
 
-        if latest_file_number is None:
-            raise Exception("No files found on camera after capture")
+    @staticmethod
+    def capturePhoto(save_folder):
+        makedirs(save_folder, exist_ok=True)
 
-        # Download the latest file to the desired path
-        get_file = run(
-            ["gphoto2", "--get-file", latest_file_number, "--filename", filepath],
+        # Use gphoto2's built-in capture and download
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Download all files to the save_folder, keeping original names
+        capture = run(
+            [
+                "gphoto2",
+                "--capture-image-and-download",
+                "--filename", f"{save_folder}/photo_{timestamp}_%C.%C"
+            ],
             capture_output=True,
             text=True
         )
-        if get_file.returncode != 0:
-            raise Exception(f"Download failed: {get_file.stderr.strip()}")
+        print(f"[DEBUG] Capture and download output: {capture.stdout} {capture.stderr}")
+        if capture.returncode != 0:
+            raise Exception(f"Capture and download failed: {capture.stderr.strip()}")
 
-        # Wait a moment before deleting to allow camera to finalize file
-        sleep(2)
+        # Collect downloaded filenames from output
+        downloaded_files = []
+        for line in capture.stdout.splitlines():
+            if "Saving file as" in line:
+                # Extract the filename from the output
+                saved_file = line.split("Saving file as")[-1].strip()
+                downloaded_files.append(path.basename(saved_file))
 
-        # Re-list files to confirm the file still exists before deleting
-        files_list_after = run(["gphoto2", "--list-files"], capture_output=True, text=True)
-        if files_list_after.returncode == 0:
-            file_exists = False
-            for line in files_list_after.stdout.splitlines():
-                if line.strip().startswith(f"#{latest_file_number} "):
-                    file_exists = True
-                    break
-
-            if file_exists:
-                delete_file = run(
-                    ["gphoto2", "--delete-file", latest_file_number],
-                    capture_output=True,
-                    text=True
-                )
-                if delete_file.returncode != 0:
-                    # Suppress known 'no files' error, warn on others
-                    if "*** Error (-2: 'Bad parameters')" in delete_file.stderr:
-                        print(f"Warning: File #{latest_file_number} not found on camera, skipping delete.")
-                    else:
-                        print(f"Warning: Could not delete file {latest_file_number} from camera: {delete_file.stderr.strip()}")
-            else:
-                print(f"Warning: File #{latest_file_number} not found on camera when attempting delete, skipping.")
-        else:
-            print(f"Warning: Could not list files before deletion: {files_list_after.stderr.strip()}")
-
-        # Reset camera to release lock
+        # Reset camera and wait for device to be free
         run(["gphoto2", "--reset"], capture_output=True, text=True)
+        sleep(5)
 
-        # Optional: wait a moment for camera to be ready again
-        sleep(2)
-
-        return filename
+        return downloaded_files
 
 
 
