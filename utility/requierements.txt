@@ -7,3 +7,4 @@ bcrypt
 cryptography
 pyjwt
 python-dotenv
+gphoto2

@@ -13,8 +13,8 @@ def interface():
 def update_camera():
     data = request.json
     print("Received Camera Settings:", data)
-    shutter_speed = data.get("shutterSpeed", "Unknown")
-    print(f"Shutter Speed: {shutter_speed}")
+    # shutter_speed = data.get("shutterSpeed", "Unknown")
+    # print(f"Shutter Speed: {shutter_speed}")
     return jsonify({"status": "success", "message": "Settings updated"})
 
 @interface_bp.route("/search_object", methods=["POST"])

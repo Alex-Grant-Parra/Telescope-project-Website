@@ -250,7 +250,7 @@ def get_vmag_for_object(name, phaseDeg=None):
 
     if name.lower() == "moon":
         if phaseDeg is not None:
-            illumination_fraction = 1 - cos(phaseDeg)
+            illumination_fraction = (1 + cos(phaseDeg)) / 2
             if illumination_fraction <= 0:
                 return float('inf')  # Invisible at new Moon
             return -12.7 + 2.5 * log10(illumination_fraction)
@@ -283,22 +283,12 @@ def getAllCelestialData(year, month, day):
 
     # Calculate Moon separately
     ra_moon, dec_moon = findMoon(year, month, day)
-    print("Boboboobob")
-    print(ra_moon, dec_moon, ra_sun, dec_sun)
+
     ra_moon_deg, dec_moon_deg = convert.HrMinSecToDegrees(ra_moon[0], ra_moon[1], ra_moon[2]), convert.HrMinSecToDegrees(dec_moon[0], dec_moon[1], dec_moon[2])
     ra_sun_deg, dec_sun_deg = convert.HrMinSecToDegrees(ra_sun[0], ra_sun[1], ra_sun[2]), convert.HrMinSecToDegrees(dec_sun[0], dec_sun[1], dec_sun[2])
 
-    print("skibidi")
-    print(ra_moon_deg, dec_moon_deg, ra_sun_deg, dec_sun_deg)
-
     phase = phase_angle(ra_moon_deg, dec_moon_deg, ra_sun_deg, dec_sun_deg) # works
-    print("hihihihi")
-    print(ra_moon, dec_moon, phase)
     vmag = get_vmag_for_object("moon", phaseDeg=phase)
-    print(vmag)
     results["moon"] = {"ra": ra_moon, "dec": dec_moon, "vmag": vmag}
-
-    print("mag dump")
-    print(results["moon"])
 
     return results
