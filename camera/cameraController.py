@@ -104,7 +104,7 @@ class Camera:
                 [
                     "gphoto2",
                     "--capture-image-and-download",
-                    "--filename", f"{save_folder}/photo_{timestamp}_%C.%C"
+                    "--filename", f"{save_folder}/photo_{timestamp}.%C"
                 ],
                 capture_output=True,
                 text=True

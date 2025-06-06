@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Photo Album</title>
+    <style>
+        .gallery { display: flex; flex-wrap: wrap; gap: 10px; }
+        .photo { border: 2px solid transparent; cursor: pointer; }
+        .photo.selected { border: 2px solid #2196F3; }
+        .photo img { width: 150px; height: 150px; object-fit: cover; }
+        .toolbar { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+{% extends "base.html" %}
+
+{% block title %}Album - Telescope Control{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="mb-4">Photo Album</h1>
+    <div class="toolbar mb-3">
+        <button id="sort-date" class="btn btn-secondary btn-sm me-2">Sort by Date</button>
+        <button id="download-btn" class="btn btn-primary btn-sm" disabled>Download</button>
+    </div>
+    <div id="gallery">
+        <!-- Grouped thumbnails will be loaded here -->
+    </div>
+</div>
+<script>
+    let photos = [];
+    let selected = [];
+    let lastSelected = null;
+
+    function fetchPhotos() {
+        fetch('/album/photos')
+            .then(r => r.json())
+            .then(data => {
+                photos = data;
+                renderGallery();
+            });
+    }
+
+    function ordinalSuffix(day) {
+        if (day > 3 && day < 21) return day + "th";
+        switch (day % 10) {
+            case 1:  return day + "st";
+            case 2:  return day + "nd";
+            case 3:  return day + "rd";
+            default: return day + "th";
+        }
+    }
+
+    function formatDate(dateStr) {
+        // Expects YYYYMMDD
+        if (!dateStr || dateStr.length !== 8) return dateStr || "Unknown";
+        const year = dateStr.slice(0, 4);
+        const month = parseInt(dateStr.slice(4, 6), 10) - 1;
+        const day = parseInt(dateStr.slice(6, 8), 10);
+        const d = new Date(year, month, day);
+        const monthName = d.toLocaleString('default', { month: 'long' });
+        return `${monthName} ${ordinalSuffix(day)} ${year}`;
+    }
+
+    function groupPhotosByDate(photos) {
+        const groups = {};
+        photos.forEach((photo, idx) => {
+            const date = photo.date || "Unknown";
+            if (!groups[date]) groups[date] = [];
+            groups[date].push({...photo, idx});
+        });
+        // Sort groups by date descending
+        const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+        return sortedDates.map(date => ({date, items: groups[date]}));
+    }
+
+    function renderGallery() {
+        const gallery = document.getElementById('gallery');
+        gallery.innerHTML = '';
+        const groups = groupPhotosByDate(photos);
+        groups.forEach(group => {
+            const heading = document.createElement('h4');
+            heading.textContent = formatDate(group.date);
+            heading.className = "mt-4 mb-3";
+            gallery.appendChild(heading);
+
+            const row = document.createElement('div');
+            row.className = 'row';
+            group.items.forEach(photo => {
+                const col = document.createElement('div');
+                col.className = 'col-6 col-sm-4 col-md-3 col-lg-2 mb-3';
+                const div = document.createElement('div');
+                div.className = 'photo card p-2' + (selected.includes(photo.idx) ? ' selected border-primary' : '');
+                div.dataset.idx = photo.idx;
+                div.style.cursor = 'pointer';
+                div.onclick = (e) => handleSelect(e, photo.idx);
+                div.innerHTML = `<img src="${photo.url}" alt="${photo.name}" class="card-img-top mb-2" style="height:120px;object-fit:cover;">
+                    <div class="card-body p-1">
+                        <div class="small">${photo.name}</div>
+                        <div class="text-muted small">${photo.date}</div>
+                    </div>`;
+                col.appendChild(div);
+                row.appendChild(col);
+            });
+            gallery.appendChild(row);
+        });
+        document.getElementById('download-btn').disabled = selected.length === 0;
+    }
+
+    function handleSelect(e, idx) {
+        if (e.shiftKey && lastSelected !== null) {
+            const [start, end] = [lastSelected, idx].sort((a, b) => a - b);
+            for (let i = start; i <= end; i++) {
+                if (!selected.includes(i)) selected.push(i);
+            }
+        } else if (e.ctrlKey || e.metaKey) {
+            if (selected.includes(idx)) {
+                selected = selected.filter(i => i !== idx);
+            } else {
+                selected.push(idx);
+            }
+            lastSelected = idx;
+        } else {
+            if (selected.length === 1 && selected[0] === idx) {
+                selected = [];
+                lastSelected = null;
+            } else {
+                selected = [idx];
+                lastSelected = idx;
+            }
+        }
+        selected = Array.from(new Set(selected));
+        renderGallery();
+    }
+
+    document.getElementById('sort-date').onclick = () => {
+        photos.sort((a, b) => b.datetime - a.datetime);
+        renderGallery();
+    };
+
+    document.getElementById('download-btn').onclick = () => {
+        if (selected.length === 0) return;
+        const files = selected.map(i => photos[i].name);
+        fetch('/album/download', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({files})
+        })
+        .then(resp => {
+            if (!resp.ok) throw new Error("Download failed");
+            return resp.blob();
+        })
+        .then(blob => {
+            let filename = "photos.zip";
+            if (files.length === 1) {
+                filename = files[0].replace(/\.[^.]+$/, '') + ".zip";
+            }
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            }, 100);
+        });
+    };
+
+    fetchPhotos();
+</script>
+<style>
+    .photo.selected {
+        border: 2px solid #2196F3 !important;
+    }
+</style>
+{% endblock %}
+</body>
+</html>
