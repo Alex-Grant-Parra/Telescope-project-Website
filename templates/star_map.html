@@ -1,11 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Star Map{% endblock %}
+{% block title %}Star Map - Telescope Control{% endblock %}
 
 {% block content %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
-<div id="starMapPanelContainer" style="display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+<style>
+/* Ensure the star map container does not block the navbar/header */
+#starMapPanelContainer {
+    pointer-events: none;
+}
+#starMapPanel, #magnitudePanel, #starLabel, #fullscreenButton {
+    pointer-events: auto;
+}
+</style>
+
+<div id="starMapPanelContainer" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw;">
     <div id="starMapPanel" style="width: 80%; height: 80%; position: relative; background-color: black;">
         <button id="fullscreenButton" style="position: absolute; top: 10px; right: 10px; padding: 10px; background: rgba(0, 0, 0, 0.7); color: white; border: none; cursor: pointer;">⛶ Full Screen</button>
         <div id="starLabel" style="position: absolute; color: white; background: rgba(0, 0, 0, 0.7); padding: 5px; font-size: 14px; border-radius: 5px; display: none;"></div>
