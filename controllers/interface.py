@@ -5,6 +5,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from flask import Blueprint, render_template, request, jsonify, session
 from algorithms.convert import convert
 from camera.cameraController import Camera
+from camera.liveView import live_view_frame_generator, set_live_view_setting
+from flask import Response
 
 from datetime import datetime
 import time
@@ -27,18 +29,20 @@ def update_camera():
         try:
             # Set the shutter speed using Camera class
             Camera.setSetting("/main/capturesettings/shutterspeed", shutter_speed)
+            set_live_view_setting("shutter_speed", shutter_speed)
         except Exception as e:
             response = {"status": "error", "message": f"Failed to set shutter speed: {e}"}
             return jsonify(response)
 
-    # Optionally, handle ISO and other settings similarly
-    # iso = data.get("iso")
-    # if iso:
-    #     try:
-    #         Camera.setSetting("/main/imgsettings/iso", iso)
-    #     except Exception as e:
-    #         response = {"status": "error", "message": f"Failed to set ISO: {e}"}
-    #         return jsonify(response)
+    # Set ISO if provided
+    iso = data.get("iso")
+    if iso:
+        try:
+            Camera.setSetting("/main/imgsettings/iso", iso)
+            set_live_view_setting("iso", iso)
+        except Exception as e:
+            response = {"status": "error", "message": f"Failed to set ISO: {e}"}
+            return jsonify(response)
 
     return jsonify(response)
 
@@ -157,4 +161,18 @@ def take_photo():
         return jsonify({"status": "success", "filename": filename})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
+
+@interface_bp.route("/live_view_stream")
+def live_view_stream():
+    def generate():
+        while True:
+            try:
+                for frame in live_view_frame_generator():
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+            except Exception as e:
+                import time
+                print(f"Live view error: {e}", flush=True)
+                time.sleep(1)  # Wait before retrying
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
