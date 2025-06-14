@@ -61,14 +61,6 @@ def register_blueprints():
 
 register_blueprints()
 
-# Prevent caching for all responses (important for MJPEG/live view)
-@app.after_request
-def add_header(response):
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
-
 # Debugging - Print all registered routes
 print("\nRegistered Routes:")
 for rule in app.url_map.iter_rules():
