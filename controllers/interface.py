@@ -20,27 +20,33 @@ def interface():
 @interface_bp.route("/update_camera", methods=["POST"])
 def update_camera():
     data = request.json
-    print("Received Camera Settings:", data)
+    # print("Received Camera Settings:", data)
     response = {"status": "success", "message": "Settings updated"}
 
     # Set shutter speed if provided
     shutter_speed = data.get("shutterSpeed")
+    iso = data.get("iso")
+
+    print(shutter_speed, iso)
     if shutter_speed:
         try:
             # Set the shutter speed using Camera class
-            Camera.setSetting("/main/capturesettings/shutterspeed", shutter_speed)
+            print("Changing shutterspeed")
+            Cameralink.setSettings(["/main/capturesettings/shutterspeed", shutter_speed])
         except Exception as e:
             response = {"status": "error", "message": f"Failed to set shutter speed: {e}"}
+            print(response)
             return jsonify(response)
 
-    # Optionally, handle ISO and other settings similarly
-    # iso = data.get("iso")
-    # if iso:
-    #     try:
-    #         Camera.setSetting("/main/imgsettings/iso", iso)
-    #     except Exception as e:
-    #         response = {"status": "error", "message": f"Failed to set ISO: {e}"}
-    #         return jsonify(response)
+    # Handling ISO
+    if iso:
+        try:
+            print("Changing iso")
+            Cameralink.setSettings(["/main/imgsettings/iso", iso])
+        except Exception as e:
+            response = {"status": "error", "message": f"Failed to set ISO: {e}"}
+            print(response)
+            return jsonify(response)
 
     return jsonify(response)
 
