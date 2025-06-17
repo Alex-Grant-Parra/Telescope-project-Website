@@ -25,5 +25,3 @@ class Cameralink:
         extracted_data = data["result"] 
         
         return extracted_data  
-
-print(Cameralink.getSettings())

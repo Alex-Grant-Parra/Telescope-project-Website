@@ -9,6 +9,8 @@ from camera.cameraController import Camera
 from datetime import datetime
 import time
 
+from telescopeLink import Cameralink
+
 interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
 @interface_bp.route("/")
@@ -133,18 +135,19 @@ def format_celestial_data(name, data):
 
 @interface_bp.route("/get_camera_choices")
 def get_camera_choices():
-    # Map setting names to gphoto2 config paths
-    settings = {
-        "shutterSpeed": "/main/capturesettings/shutterspeed",
-        "iso": "/main/imgsettings/iso",
-        # Add more settings as needed
-    }
-    choices = {}
-    start = time.time()
-    for label, path in settings.items():
-        result = Camera.getSettingChoices(label, path)
-        choices[label] = result if result else []
-    print(f"get_camera_choices took {time.time() - start:.2f} seconds")
+    # # Map setting names to gphoto2 config paths
+    # settings = {
+    #     "shutterSpeed": "/main/capturesettings/shutterspeed",
+    #     "iso": "/main/imgsettings/iso",
+    #     # Add more settings as needed
+    # }
+    # choices = {}
+    # start = time.time()
+    # for label, path in settings.items():
+    #     result = Camera.getSettingChoices(label, path)
+    #     choices[label] = result if result else []
+    # print(f"get_camera_choices took {time.time() - start:.2f} seconds")
+    choices = Cameralink.getSettings()
     return jsonify(choices)
 
 @interface_bp.route("/take_photo", methods=["POST"])
