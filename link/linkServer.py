@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import asyncio
 import threading
 import websockets
-import json
+import ujson as json  # Using ujson for faster serialization
 import uuid
 
 FLASK_IP = "0.0.0.0"
@@ -25,20 +25,20 @@ class Client:
             kwargs = {}
 
         message_id = str(uuid.uuid4())
-        message = {
+        message = json.dumps({
             "type": "call",
             "function": function_name,
             "args": args,
             "kwargs": kwargs,
             "id": message_id
-        }
+        })
 
         future = asyncio.get_event_loop().create_future()
         pending[message_id] = future
-        await self.ws.send(json.dumps(message))
+        await self.ws.send(message)
 
         try:
-            response = await asyncio.wait_for(future, timeout=5)
+            response = await asyncio.wait_for(future, timeout=3)  # Reduced timeout for faster responses
         except asyncio.TimeoutError:
             pending.pop(message_id, None)
             raise Exception("Timeout waiting for client response")
@@ -65,8 +65,7 @@ client_manager = ClientManager()
 async def handle_client(ws):
     client_id = await ws.recv()
     client_manager.add_client(client_id, ws)
-    print(f"Clients stored: {client_manager.clients.keys()}")
-    print(f"[+] {client_id} connected")
+    print(f"[+] {client_id} connected. Stored clients: {client_manager.clients.keys()}")
 
     try:
         async for message in ws:
@@ -84,20 +83,17 @@ async def handle_client(ws):
 
 @app.route('/sendCommand', methods=['POST'])
 def send_command():
-    print(f"Known clients before execution: {client_manager.clients.keys()}")  # Debugging print
-    
-    data = request.json
+    data = request.get_json()
     client_id = data.get('client_id')
     command = data.get('command')
     args = data.get('args', [])
 
     try:
-        result = asyncio.run(client_manager.command(client_id, command, args))  # Fixed async handling
+        result = asyncio.run(client_manager.command(client_id, command, args))  # Ensure a fresh event loop
         return jsonify({"status": "success", "result": result})
     except Exception as e:
         print(f"Error executing command: {str(e)}")  # Debugging output
         return jsonify({"status": "error", "error": str(e)}), 500
-
 
 
 def start_ws_server():
