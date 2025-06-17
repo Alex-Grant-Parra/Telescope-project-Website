@@ -17,6 +17,7 @@ client_id = "pi-001"
 
 class Cameralink:
 
+    # @staticmethod
     def getSettings():
         payload = {"client_id": client_id, "command": "getCameraChoices"}
         response = requests.post(url, json=payload).text 
@@ -25,3 +26,17 @@ class Cameralink:
         extracted_data = data["result"] 
         
         return extracted_data  
+    
+    # @staticmethod
+    def setSettings(args):
+        print("Yo banana")
+        payload = {"client_id": client_id, "command": "setCameraSetting", "args": args}
+        # print(args)
+        print(payload)
+        response = requests.post(url, json=payload).text
+
+        data = ujson.loads(response) 
+        extracted_data = data["result"] 
+        
+        return extracted_data  
+    
