@@ -29,14 +29,20 @@ class Cameralink:
     
     # @staticmethod
     def setSettings(args):
-        print("Yo banana")
         payload = {"client_id": client_id, "command": "setCameraSetting", "args": args}
-        # print(args)
-        print(payload)
         response = requests.post(url, json=payload).text
 
-        data = ujson.loads(response) 
+        data = ujson.loads(response)
         extracted_data = data["result"] 
         
         return extracted_data  
     
+    def capturePhoto():
+        payload = {"client_id": client_id, "command": "capturePhoto"}
+        response = requests.post(url, json=payload).text
+
+        data = ujson.loads(response)
+
+        print(data)
+        
+        return data  
