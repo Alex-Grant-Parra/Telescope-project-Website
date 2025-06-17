@@ -159,11 +159,14 @@ def get_camera_choices():
 @interface_bp.route("/take_photo", methods=["POST"])
 def take_photo():
     # Set your camera photos folder path here
-    photos_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "camera_photos")
-    os.makedirs(photos_folder, exist_ok=True)
+    # photos_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "camera_photos")
+    # os.makedirs(photos_folder, exist_ok=True)
     try:
-        filename = Camera.capturePhoto(photos_folder)
-        return jsonify({"status": "success", "filename": filename})
+        print(Cameralink.capturePhoto())
+        print("Ensure the photos are parsed to the main server from the pi")
+
+
+        return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
