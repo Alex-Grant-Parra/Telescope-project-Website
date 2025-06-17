@@ -182,8 +182,8 @@ class Camera:
             Camera.photo_queue.task_done()
 
 
-Camera.ensureConnection()
-Camera.startWorker()
+# Camera.ensureConnection()
+# Camera.startWorker()
 
 # Camera settings to list and for mapping label to config path
 settings = {
