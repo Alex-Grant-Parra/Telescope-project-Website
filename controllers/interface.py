@@ -162,9 +162,16 @@ def take_photo():
     # photos_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "camera_photos")
     # os.makedirs(photos_folder, exist_ok=True)
     try:
+        from flask_login import current_user
+        if current_user.is_authenticated:
+            print(f"User ID: {current_user.get_id()}")
+        else:
+            print("Not logged in")
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+    
+    try:
         print(Cameralink.capturePhoto())
-        print("Ensure the photos are parsed to the main server from the pi")
-
 
         return jsonify({"status": "success"})
     except Exception as e:
