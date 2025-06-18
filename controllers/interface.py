@@ -164,16 +164,20 @@ def take_photo():
     try:
         from flask_login import current_user
         if current_user.is_authenticated:
-            print(f"User ID: {current_user.get_id()}")
+            currentId = current_user.get_id()
+            print(f"User ID: {currentId}")
+
+            try:
+                print(Cameralink.capturePhoto(currentId))
+
+                return jsonify({"status": "success"})
+            except Exception as e:
+                return jsonify({"status": "error", "message": str(e)})
         else:
-            print("Not logged in")
+            return jsonify({"status": "error", "message": "Must be logged in to take photos"})
+
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
     
-    try:
-        print(Cameralink.capturePhoto())
 
-        return jsonify({"status": "success"})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)})
 

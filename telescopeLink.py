@@ -37,8 +37,8 @@ class Cameralink:
         
         return extracted_data  
     
-    def capturePhoto():
-        payload = {"client_id": client_id, "command": "capturePhoto"}
+    def capturePhoto(currentid):
+        payload = {"client_id": client_id, "command": "capturePhoto", "args": currentid}
         response = requests.post(url, json=payload).text
 
         data = ujson.loads(response)
