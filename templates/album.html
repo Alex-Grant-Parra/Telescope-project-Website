@@ -77,6 +77,18 @@
         return sortedDates.map(date => ({date, items: groups[date]}));
     }
 
+    function handleSelect(event, idx) {
+        const photoDiv = event.currentTarget;
+        if (selected.includes(idx)) {
+            selected = selected.filter(i => i !== idx);
+            photoDiv.classList.remove("selected");
+        } else {
+            selected.push(idx);
+            photoDiv.classList.add("selected");
+        }
+        document.getElementById('download-btn').disabled = selected.length === 0;
+    }
+
     function renderGallery() {
         const gallery = document.getElementById('gallery');
         gallery.innerHTML = '';

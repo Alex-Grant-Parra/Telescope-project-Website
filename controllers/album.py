@@ -24,19 +24,21 @@ def get_jpeg_files():
     files = []
     for fname in os.listdir(user_dir):
         if fname.lower().endswith(".jpg") or fname.lower().endswith(".jpeg"):
-            # Extract date from filename (assume format: IMG_YYYYMMDD_HHMMSS.jpg)
+            # Extract date from filename (assume format: photoYYYYMMDDHHMMSS.jpg)
             try:
-                date_str = fname.split("_")[1]  # e.g., '20240607'
+                date_part = fname.lstrip("photo").split(".")[0]  # Remove "photo" and take numeric part
+                date_str = date_part[:8]  # First 8 digits represent YYYYMMDD
                 date = datetime.strptime(date_str, "%Y%m%d")
             except Exception:
                 date = None
             files.append({
                 "name": fname,
-                "date": date_str if date else "",
+                "date": date_str if date else "Unknown",
                 "datetime": date.timestamp() if date else 0,
                 "url": f"/album/photo/{fname}"
             })
     return files
+
 
 @album_bp.route("/album")
 @login_required
