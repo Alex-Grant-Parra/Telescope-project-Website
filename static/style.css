@@ -203,3 +203,39 @@ body.night-mode .moon-stars {
 body.night-mode .nightmode-icon {
     transform: rotateY(180deg);
 }
+
+.grin-face {
+    position: absolute;
+    left: 4px; top: 4px;
+    width: 20px; height: 20px;
+    background: #222;
+    border-radius: 50%;
+    border: 2px solid #ffe066;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    box-shadow: 0 0 8px 2px #ffe06699;
+    transition: background 0.3s;
+}
+.grin-eyes {
+    position: absolute;
+    top: 7px; left: 5px;
+    width: 10px; height: 4px;
+    display: flex;
+    justify-content: space-between;
+}
+.grin-eyes::before, .grin-eyes::after {
+    content: '';
+    display: block;
+    width: 3px; height: 3px;
+    background: #fff;
+    border-radius: 50%;
+}
+.grin-mouth {
+    position: absolute;
+    left: 5px; top: 13px;
+    width: 10px; height: 5px;
+    border-bottom: 2px solid #fff;
+    border-radius: 0 0 10px 10px;
+}
