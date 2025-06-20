@@ -51,6 +51,7 @@
                         <span class="star star2"></span>
                         <span class="star star3"></span>
                     </span>
+                    <img class="evil-grin-gif" src="{{ url_for('static', filename='evil-grin.gif') }}" alt="evil grin" style="display:none; width:28px; height:28px; position:absolute; left:0; top:0; z-index:10; border-radius:50%;" />
                 </span>
                 <span class="nightmode-label">Night Mode</span>
             </button>
@@ -65,9 +66,40 @@
     document.addEventListener('DOMContentLoaded', function() {
         const btn = document.getElementById('nightModeToggle');
         const label = btn.querySelector('.nightmode-label');
+        const icon = btn.querySelector('.nightmode-icon');
+        const sun = icon.querySelector('.sun');
+        const moon = icon.querySelector('.moon-stars');
+        const grin = icon.querySelector('.evil-grin-gif');
+        let clickCount = 0;
+        let lastClickTime = 0;
+        let grinTrigger = Math.floor(Math.random() * 11) + 10; // 10-20
         btn.addEventListener('click', function() {
+            const now = Date.now();
+            if (now - lastClickTime > 2000) {
+                clickCount = 0;
+                grinTrigger = Math.floor(Math.random() * 11) + 10;
+            }
+            lastClickTime = now;
+            clickCount++;
+            if (clickCount === grinTrigger) {
+                sun.style.display = 'none';
+                moon.style.display = 'none';
+                grin.style.display = 'block';
+                btn.disabled = true;
+                setTimeout(() => {
+                    grin.style.display = 'none';
+                    sun.style.display = document.body.classList.contains('night-mode') ? 'none' : 'flex';
+                    moon.style.display = document.body.classList.contains('night-mode') ? 'flex' : 'none';
+                    btn.disabled = false;
+                    clickCount = 0;
+                    grinTrigger = Math.floor(Math.random() * 11) + 10;
+                }, 2500);
+                return;
+            }
             document.body.classList.toggle('night-mode');
             label.textContent = document.body.classList.contains('night-mode') ? 'Day Mode' : 'Night Mode';
+            sun.style.display = document.body.classList.contains('night-mode') ? 'none' : 'flex';
+            moon.style.display = document.body.classList.contains('night-mode') ? 'flex' : 'none';
         });
     });
     </script>
