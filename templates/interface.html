@@ -11,12 +11,10 @@
             <button class="fullscreen-toggle btn btn-danger btn-sm position-absolute top-0 end-0 m-2" onclick="toggleFullscreen()">⛶</button>
             <h2 class="text-center">Main Panel</h2>
         </div>
-        <!-- Take Photo Button just to the right of the main panel -->
-        <button id="takePhotoBtn" class="btn btn-primary btn-sm ms-3 mt-2" style="height: 40px;" onclick="takePhoto()">📷 Take Photo</button>
     </div>
 
     <!-- Draggable Camera Controls Panel -->
-    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="cameraPanel" style="top: 50px; left: 20px;">
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="cameraPanel" style="top: 100px; left: 20px;">
         <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Camera Controls</div>  <!-- non-selectable title -->
         <div class="control-row d-flex justify-content-between my-2">
             <span>Shutter Speed</span>
@@ -47,15 +45,25 @@
                 <option>RAW</option>
             </select>
         </div>
+        <button id="takePhotoBtn" class="btn btn-primary mt-3 w-100" style="height: 60px; font-size: 1.25rem;" onclick="takePhoto()">📷 Take Photo</button>
     </div>
 
     <!-- Draggable Telescope Controls Panel -->
-    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="telescopePanel" style="top: 300px; left: 20px;">
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="telescopePanel" style="top: 500px; left: 20px;">
         <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Telescope Controls</div>  <!-- non-selectable title -->
         <div class="control-row my-2">
             <label for="searchObject">Search Object</label>
             <input type="text" class="form-control" id="searchObject" placeholder="Enter HD, NGC, or IC number">
             <button class="btn btn-primary mt-2" onclick="searchObject()">Search</button>
+        </div>
+    </div>
+
+    <!-- Draggable Live View Controls Panel -->
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="liveViewPanel" style="top: 100px; left: 80vw; min-width: 220px;">
+        <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Live View Controls</div>
+        <div class="control-row my-3 d-flex justify-content-between align-items-center">
+            <span>Live View</span>
+            <button id="liveViewToggleBtn" class="btn btn-outline-primary" onclick="toggleLiveView()">Start</button>
         </div>
     </div>
 </div>
@@ -164,6 +172,17 @@
         .catch(error => {
             alert("Error taking photo: " + error);
         });
+    }
+
+    // Live View Toggle Logic
+    let liveViewActive = false;
+    function toggleLiveView() {
+        liveViewActive = !liveViewActive;
+        const btn = document.getElementById("liveViewToggleBtn");
+        btn.textContent = liveViewActive ? "Stop" : "Start";
+        btn.classList.toggle("btn-outline-primary", !liveViewActive);
+        btn.classList.toggle("btn-outline-danger", liveViewActive);
+        // Add your start/stop live view logic here
     }
 
     // // Function to search for an object
