@@ -34,8 +34,26 @@
             {% block content %}{% endblock %}
         </div>
     </div>
-    <footer class="footer bg-dark text-white text-center py-3">
+    <footer class="footer bg-dark text-white text-center py-3 position-relative">
         <div class="container">
+            <button id="nightModeToggle" class="btn btn-outline-light position-absolute start-0 bottom-0 mb-2 ms-2 d-flex align-items-center" style="z-index:2;">
+                <span class="nightmode-icon me-2" aria-hidden="true">
+                    <span class="sun">
+                        <span class="sun-core"></span>
+                        <span class="sun-ray ray1"></span>
+                        <span class="sun-ray ray2"></span>
+                        <span class="sun-ray ray3"></span>
+                        <span class="sun-ray ray4"></span>
+                    </span>
+                    <span class="moon-stars">
+                        <span class="moon"></span>
+                        <span class="star star1"></span>
+                        <span class="star star2"></span>
+                        <span class="star star3"></span>
+                    </span>
+                </span>
+                <span class="nightmode-label">Night Mode</span>
+            </button>
             <p>
                 <a href="{{ url_for('about.about') }}" class="text-white">About</a> |
                 <a href="{{ url_for('about.privacy') }}" class="text-white">Privacy Policy</a> | 
@@ -43,6 +61,16 @@
             </p>
         </div>
     </footer>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const btn = document.getElementById('nightModeToggle');
+        const label = btn.querySelector('.nightmode-label');
+        btn.addEventListener('click', function() {
+            document.body.classList.toggle('night-mode');
+            label.textContent = document.body.classList.contains('night-mode') ? 'Day Mode' : 'Night Mode';
+        });
+    });
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

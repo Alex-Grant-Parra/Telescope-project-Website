@@ -53,6 +53,43 @@ body {
     color: #f8f9fa;
 }
 
+body.night-mode {
+    background-color: #0a1020 !important;
+    color: #ffb;
+}
+
+body.night-mode .navbar,
+body.night-mode .footer,
+body.night-mode .panel-header,
+body.night-mode .draggable-panel {
+    background-color: #111a2a !important;
+    color: #ffb !important;
+    border-color: #233 !important;
+}
+
+body.night-mode .btn,
+body.night-mode .form-control,
+body.night-mode .form-select {
+    background-color: #162040 !important;
+    color: #ffb !important;
+    border-color: #233 !important;
+}
+
+body.night-mode .btn-outline-light {
+    color: #ffb !important;
+    border-color: #ffb !important;
+}
+
+body.night-mode .btn-outline-light:hover {
+    background-color: #233 !important;
+    color: #fff !important;
+}
+
+body.night-mode a,
+body.night-mode a.text-white {
+    color: #ffb !important;
+}
+
 .navbar-brand {
     font-weight: bold;
     letter-spacing: 1px;
@@ -65,4 +102,104 @@ body {
 .star-map-canvas {
     border-radius: 12px;
     box-shadow: 0 0 16px #000a;
+}
+
+body.night-mode .star-map-canvas {
+    box-shadow: 0 0 16px #162040aa;
+}
+
+.nightmode-icon {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    position: relative;
+    vertical-align: middle;
+    transition: transform 0.5s cubic-bezier(.4,2,.6,1);
+}
+
+.sun {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    transition: opacity 0.5s;
+}
+
+.sun-core {
+    width: 14px;
+    height: 14px;
+    background: #ffe066;
+    border-radius: 50%;
+    box-shadow: 0 0 8px 2px #ffe06699;
+    position: absolute;
+    left: 7px; top: 7px;
+    z-index: 2;
+}
+.sun-ray {
+    position: absolute;
+    width: 4px; height: 14px;
+    background: #ffe066;
+    border-radius: 2px;
+    left: 12px; top: 0;
+    transform-origin: 2px 12px;
+    opacity: 0.7;
+    animation: sunray-spin 2s linear infinite;
+}
+.sun-ray.ray1 { transform: rotate(0deg); animation-delay: 0s; }
+.sun-ray.ray2 { transform: rotate(90deg); animation-delay: 0.5s; }
+.sun-ray.ray3 { transform: rotate(45deg); animation-delay: 1s; }
+.sun-ray.ray4 { transform: rotate(-45deg); animation-delay: 1.5s; }
+
+@keyframes sunray-spin {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
+}
+
+.moon-stars {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.5s;
+}
+.moon {
+    width: 16px;
+    height: 16px;
+    background: #e0eaff;
+    border-radius: 50%;
+    position: absolute;
+    left: 6px; top: 6px;
+    box-shadow: -4px 0 0 0 #0a1020;
+}
+.star {
+    position: absolute;
+    width: 3px; height: 3px;
+    background: #fffbe6;
+    border-radius: 50%;
+    opacity: 0.7;
+    animation: star-twinkle 2s infinite;
+}
+.star1 { left: 3px; top: 5px; animation-delay: 0s; }
+.star2 { left: 18px; top: 8px; animation-delay: 1s; }
+.star3 { left: 12px; top: 2px; animation-delay: 1.5s; }
+
+@keyframes star-twinkle {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+body.night-mode .sun {
+    opacity: 0;
+}
+body.night-mode .moon-stars {
+    opacity: 1;
+}
+body.night-mode .nightmode-icon {
+    transform: rotateY(180deg);
 }
