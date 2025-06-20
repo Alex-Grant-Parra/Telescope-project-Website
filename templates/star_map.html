@@ -26,6 +26,14 @@
         <label for="magnitudeSlider" style="margin-bottom: 8px;">Show stars brighter than:</label>
         <input type="range" id="magnitudeSlider" min="0" max="10" step="0.1" value="10" style="width: 90%;">
         <span id="magnitudeValue" style="margin-top: 8px; font-size: 1.2em;">Mag ≤ 10</span>
+        <hr style="width: 100%; margin: 18px 0 10px 0; border: 0; border-top: 1px solid #333;">
+        <label for="latitudeInput" style="margin-bottom: 6px;">Latitude (°):</label>
+        <input type="number" id="latitudeInput" min="-90" max="90" step="0.01" value="0" style="width: 90%; margin-bottom: 12px; padding: 4px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+        <label for="datetimeInput" style="margin-bottom: 6px;">Date & Time:</label>
+        <div style="width: 90%; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-right: 0;">
+            <input type="datetime-local" id="datetimeInput" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff; text-align: center;">
+            <button id="nowButton" type="button" style="margin-top: 4px; padding: 4px 12px; border-radius: 4px; border: none; background: #444; color: #fff; cursor: pointer; align-self: center;">Now</button>
+        </div>
     </div>
 </div>
 
@@ -244,6 +252,17 @@ document.addEventListener("DOMContentLoaded", function () {
                 alert(`Please enter a number between ${min} and ${max}.`);
             }
         }
+    });
+
+    // --- Now button for datetime input ---
+    const nowButton = document.getElementById("nowButton");
+    const datetimeInput = document.getElementById("datetimeInput");
+    nowButton.addEventListener("click", function() {
+        const now = new Date();
+        // Format as yyyy-MM-ddTHH:mm (local time)
+        const pad = n => n.toString().padStart(2, '0');
+        const formatted = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+        datetimeInput.value = formatted;
     });
 
 // --- Initial filter (show all) ---
