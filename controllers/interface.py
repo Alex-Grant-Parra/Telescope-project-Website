@@ -4,7 +4,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from flask import Blueprint, render_template, request, jsonify, session
 from algorithms.convert import convert
-from camera.cameraController import Camera
+# from camera.cameraController import Camera # Redundant import, using Cameralink instead
 
 from datetime import datetime
 import time
