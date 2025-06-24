@@ -7,4 +7,5 @@ bcrypt
 cryptography
 pyjwt
 python-dotenv
-gphoto2
+websockets
+ujson

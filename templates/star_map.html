@@ -13,6 +13,25 @@
 #starMapPanel, #magnitudePanel, #starLabel, #fullscreenButton {
     pointer-events: auto;
 }
+#gridToggles {
+    width: 100%;
+    margin-top: auto;
+    margin-bottom: 0;
+    background: rgba(24,24,24,0.95);
+    border-radius: 8px;
+    box-shadow: 0 0 8px #000a;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+    font-size: 1.08em;
+    padding: 10px 0 8px 0;
+}
+#gridToggles label {
+    cursor: pointer;
+    user-select: none;
+    padding-left: 12px;
+}
 </style>
 
 <div id="starMapPanelContainer" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw;">
@@ -33,6 +52,11 @@
         <div style="width: 90%; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-right: 0;">
             <input type="datetime-local" id="datetimeInput" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff; text-align: center;">
             <button id="nowButton" type="button" style="margin-top: 4px; padding: 4px 12px; border-radius: 4px; border: none; background: #444; color: #fff; cursor: pointer; align-self: center;">Now</button>
+        </div>
+        <div style="flex:1"></div>
+        <div id="gridToggles">
+            <label><input type="checkbox" id="toggleHorizonGrid" checked> Show Horizon Grid</label>
+            <label><input type="checkbox" id="toggleEquatorialGrid" checked> Show Equatorial Grid</label>
         </div>
     </div>
 </div>
@@ -84,6 +108,311 @@ document.addEventListener("DOMContentLoaded", function () {
     const starGroup = new THREE.Group();
     scene.add(starGroup);
 
+    // --- GRID LINES ---
+    // Helper: create a circle (for elevation/DEC lines)
+    function createCircle(radius, segments, color, opacity=0.25) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        for (let i = 0; i <= segments; i++) {
+            const theta = (i / segments) * 2 * Math.PI;
+            vertices.push(
+                radius * Math.cos(theta),
+                0,
+                radius * Math.sin(theta)
+            );
+        }
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const material = new THREE.LineBasicMaterial({ color: color, opacity: opacity, transparent: true });
+        return new THREE.Line(geometry, material);
+    }
+
+    // Helper: create a meridian (for azimuth/RA lines)
+    function createMeridian(radius, segments, azimuthDeg, color, opacity=0.25) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const azRad = azimuthDeg * Math.PI / 180;
+        for (let i = 0; i <= segments; i++) {
+            const el = (i / segments) * Math.PI / 2; // 0 (horizon) to pi/2 (zenith)
+            const r = radius * Math.cos(el);
+            const y = radius * Math.sin(el);
+            const x = r * Math.sin(azRad);
+            const z = r * Math.cos(azRad);
+            vertices.push(x, y, z);
+        }
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const material = new THREE.LineBasicMaterial({ color: color, opacity: opacity, transparent: true });
+        return new THREE.Line(geometry, material);
+    }
+
+    // Helper: create a text sprite for grid labels
+    function makeTextSprite(message, parameters = {}) {
+        const fontface = parameters.fontface || "Arial";
+        const fontsize = parameters.fontsize || 36;
+        const borderThickness = parameters.borderThickness || 2;
+        const borderColor = parameters.borderColor || { r:0, g:0, b:0, a:1.0 };
+        const backgroundColor = parameters.backgroundColor || { r:0, g:0, b:0, a:0.0 };
+        const textColor = parameters.textColor || "#fff";
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        context.font = fontsize + "px " + fontface;
+        // size canvas to fit text
+        const metrics = context.measureText(message);
+        canvas.width = metrics.width + 8;
+        canvas.height = fontsize + 8;
+        // background
+        context.fillStyle = `rgba(${backgroundColor.r},${backgroundColor.g},${backgroundColor.b},${backgroundColor.a})`;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        // border
+        context.strokeStyle = `rgba(${borderColor.r},${borderColor.g},${borderColor.b},${borderColor.a})`;
+        context.lineWidth = borderThickness;
+        context.strokeRect(0, 0, canvas.width, canvas.height);
+        // text
+        context.font = fontsize + "px " + fontface;
+        context.fillStyle = textColor;
+        context.textAlign = "left";
+        context.textBaseline = "top";
+        context.fillText(message, 4, 4);
+        // texture
+        const texture = new THREE.Texture(canvas);
+        texture.needsUpdate = true;
+        const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.7 });
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.scale.set(30, 15, 1);
+        return sprite;
+    }
+
+    // --- Azimuth/Elevation grid (pink, faint) ---
+    const gridGroup = new THREE.Group();
+
+    // Elevation circles (every 10°, from -80° to +80°)
+    for (let el = -80; el < 90; el += 10) {
+        if (el === 0) continue; // skip horizon, handled by azimuth lines
+        const r = radius * Math.cos(el * Math.PI / 180);
+        const y = radius * Math.sin(el * Math.PI / 180);
+        const circle = createCircle(r, 128, 0xff69b4, 0.25); // faint pink
+        circle.position.y = y;
+        circle.userData.gridType = "horizon";
+        gridGroup.add(circle);
+    }
+    // Place elevation labels only at az=0 (north), for both positive and negative
+    for (let el = -80; el < 90; el += 10) {
+        if (el === 0) continue;
+        const r = radius * Math.cos(el * Math.PI / 180);
+        const y = radius * Math.sin(el * Math.PI / 180);
+        const azRad = 0;
+        const x = r * Math.sin(azRad);
+        const z = r * Math.cos(azRad);
+        const label = makeTextSprite(el + "° (e)", { fontsize: 32, textColor: "#ff69b4" });
+        label.position.set(x, y + 8, z);
+        label.userData.gridType = "horizon";
+        gridGroup.add(label);
+    }
+
+    // Azimuth meridians (every 10°, from 0° to 350°), from el=-80° to el=+90°
+    for (let az = 0; az < 360; az += 10) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const azRad = az * Math.PI / 180;
+        for (let i = 0; i <= 64; i++) {
+            // el from -80° to +90°
+            const el = (-80 + (i / 64) * 170) * Math.PI / 180;
+            const r = radius * Math.cos(el);
+            const y = radius * Math.sin(el);
+            const x = r * Math.sin(azRad);
+            const z = r * Math.cos(azRad);
+            vertices.push(x, y, z);
+        }
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const material = new THREE.LineBasicMaterial({ color: 0xff69b4, opacity: 0.25, transparent: true });
+        const line = new THREE.Line(geometry, material);
+        line.userData.gridType = "horizon";
+        gridGroup.add(line);
+    }
+    // Place azimuth labels only at the horizon (el=0)
+    for (let az = 0; az < 360; az += 10) {
+        const azRad = az * Math.PI / 180;
+        const x = radius * Math.cos(0) * Math.sin(azRad);
+        const y = 0;
+        const z = radius * Math.cos(0) * Math.cos(azRad);
+        const label = makeTextSprite(az + "° (a)", { fontsize: 32, textColor: "#ff69b4" });
+        label.position.set(x * 1.04, y - 10, z * 1.04); // slightly outside
+        label.userData.gridType = "horizon";
+        gridGroup.add(label);
+    }
+
+    // --- RA/DEC grid (green, faint) ---
+    const raDecGroup = new THREE.Group();
+
+    // DEC circles (every 10°, from -80° to +80°)
+    for (let dec = -80; dec <= 80; dec += 10) {
+        if (dec === 0) continue; // skip equator, handled by RA lines
+        const decRad = dec * Math.PI / 180;
+        const r = radius * Math.cos(decRad);
+        const y = radius * Math.sin(decRad);
+        const circle = createCircle(r, 128, 0x00ff00, 0.25); // faint green
+        circle.position.y = y;
+        circle.userData.gridType = "equatorial";
+        raDecGroup.add(circle);
+    }
+    // Place DEC labels at RA=0 (north), 90 (east), 180 (south), 270 (west)
+    for (let dec = -80; dec <= 80; dec += 10) {
+        if (dec === 0) continue;
+        const decRad = dec * Math.PI / 180;
+        const r = radius * Math.cos(decRad);
+        const y = radius * Math.sin(decRad);
+        for (let raDeg of [0, 90, 180, 270]) {
+            const raRad = raDeg * Math.PI / 180;
+            const x = r * Math.cos(raRad);
+            const z = r * Math.sin(raRad);
+            const label = makeTextSprite(dec + "° (D)", { fontsize: 32, textColor: "#00ff00" });
+            label.position.set(x, y + 8, z);
+            label.userData.gridType = "equatorial";
+            raDecGroup.add(label);
+        }
+    }
+
+    // RA meridians (every 10°, from 0° to 350°), from DEC=-90° to DEC=+90°
+    for (let ra = 0; ra < 360; ra += 10) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const raRad = ra * Math.PI / 180;
+        for (let i = 0; i <= 64; i++) {
+            const dec = -90 + (i / 64) * 180; // -90 to +90
+            const decRad = dec * Math.PI / 180;
+            const r = radius * Math.cos(decRad);
+            const y = radius * Math.sin(decRad);
+            const x = r * Math.cos(raRad);
+            const z = r * Math.sin(raRad);
+            vertices.push(x, y, z);
+        }
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const material = new THREE.LineBasicMaterial({ color: 0x00ff00, opacity: 0.25, transparent: true });
+        const line = new THREE.Line(geometry, material);
+        line.userData.gridType = "equatorial";
+        raDecGroup.add(line);
+    }
+    // Place RA labels at DEC=0 (celestial equator), for RA=0 (north), 90 (east), 180 (south), 270 (west)
+    for (let ra = 0; ra < 360; ra += 10) {
+        if (![0, 90, 180, 270].includes(ra)) continue;
+        const raRad = ra * Math.PI / 180;
+        const decRad = 0;
+        const r = radius * Math.cos(decRad);
+        const y = radius * Math.sin(decRad);
+        const x = r * Math.cos(raRad);
+        const z = r * Math.sin(raRad);
+        const label = makeTextSprite(ra + "° (R)", { fontsize: 32, textColor: "#00ff00" });
+        label.position.set(x * 1.04, y + 10, z * 1.04);
+        label.userData.gridType = "equatorial";
+        raDecGroup.add(label);
+    }
+
+    // --- Offset RA/DEC grid so celestial pole is at elevation = latitude ---
+    // Rotate around X axis by (90 - latitude) degrees
+    const latitude = 52.5; // match OBS_LATITUDE
+    raDecGroup.rotation.x = -THREE.MathUtils.degToRad(90 - latitude);
+
+    gridGroup.add(raDecGroup);
+
+    scene.add(gridGroup);
+
+    // --- TOGGLES FOR GRID VISIBILITY ---
+    const toggleHorizonGrid = document.getElementById("toggleHorizonGrid");
+    const toggleEquatorialGrid = document.getElementById("toggleEquatorialGrid");
+
+    function setGridTypeVisible(type, visible, parent) {
+        parent = parent || gridGroup;
+        parent.children.forEach(child => {
+            if (child.userData && child.userData.gridType === type) {
+                child.visible = visible;
+            }
+            // Recursively check children (for raDecGroup)
+            if (child.children && child.children.length > 0) {
+                setGridTypeVisible(type, visible, child);
+            }
+        });
+    }
+
+    toggleHorizonGrid.addEventListener("change", function() {
+        setGridTypeVisible("horizon", this.checked);
+    });
+    toggleEquatorialGrid.addEventListener("change", function() {
+        setGridTypeVisible("equatorial", this.checked);
+    });
+
+    // Set initial visibility
+    setGridTypeVisible("horizon", toggleHorizonGrid.checked);
+    setGridTypeVisible("equatorial", toggleEquatorialGrid.checked);
+
+
+    // --- DEBUG: Hardcoded observer location and time ---
+    const OBS_LATITUDE = 52.5; // debug: hardcoded latitude
+    const OBS_LST = 0; // debug: hardcoded LST (hours, GMT)
+
+    // Helper: Convert decimal degrees to [deg, min, sec]
+    function decimalToDMS(deg) {
+        const sign = deg < 0 ? -1 : 1;
+        deg = Math.abs(deg);
+        const d = Math.floor(deg);
+        const m = Math.floor((deg - d) * 60);
+        const s = ((deg - d) * 60 - m) * 60;
+        return [sign * d, m, s];
+    }
+
+    // Helper: Convert decimal hours to [h, m, s]
+    function decimalToHMS(hours) {
+        const sign = hours < 0 ? -1 : 1;
+        hours = Math.abs(hours);
+        const h = Math.floor(hours);
+        const m = Math.floor((hours - h) * 60);
+        const s = ((hours - h) * 60 - m) * 60;
+        return [sign * h, m, s];
+    }
+
+    // Helper: Convert [h, m, s] to decimal hours
+    function hmsToDecimal(h, m, s) {
+        const sign = h < 0 ? -1 : 1;
+        return sign * (Math.abs(h) + Math.abs(m) / 60 + Math.abs(s) / 3600);
+    }
+
+    // Helper: Convert [d, m, s] to decimal degrees
+    function dmsToDecimal(d, m, s) {
+        const sign = d < 0 ? -1 : 1;
+        return sign * (Math.abs(d) + Math.abs(m) / 60 + Math.abs(s) / 3600);
+    }
+
+    // Equatorial to Horizon conversion (JS version of convert.EquatorialToHorizon)
+    function equatorialToHorizon(raDeg, decDeg, latitude, lstHours) {
+        // raDeg: degrees, decDeg: degrees, latitude: degrees, lstHours: hours
+        // Returns: { az: degrees, el: degrees }
+        // Convert RA to hours
+        const raHours = raDeg / 15;
+        // Hour angle in degrees
+        let H = lstHours - raHours;
+        if (H < 0) H += 24;
+        H = H * 15; // to degrees
+
+        // Convert to radians
+        const Hrad = H * Math.PI / 180;
+        const latRad = latitude * Math.PI / 180;
+        const decRad = decDeg * Math.PI / 180;
+
+        // Elevation
+        const sinEl = Math.sin(decRad) * Math.sin(latRad) + Math.cos(decRad) * Math.cos(latRad) * Math.cos(Hrad);
+        const el = Math.asin(sinEl);
+
+        // Azimuth
+        const cosAz = (Math.sin(decRad) - Math.sin(latRad) * Math.sin(el)) / (Math.cos(latRad) * Math.cos(el));
+        let az = Math.acos(Math.max(-1, Math.min(1, cosAz))); // Clamp for safety
+
+        if (Math.sin(Hrad) > 0) {
+            az = 2 * Math.PI - az;
+        }
+
+        return {
+            az: az * 180 / Math.PI,
+            el: el * 180 / Math.PI
+        };
+    }
 
     // Parse stars + celestial objects from Flask data
     const starsData = JSON.parse(document.getElementById('stars-data').textContent);
@@ -127,12 +456,21 @@ document.addEventListener("DOMContentLoaded", function () {
     let spritesAdded = 0;
     let starsWithIconsCount = 0;
 
+    // --- MAIN COORDINATE CHANGE: Use azimuth/elevation instead of RA/DEC ---
     starsData.forEach((star, i) => {
-        const raRad = (star.ra / 360) * Math.PI * 2;
-        const decRad = (star.dec / 180) * Math.PI;
-        const x = radius * Math.cos(decRad) * Math.cos(raRad);
-        const y = radius * Math.sin(decRad);
-        const z = radius * Math.cos(decRad) * Math.sin(raRad);
+        // Convert equatorial to horizon coordinates
+        const eqToHor = equatorialToHorizon(star.ra, star.dec, OBS_LATITUDE, OBS_LST);
+        const az = eqToHor.az;
+        const el = eqToHor.el;
+
+        // Convert az/el to 3D coordinates on a sphere
+        // Azimuth: 0 = North, increases eastward; Elevation: 0 = horizon, +90 = zenith
+        // For 3D: x = r * cos(el) * sin(az), y = r * sin(el), z = r * cos(el) * cos(az)
+        const azRad = az * Math.PI / 180;
+        const elRad = el * Math.PI / 180;
+        const x = radius * Math.cos(elRad) * Math.sin(azRad);
+        const y = radius * Math.sin(elRad);
+        const z = radius * Math.cos(elRad) * Math.cos(azRad);
 
         if (star.icon) {
             starsWithIconsCount++;
@@ -178,12 +516,15 @@ document.addEventListener("DOMContentLoaded", function () {
         allPointsIndexToStarIndex = [];
         starsData.forEach((star, i) => {
             if (!star.icon) {
-                const raRad = (star.ra / 360) * Math.PI * 2;
-                const decRad = (star.dec / 180) * Math.PI;
-                const x = radius * Math.cos(decRad) * Math.cos(raRad);
-                const y = radius * Math.sin(decRad);
-                
-                const z = radius * Math.cos(decRad) * Math.sin(raRad);
+                // Convert equatorial to horizon coordinates
+                const eqToHor = equatorialToHorizon(star.ra, star.dec, OBS_LATITUDE, OBS_LST);
+                const az = eqToHor.az;
+                const el = eqToHor.el;
+                const azRad = az * Math.PI / 180;
+                const elRad = el * Math.PI / 180;
+                const x = radius * Math.cos(elRad) * Math.sin(azRad);
+                const y = radius * Math.sin(elRad);
+                const z = radius * Math.cos(elRad) * Math.cos(azRad);
                 allPositions.push(x, y, z);
                 allPointsIndexToStarIndex.push(i);
             }

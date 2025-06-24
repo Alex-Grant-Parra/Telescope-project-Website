@@ -83,7 +83,7 @@ def index():
 
 # WebSocket Configuration
 WS_IP = "0.0.0.0"
-WS_PORT = 8001
+WS_PORT = 8000
 pending = {}
 
 class Client:
@@ -192,7 +192,7 @@ async def handle_liveview_client(ws):
         last_frame_log_time.pop(client_id, None)
 
 # Start a separate WebSocket server for live view frames
-LIVEVIEW_WS_PORT = 4001
+LIVEVIEW_WS_PORT = 4000
 
 def start_liveview_ws_server():
     loop = asyncio.new_event_loop()
@@ -263,7 +263,7 @@ def start_ws_server():
 
 # Run Flask and WebSocket Server
 if __name__ == '__main__':
-    threading.Thread(target=start_ws_server, daemon=True).start()  # Command WebSocket (8001)
-    threading.Thread(target=start_liveview_ws_server, daemon=True).start()  # LiveView WebSocket (4001)
-    print(f"Starting Flask server on {gethostname()} at http://0.0.0.0:25566")
-    app.run(host="0.0.0.0", port=25566, debug=False)
+    threading.Thread(target=start_ws_server, daemon=True).start()  # Command WebSocket (8000)
+    threading.Thread(target=start_liveview_ws_server, daemon=True).start()  # LiveView WebSocket (4000)
+    print(f"Starting Flask server on {gethostname()} at http://0.0.0.0:25565")
+    app.run(host="0.0.0.0", port=25565, debug=False)
