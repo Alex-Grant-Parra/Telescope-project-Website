@@ -290,20 +290,20 @@ document.addEventListener("DOMContentLoaded", function () {
         const line = new THREE.Line(geometry, material);
         line.userData.gridType = "equatorial";
         raDecGroup.add(line);
-    }
-    // Place RA labels at DEC=0 (celestial equator), for RA=0 (north), 90 (east), 180 (south), 270 (west)
-    for (let ra = 0; ra < 360; ra += 10) {
-        if (![0, 90, 180, 270].includes(ra)) continue;
-        const raRad = ra * Math.PI / 180;
-        const decRad = 0;
-        const r = radius * Math.cos(decRad);
-        const y = radius * Math.sin(decRad);
-        const x = r * Math.cos(raRad);
-        const z = r * Math.sin(raRad);
-        const label = makeTextSprite(ra + "° (R)", { fontsize: 32, textColor: "#00ff00" });
-        label.position.set(x * 1.04, y + 10, z * 1.04);
-        label.userData.gridType = "equatorial";
-        raDecGroup.add(label);
+
+        // Place RA labels at DEC=0 (celestial equator), for RA=0 (north), 90 (east), 180 (south), 270 (west)
+        if ([0, 90, 180, 270].includes(ra)) {
+            const decRad = 0;
+            const r0 = radius * Math.cos(decRad);
+            const y0 = radius * Math.sin(decRad);
+            const x0 = r0 * Math.cos(raRad);
+            const z0 = r0 * Math.sin(raRad);
+            const label = makeTextSprite(ra + "° (R)", { fontsize: 32, textColor: "#00ff00" });
+            // Place label slightly outside the sphere for visibility
+            label.position.set(x0 * 1.08, y0 + 10, z0 * 1.08);
+            label.userData.gridType = "equatorial";
+            raDecGroup.add(label);
+        }
     }
 
     // --- Offset RA/DEC grid so celestial pole is at elevation = latitude ---
@@ -345,7 +345,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
     // --- DEBUG: Hardcoded observer location and time ---
-    const OBS_LATITUDE = 52.5; // debug: hardcoded latitude
+    const OBS_LATITUDE = latitude; // debug: hardcoded latitude
     const OBS_LST = 0; // debug: hardcoded LST (hours, GMT)
 
     // Helper: Convert decimal degrees to [deg, min, sec]
@@ -456,28 +456,30 @@ document.addEventListener("DOMContentLoaded", function () {
     let spritesAdded = 0;
     let starsWithIconsCount = 0;
 
-    // --- MAIN COORDINATE CHANGE: Use azimuth/elevation instead of RA/DEC ---
+    // --- MAIN COORDINATE CHANGE: Plot using RA/DEC, but rotate so celestial pole is at elevation = latitude ---
     starsData.forEach((star, i) => {
-        // Convert equatorial to horizon coordinates
-        const eqToHor = equatorialToHorizon(star.ra, star.dec, OBS_LATITUDE, OBS_LST);
-        const az = eqToHor.az;
-        const el = eqToHor.el;
+        // Convert RA/DEC to 3D coordinates on the celestial sphere
+        // RA: 0-360°, DEC: -90° to +90°
+        const raRad = (star.ra) * Math.PI / 180;
+        const decRad = (star.dec) * Math.PI / 180;
+        const r = radius * Math.cos(decRad);
+        const y = radius * Math.sin(decRad);
+        const x = r * Math.cos(raRad);
+        const z = r * Math.sin(raRad);
 
-        // Convert az/el to 3D coordinates on a sphere
-        // Azimuth: 0 = North, increases eastward; Elevation: 0 = horizon, +90 = zenith
-        // For 3D: x = r * cos(el) * sin(az), y = r * sin(el), z = r * cos(el) * cos(az)
-        const azRad = az * Math.PI / 180;
-        const elRad = el * Math.PI / 180;
-        const x = radius * Math.cos(elRad) * Math.sin(azRad);
-        const y = radius * Math.sin(elRad);
-        const z = radius * Math.cos(elRad) * Math.cos(azRad);
+        // Rotate so celestial pole is at elevation = latitude (around X axis)
+        const latitude = 52.5; // match observer latitude
+        const rotX = -THREE.MathUtils.degToRad(90 - latitude);
+        // Rotation matrix for X axis
+        const y_rot = y * Math.cos(rotX) - z * Math.sin(rotX);
+        const z_rot = y * Math.sin(rotX) + z * Math.cos(rotX);
 
         if (star.icon) {
             starsWithIconsCount++;
             loader.load(star.icon, texture => {
                 const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
                 const sprite = new THREE.Sprite(material);
-                sprite.position.set(x, y, z);
+                sprite.position.set(x, y_rot, z_rot);
                 sprite.scale.set(20, 20, 1);
                 sprite.userData = { name: star.name, mag: star.mag };
                 sprite.renderOrder = 999;
@@ -492,7 +494,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 console.warn("Icon failed to load for", star.name, err);
             });
         } else {
-            positions.push(x, y, z);
+            positions.push(x, y_rot, z_rot);
             const size = Math.max(0.1, 1.5 - (star.mag * 0.1));
             sizes.push(size);
             if (typeof star.mag === "number") {
@@ -516,16 +518,20 @@ document.addEventListener("DOMContentLoaded", function () {
         allPointsIndexToStarIndex = [];
         starsData.forEach((star, i) => {
             if (!star.icon) {
-                // Convert equatorial to horizon coordinates
-                const eqToHor = equatorialToHorizon(star.ra, star.dec, OBS_LATITUDE, OBS_LST);
-                const az = eqToHor.az;
-                const el = eqToHor.el;
-                const azRad = az * Math.PI / 180;
-                const elRad = el * Math.PI / 180;
-                const x = radius * Math.cos(elRad) * Math.sin(azRad);
-                const y = radius * Math.sin(elRad);
-                const z = radius * Math.cos(elRad) * Math.cos(azRad);
-                allPositions.push(x, y, z);
+                const raRad = (star.ra) * Math.PI / 180;
+                const decRad = (star.dec) * Math.PI / 180;
+                const r = radius * Math.cos(decRad);
+                const y = radius * Math.sin(decRad);
+                const x = r * Math.cos(raRad);
+                const z = r * Math.sin(raRad);
+
+                // Rotate so celestial pole is at elevation = latitude (around X axis)
+                const latitude = 52.5;
+                const rotX = -THREE.MathUtils.degToRad(90 - latitude);
+                const y_rot = y * Math.cos(rotX) - z * Math.sin(rotX);
+                const z_rot = y * Math.sin(rotX) + z * Math.cos(rotX);
+
+                allPositions.push(x, y_rot, z_rot);
                 allPointsIndexToStarIndex.push(i);
             }
         });
