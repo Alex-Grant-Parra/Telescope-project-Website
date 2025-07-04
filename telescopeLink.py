@@ -6,6 +6,7 @@ import subprocess
 
 
 flaskLinkIp = "172.25.199.161"
+# flaskLinkIp - "localhost" # temp
 url = f"http://{flaskLinkIp}:25566/sendCommand" # Url for sending flask server commands
 
 # Example
