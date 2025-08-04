@@ -9,3 +9,4 @@ pyjwt
 python-dotenv
 websockets
 ujson
+requests
