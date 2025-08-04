@@ -240,6 +240,25 @@ document.addEventListener("DOMContentLoaded", function () {
         gridGroup.add(label);
     }
 
+    // Add cardinal direction labels (N, E, S, W)
+    const cardinalDirections = [
+        { az: 0, label: "N" },
+        { az: 90, label: "E" },
+        { az: 180, label: "S" },
+        { az: 270, label: "W" }
+    ];
+    
+    cardinalDirections.forEach(dir => {
+        const azRad = dir.az * Math.PI / 180;
+        const x = radius * Math.cos(0) * Math.sin(azRad);
+        const y = 0;
+        const z = radius * Math.cos(0) * Math.cos(azRad);
+        const cardinalLabel = makeTextSprite(dir.label, { fontsize: 48, textColor: "#ff69b4" });
+        cardinalLabel.position.set(x * 1.12, y - 20, z * 1.12); // further outside than degree labels
+        cardinalLabel.userData.gridType = "horizon";
+        gridGroup.add(cardinalLabel);
+    });
+
     // --- RA/DEC grid (green, faint) ---
     const raDecGroup = new THREE.Group();
 
@@ -309,7 +328,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // --- Offset RA/DEC grid so celestial pole is at elevation = latitude ---
     // Rotate around X axis by (90 - latitude) degrees
     const latitude = 52.5; // match OBS_LATITUDE
-    raDecGroup.rotation.x = -THREE.MathUtils.degToRad(90 - latitude);
+    raDecGroup.rotation.x = THREE.MathUtils.degToRad(90 - latitude);  // Remove the negative sign
 
     gridGroup.add(raDecGroup);
 
@@ -456,30 +475,47 @@ document.addEventListener("DOMContentLoaded", function () {
     let spritesAdded = 0;
     let starsWithIconsCount = 0;
 
-    // --- MAIN COORDINATE CHANGE: Plot using RA/DEC, but rotate so celestial pole is at elevation = latitude ---
+    // --- MAIN COORDINATE CHANGE: Convert RA/DEC to Azimuth/Elevation, then plot ---
     starsData.forEach((star, i) => {
-        // Convert RA/DEC to 3D coordinates on the celestial sphere
-        // RA: 0-360°, DEC: -90° to +90°
-        const raRad = (star.ra) * Math.PI / 180;
-        const decRad = (star.dec) * Math.PI / 180;
-        const r = radius * Math.cos(decRad);
-        const y = radius * Math.sin(decRad);
-        const x = r * Math.cos(raRad);
-        const z = r * Math.sin(raRad);
-
-        // Rotate so celestial pole is at elevation = latitude (around X axis)
-        const latitude = 52.5; // match observer latitude
-        const rotX = -THREE.MathUtils.degToRad(90 - latitude);
-        // Rotation matrix for X axis
-        const y_rot = y * Math.cos(rotX) - z * Math.sin(rotX);
-        const z_rot = y * Math.sin(rotX) + z * Math.cos(rotX);
+        // Get current time for LST calculation
+        const now = new Date();
+        
+        // More accurate LST calculation
+        // Julian day number
+        const jd = (now.getTime() / 86400000) + 2440587.5;
+        const T = (jd - 2451545.0) / 36525.0;
+        
+        // Greenwich Mean Sidereal Time at 0h UT
+        let gmst = 280.46061837 + 360.98564736629 * (jd - 2451545.0) + 0.000387933 * T * T - T * T * T / 38710000.0;
+        gmst = gmst % 360;
+        if (gmst < 0) gmst += 360;
+        
+        // Convert to hours and add current UT hours
+        const utHours = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+        gmst = (gmst / 15 + utHours) % 24;
+        
+        // Local Sidereal Time (assuming longitude 0 for now - you can adjust this)
+        const longitude = 0; // degrees, positive east
+        const lst = (gmst + longitude / 15) % 24;
+        if (lst < 0) lst += 24;
+        
+        // Convert RA/DEC to Azimuth/Elevation
+        const azEl = equatorialToHorizon(star.ra, star.dec, 52.5, lst);
+        
+        // Convert azimuth/elevation to 3D coordinates (same as grid system)
+        const azRad = azEl.az * Math.PI / 180;
+        const elRad = azEl.el * Math.PI / 180;
+        const r = radius * Math.cos(elRad);
+        const y = radius * Math.sin(elRad);
+        const x = r * Math.sin(azRad);
+        const z = r * Math.cos(azRad);
 
         if (star.icon) {
             starsWithIconsCount++;
             loader.load(star.icon, texture => {
                 const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
                 const sprite = new THREE.Sprite(material);
-                sprite.position.set(x, y_rot, z_rot);
+                sprite.position.set(x, y, z);  // Use direct coordinates
                 sprite.scale.set(20, 20, 1);
                 sprite.userData = { name: star.name, mag: star.mag };
                 sprite.renderOrder = 999;
@@ -494,7 +530,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 console.warn("Icon failed to load for", star.name, err);
             });
         } else {
-            positions.push(x, y_rot, z_rot);
+            positions.push(x, y, z);  // Use direct coordinates
             const size = Math.max(0.1, 1.5 - (star.mag * 0.1));
             sizes.push(size);
             if (typeof star.mag === "number") {
@@ -518,20 +554,39 @@ document.addEventListener("DOMContentLoaded", function () {
         allPointsIndexToStarIndex = [];
         starsData.forEach((star, i) => {
             if (!star.icon) {
-                const raRad = (star.ra) * Math.PI / 180;
-                const decRad = (star.dec) * Math.PI / 180;
-                const r = radius * Math.cos(decRad);
-                const y = radius * Math.sin(decRad);
-                const x = r * Math.cos(raRad);
-                const z = r * Math.sin(raRad);
+                // Get current time for LST calculation
+                const now = new Date();
+                
+                // More accurate LST calculation
+                // Julian day number
+                const jd = (now.getTime() / 86400000) + 2440587.5;
+                const T = (jd - 2451545.0) / 36525.0;
+                
+                // Greenwich Mean Sidereal Time at 0h UT
+                let gmst = 280.46061837 + 360.98564736629 * (jd - 2451545.0) + 0.000387933 * T * T - T * T * T / 38710000.0;
+                gmst = gmst % 360;
+                if (gmst < 0) gmst += 360;
+                
+                // Convert to hours and add current UT hours
+                const utHours = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+                gmst = (gmst / 15 + utHours) % 24;
+                
+                // Local Sidereal Time (assuming longitude 0 for now - you can adjust this)
+                const longitude = 0; // degrees, positive east
+                const lst = (gmst + longitude / 15) % 24;
+                
+                // Convert RA/DEC to Azimuth/Elevation
+                const azEl = equatorialToHorizon(star.ra, star.dec, 52.5, lst);
+                
+                // Convert azimuth/elevation to 3D coordinates (same as grid system)
+                const azRad = azEl.az * Math.PI / 180;
+                const elRad = azEl.el * Math.PI / 180;
+                const r = radius * Math.cos(elRad);
+                const y = radius * Math.sin(elRad);
+                const x = r * Math.sin(azRad);
+                const z = r * Math.cos(azRad);
 
-                // Rotate so celestial pole is at elevation = latitude (around X axis)
-                const latitude = 52.5;
-                const rotX = -THREE.MathUtils.degToRad(90 - latitude);
-                const y_rot = y * Math.cos(rotX) - z * Math.sin(rotX);
-                const z_rot = y * Math.sin(rotX) + z * Math.cos(rotX);
-
-                allPositions.push(x, y_rot, z_rot);
+                allPositions.push(x, y, z);  // Use direct coordinates
                 allPointsIndexToStarIndex.push(i);
             }
         });
