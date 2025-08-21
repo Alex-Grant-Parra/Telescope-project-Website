@@ -1,0 +1,14 @@
+# Flask app
+telescopes.dev {
+    reverse_proxy 127.0.0.1:8080
+}
+
+# WebSocket 1
+telescopes.dev:4000 {
+    reverse_proxy 127.0.0.1:4000
+}
+
+# WebSocket 2
+telescopes.dev:8000 {
+    reverse_proxy 127.0.0.1:8000
+}
