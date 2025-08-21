@@ -1,6 +1,6 @@
-commandPort = 8001
-LiveViewPort = 4001
-FlaskServerPort = 25566
+commandPort = 8000
+LiveViewPort = 4000
+FlaskServerPort = 8080
 
 from flask import Flask, request, jsonify, redirect, url_for, Response
 from flask_login import LoginManager # type: ignore # type: ignore
@@ -18,6 +18,17 @@ from db import db
 import base64
 import logging
 import time
+import tempfile
+import subprocess
+
+# Get the base dir
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+# Startup caddy
+
+caddyPath = os.path.join(BASE_DIR, "caddy_windows_amd64.exe") 
+caddyProc = subprocess.Popen([caddyPath, "run"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+print("Caddy started in the background")
 
 # Flask App Initialization
 app = Flask(__name__)
@@ -25,7 +36,7 @@ load_dotenv()
 
 # Flask Configuration
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY")
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
 DATABASE_PATH = f"sqlite:///{os.path.join(BASE_DIR, 'Data.db')}"
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_PATH 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = os.getenv("SQLALCHEMY_TRACK_MODIFICATIONS") == "True"
@@ -34,13 +45,13 @@ app.config["ENCRYPTION_KEY"] = os.getenv("ENCRYPTION_KEY")
 db.init_app(app)
 
 # Email Configuration
-app.config["MAIL_SERVER"] = "smtp.gmail.com"
+app.config["MAIL_SERVER"] = "smtp.zoho.eu"
 app.config["MAIL_PORT"] = 587
 app.config["MAIL_USE_TLS"] = True
+app.config["MAIL_USE_SSL"] = not(app.config["MAIL_USE_TLS"])
 app.config["MAIL_USERNAME"] = os.getenv("MAIL_USERNAME")
 app.config["MAIL_PASSWORD"] = os.getenv("MAIL_PASSWORD")
 app.config["MAIL_DEFAULT_SENDER"] = app.config["MAIL_USERNAME"]
-
 
 # Flask-Login & Email Configurations
 login_manager = LoginManager()
@@ -215,13 +226,17 @@ def start_liveview_ws_server():
         print(f"[LiveView] Event loop error: {e}")
 
 # MJPEG HTTP endpoint
+
+
 def save_latest_frame(client_id):
     frame = latest_frames.get(client_id)
     if frame:
         try:
-            with open(f"/tmp/{client_id}_latest.jpg", "wb") as f:
+            tmp_dir = tempfile.gettempdir()
+            file_path = os.path.join(tmp_dir, f"{client_id}_latest.jpg")
+            with open(file_path, "wb") as f:
                 f.write(frame)
-            print(f"[DEBUG] Saved /tmp/{client_id}_latest.jpg")
+            print(f"[DEBUG] Saved {file_path}")
         except Exception as e:
             print(f"[DEBUG] Failed to save frame for {client_id}: {e}")
 
@@ -238,7 +253,7 @@ def liveview(client_id):
                     if now - last_save > 5:
                         save_latest_frame(client_id)
                         last_save = now
-                time.sleep(0.04)  # ~25fps
+                time.sleep(1/10)
             except Exception as e:
                 print(f"[MJPEG] Error streaming frame for {client_id}: {e}")
                 break
@@ -265,6 +280,25 @@ def start_ws_server():
     except Exception as e:
         print(f"[CommandWS] Event loop error: {e}")
 
+clients = []
+
+@app.route('/client/register', methods=['POST'])
+def register_client():
+    # from telescopeLink import getClientID # imported here, to prevent circular import
+    # Generate a unique client_id
+    print("Client requesting client ID")
+    client_id = str(uuid.uuid4())
+
+    clients.append(client_id)
+    
+    # Optionally, store the client_id in a database or in-memory structure
+    # For example: registered_clients[client_id] = {"timestamp": time.time()}
+    
+    print(f"[+] New client registered: {client_id}")
+    # getClientID()
+
+    return jsonify({"client_id": client_id})
+
 # Run Flask and WebSocket Server
 if __name__ == '__main__':
 
@@ -286,4 +320,4 @@ if __name__ == '__main__':
     print(f"Starting Flask server on {gethostname()} at http://0.0.0.0:{FlaskServerPort}")
     app.run(host="0.0.0.0", port=FlaskServerPort, debug=False)
 
-
+    

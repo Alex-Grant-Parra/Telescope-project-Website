@@ -1,0 +1,471 @@
+{% extends "base.html" %}
+{% block title %}Star Map - Telescope Control{% endblock %}
+
+{% block content %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<style>
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #111;
+}
+#starMapContainer {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  z-index: 1;
+}
+#uiPanel {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  z-index: 10;
+  background: rgba(24,24,24,0.95);
+  color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 0 12px #000a;
+  padding: 18px 24px 18px 24px;
+  min-width: 220px;
+  font-size: 1.08em;
+}
+#uiPanel label {
+  display: block;
+  margin-bottom: 8px;
+}
+#uiPanel input, #uiPanel button {
+  margin-bottom: 12px;
+  width: 100%;
+  padding: 6px;
+  border-radius: 4px;
+  border: 1px solid #444;
+  background: #222;
+  color: #fff;
+}
+#uiPanel button {
+  background: #444;
+  cursor: pointer;
+  border: none;
+  width: auto;
+  margin-top: 0;
+}
+#magnitudeValue {
+  font-size: 1.2em;
+  margin-bottom: 12px;
+}
+</style>
+
+<style>
+#starInfoModal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #181818;
+  color: #fff;
+  padding: 18px 24px;
+  border-radius: 10px;
+  z-index: 1000;
+  max-width: 320px;
+  box-shadow: 0 0 10px #fff;
+  font-size: 1.08em;
+}
+#starInfoModal button {
+  margin-top: 12px;
+  margin-right: 8px;
+  padding: 6px 18px;
+  border-radius: 4px;
+  border: none;
+  font-size: 1em;
+}
+#starInfoModal .btn-success {
+  background: #198754;
+  color: #fff;
+}
+#starInfoModal .btn-secondary {
+  background: #444;
+  color: #fff;
+}
+</style>
+
+<div id="starMapContainer"></div>
+<div id="loadingOverlay" style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2000;background:rgba(20,20,20,0.92);display:flex;align-items:center;justify-content:center;flex-direction:column;">
+  <div style="border:6px solid #444;border-top:6px solid #fff;border-radius:50%;width:60px;height:60px;animation:spin 1s linear infinite;"></div>
+  <div style="margin-top:24px;color:#fff;font-size:1.3em;">Loading star map...</div>
+</div>
+<style>
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+</style>
+<div id="uiPanel">
+  <label for="magnitudeSlider">Show stars brighter than:</label>
+  <input type="range" id="magnitudeSlider" min="0" max="10" step="0.1" value="10">
+  <span id="magnitudeValue">Mag ≤ 10</span>
+  <label for="latitudeInput">Latitude (°):</label>
+  <input type="number" id="latitudeInput" min="-90" max="90" step="0.01" value="0">
+  <label for="longitudeInput">Longitude (°):</label>
+  <input type="number" id="longitudeInput" min="-180" max="180" step="0.01" value="0">
+  <label for="datetimeInput">Date & Time:</label>
+  <input type="datetime-local" id="datetimeInput">
+  <button id="nowButton" type="button">Now</button>
+  <label><input type="checkbox" id="toggleHorizonGrid" checked> Show Horizon Grid</label>
+  <label><input type="checkbox" id="toggleEquatorialGrid" checked> Show Equatorial Grid</label>
+</div>
+
+<script id="stars-data" type="application/json">{{ stars | tojson }}</script>
+
+<script>
+// Modern, clean star map implementation
+const container = document.getElementById('starMapContainer');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 0, 10);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+container.appendChild(renderer.domElement);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.1;
+controls.enablePan = false;
+controls.enableZoom = true;
+controls.minDistance = 10; // Allow zooming in to distance 10
+controls.maxDistance = 10 * 20; // Allow zooming out to 200, but not further
+controls.zoomSpeed = 1.2;
+
+// --- Star label overlay ---
+const starLabel = document.createElement('div');
+starLabel.style.position = 'fixed';
+starLabel.style.pointerEvents = 'none';
+starLabel.style.background = 'rgba(30,30,30,0.95)';
+starLabel.style.color = '#fff';
+starLabel.style.padding = '4px 10px';
+starLabel.style.borderRadius = '6px';
+starLabel.style.fontSize = '1em';
+starLabel.style.zIndex = 1500;
+starLabel.style.display = 'none';
+starLabel.style.boxShadow = '0 2px 8px #000a';
+document.body.appendChild(starLabel);
+
+container.addEventListener('mousemove', function(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(starGroup.children, true);
+  if (intersects.length > 0) {
+    let obj = intersects[0].object;
+    let data = obj.userData || {};
+    if (data.name) {
+      starLabel.textContent = data.name + (typeof data.mag === 'number' ? ` (Mag ${data.mag})` : '');
+      starLabel.style.left = (event.clientX + 12) + 'px';
+      starLabel.style.top = (event.clientY - 8) + 'px';
+      starLabel.style.display = 'block';
+      return;
+    }
+  }
+  starLabel.style.display = 'none';
+});
+
+// UI elements
+const magnitudeSlider = document.getElementById('magnitudeSlider');
+const magnitudeValue = document.getElementById('magnitudeValue');
+const latitudeInput = document.getElementById('latitudeInput');
+const longitudeInput = document.getElementById('longitudeInput');
+const datetimeInput = document.getElementById('datetimeInput');
+const nowButton = document.getElementById('nowButton');
+const toggleHorizonGrid = document.getElementById('toggleHorizonGrid');
+const toggleEquatorialGrid = document.getElementById('toggleEquatorialGrid');
+
+// Data
+const starsData = JSON.parse(document.getElementById('stars-data').textContent);
+
+// State
+let starGroup = new THREE.Group();
+// For star labels on points
+let pointStarIndices = [];
+let gridGroup = new THREE.Group();
+scene.add(starGroup);
+scene.add(gridGroup);
+
+// Double-click to show modal for tracking
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+container.addEventListener('dblclick', function(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(starGroup.children, true);
+  if (intersects.length > 0) {
+    let obj = intersects[0].object;
+    let data = obj.userData || {};
+    if (obj.type === 'Sprite' && data.name) {
+      showStarInfoModal(data);
+    }
+  }
+});
+
+function showStarInfoModal(star) {
+  const existingModal = document.getElementById('starInfoModal');
+  if (existingModal) existingModal.remove();
+  const modal = document.createElement('div');
+  modal.id = 'starInfoModal';
+  modal.innerHTML = `
+    <h2>${star.name}</h2>
+    <p><b>RA:</b> ${star.ra}°</p>
+    <p><b>DEC:</b> ${star.dec}°</p>
+    <p><b>Magnitude:</b> ${star.mag}</p>
+    <button id="trackStarBtn" class="btn btn-success">Track</button>
+    <button id="closeStarInfo" class="btn btn-secondary">Close</button>
+  `;
+  document.body.appendChild(modal);
+  document.getElementById('closeStarInfo').onclick = () => modal.remove();
+  document.getElementById('trackStarBtn').onclick = () => {
+    fetch('/track_star', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: star.name,
+        ra: star.ra,
+        dec: star.dec,
+        mag: star.mag
+      })
+    })
+    .then(response => response.json())
+    .then(data => { modal.remove(); })
+    .catch(error => { modal.remove(); });
+  };
+}
+
+// Helper: Equatorial to Horizon
+function equatorialToHorizon(raDeg, decDeg, latitude, lstHours) {
+  const raHours = raDeg / 15;
+  let H = lstHours - raHours;
+  // Wrap H to [-12, +12] hours (i.e., [-180, +180] degrees)
+  if (H < -12) H += 24;
+  if (H > 12) H -= 24;
+  H = H * 15; // degrees
+  const Hrad = H * Math.PI / 180;
+  const latRad = latitude * Math.PI / 180;
+  const decRad = decDeg * Math.PI / 180;
+  const sinEl = Math.sin(decRad) * Math.sin(latRad) + Math.cos(decRad) * Math.cos(latRad) * Math.cos(Hrad);
+  const el = Math.asin(sinEl);
+  const cosAz = (Math.sin(decRad) - Math.sin(latRad) * Math.sin(el)) / (Math.cos(latRad) * Math.cos(el));
+  let az = Math.acos(Math.max(-1, Math.min(1, cosAz)));
+  if (Math.sin(Hrad) > 0) az = 2 * Math.PI - az;
+  return { az: az * 180 / Math.PI, el: el * 180 / Math.PI };
+}
+
+function getLST(date, longitude) {
+  const jd = (date.getTime() / 86400000) + 2440587.5;
+  const T = (jd - 2451545.0) / 36525.0;
+  let gmst = 280.46061837 + 360.98564736629 * (jd - 2451545.0) + 0.000387933 * T * T - T * T * T / 38710000.0;
+  gmst = gmst % 360;
+  if (gmst < 0) gmst += 360;
+  const utHours = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+  gmst = (gmst / 15 + utHours) % 24;
+  let lst = (gmst + longitude / 15) % 24;
+  if (lst < 0) lst += 24;
+  return lst;
+}
+
+function plotStarMap() {
+  // Show loading overlay
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  if (loadingOverlay) loadingOverlay.style.display = 'flex';
+
+  // Clear previous
+  while (starGroup.children.length) starGroup.remove(starGroup.children[0]);
+  while (gridGroup.children.length) gridGroup.remove(gridGroup.children[0]);
+
+  // Observer settings
+  const observerLat = parseFloat(latitudeInput.value) || 0;
+  const observerLon = parseFloat(longitudeInput.value) || 0;
+  let observerDate = new Date();
+  if (datetimeInput.value) observerDate = new Date(datetimeInput.value);
+  const lst = getLST(observerDate, observerLon);
+  const magLimit = parseFloat(magnitudeSlider.value);
+
+  // Plot stars/planets
+  const radius = 500;
+  const positions = [];
+  const colors = [];
+  const loader = new THREE.TextureLoader();
+  let spritesToLoad = 0;
+  let spritesLoaded = 0;
+  starsData.forEach((star, i) => {
+    // Skip if magnitude is null, undefined, or not a number
+    if (star.mag === null || star.mag === undefined || isNaN(star.mag)) return;
+    if (typeof star.mag === 'number' && star.mag > magLimit) return;
+    const azEl = equatorialToHorizon(star.ra, star.dec, observerLat, lst);
+  // Show all stars, including those below the horizon
+    const azRad = azEl.az * Math.PI / 180;
+    const elRad = azEl.el * Math.PI / 180;
+    const r = radius * Math.cos(elRad);
+    const y = radius * Math.sin(elRad);
+    const x = r * Math.sin(azRad);
+    const z = r * Math.cos(azRad);
+    if (star.icon) {
+      spritesToLoad++;
+      loader.load(star.icon, texture => {
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+        const sprite = new THREE.Sprite(material);
+        sprite.position.set(x, y, z);
+        sprite.scale.set(20, 20, 1);
+        sprite.userData = { name: star.name, mag: star.mag };
+        starGroup.add(sprite);
+        spritesLoaded++;
+        if (spritesLoaded === spritesToLoad) {
+          if (loadingOverlay) loadingOverlay.style.display = 'none';
+        }
+      }, undefined, () => {
+        // On error, still count as loaded
+        spritesLoaded++;
+        if (spritesLoaded === spritesToLoad) {
+          if (loadingOverlay) loadingOverlay.style.display = 'none';
+        }
+      });
+    } else {
+      positions.push(x, y, z);
+      // Color by magnitude (brighter = whiter)
+      const c = Math.max(0.5, 1.5 - (star.mag * 0.1));
+      colors.push(c, c, c);
+      pointStarIndices.push(i);
+    }
+  });
+  if (positions.length) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    const material = new THREE.PointsMaterial({ vertexColors: true, size: 2, sizeAttenuation: true });
+    const points = new THREE.Points(geometry, material);
+    starGroup.add(points);
+  }
+
+  // Draw grids
+  if (toggleHorizonGrid.checked) drawHorizonGrid(observerLat, radius);
+  if (toggleEquatorialGrid.checked) drawEquatorialGrid(observerLat, radius);
+
+  // If no sprites to load, hide overlay immediately
+  if (spritesToLoad === 0 && loadingOverlay) loadingOverlay.style.display = 'none';
+}
+
+function drawHorizonGrid(lat, radius) {
+  // Elevation circles
+  for (let el = -80; el < 90; el += 10) {
+    if (el === 0) continue;
+    const r = radius * Math.cos(el * Math.PI / 180);
+    const y = radius * Math.sin(el * Math.PI / 180);
+    const geometry = new THREE.BufferGeometry();
+    const vertices = [];
+    for (let i = 0; i <= 128; i++) {
+      const theta = (i / 128) * 2 * Math.PI;
+      vertices.push(r * Math.cos(theta), y, r * Math.sin(theta));
+    }
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    const material = new THREE.LineBasicMaterial({ color: 0xff69b4, opacity: 0.25, transparent: true });
+    const circle = new THREE.Line(geometry, material);
+    gridGroup.add(circle);
+  }
+  // Azimuth lines
+  for (let az = 0; az < 360; az += 10) {
+    const azRad = az * Math.PI / 180;
+    const geometry = new THREE.BufferGeometry();
+    const vertices = [];
+    for (let i = 0; i <= 64; i++) {
+      const el = (-80 + (i / 64) * 170) * Math.PI / 180;
+      const r = radius * Math.cos(el);
+      const y = radius * Math.sin(el);
+      vertices.push(r * Math.sin(azRad), y, r * Math.cos(azRad));
+    }
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    const material = new THREE.LineBasicMaterial({ color: 0xff69b4, opacity: 0.25, transparent: true });
+    const line = new THREE.Line(geometry, material);
+    gridGroup.add(line);
+  }
+}
+
+function drawEquatorialGrid(lat, radius) {
+  const group = new THREE.Group();
+  // DEC circles
+  for (let dec = -80; dec <= 80; dec += 10) {
+    if (dec === 0) continue;
+    const decRad = dec * Math.PI / 180;
+    const r = radius * Math.cos(decRad);
+    const y = radius * Math.sin(decRad);
+    const geometry = new THREE.BufferGeometry();
+    const vertices = [];
+    for (let i = 0; i <= 128; i++) {
+      const theta = (i / 128) * 2 * Math.PI;
+      vertices.push(r * Math.cos(theta), y, r * Math.sin(theta));
+    }
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    const material = new THREE.LineBasicMaterial({ color: 0x00ff00, opacity: 0.25, transparent: true });
+    const circle = new THREE.Line(geometry, material);
+    group.add(circle);
+  }
+  // RA lines
+  for (let ra = 0; ra < 360; ra += 10) {
+    const raRad = ra * Math.PI / 180;
+    const geometry = new THREE.BufferGeometry();
+    const vertices = [];
+    for (let i = 0; i <= 64; i++) {
+      const dec = -90 + (i / 64) * 180;
+      const decRad = dec * Math.PI / 180;
+      const r = radius * Math.cos(decRad);
+      const y = radius * Math.sin(decRad);
+      vertices.push(r * Math.cos(raRad), y, r * Math.sin(raRad));
+    }
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    const material = new THREE.LineBasicMaterial({ color: 0x00ff00, opacity: 0.25, transparent: true });
+    const line = new THREE.Line(geometry, material);
+    group.add(line);
+  }
+  // Rotate so celestial pole is at elevation = latitude
+  group.rotation.x = THREE.MathUtils.degToRad(90 - lat);
+  gridGroup.add(group);
+}
+
+// UI events
+magnitudeSlider.addEventListener('input', () => {
+  magnitudeValue.textContent = `Mag ≤ ${magnitudeSlider.value}`;
+  plotStarMap();
+});
+latitudeInput.addEventListener('change', plotStarMap);
+longitudeInput.addEventListener('change', plotStarMap);
+datetimeInput.addEventListener('change', plotStarMap);
+nowButton.addEventListener('click', () => {
+  const now = new Date();
+  const pad = n => n.toString().padStart(2, '0');
+  const formatted = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+  datetimeInput.value = formatted;
+  plotStarMap();
+});
+toggleHorizonGrid.addEventListener('change', plotStarMap);
+toggleEquatorialGrid.addEventListener('change', plotStarMap);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Initial plot
+plotStarMap();
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+{% endblock %}

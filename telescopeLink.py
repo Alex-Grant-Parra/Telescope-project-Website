@@ -3,10 +3,10 @@ import ujson
 import asyncio
 import websockets
 import subprocess
-
+from Server import clients
+from time import sleep
 
 flaskLinkIp = "localhost"
-# flaskLinkIp - "localhost" # temp
 url = f"http://{flaskLinkIp}:25566/sendCommand" # Url for sending flask server commands
 
 # Example
@@ -14,6 +14,16 @@ url = f"http://{flaskLinkIp}:25566/sendCommand" # Url for sending flask server c
 # response = requests.post(url, json=payload).text
 # print(response)
 
+# clientIndex = 0
+# client_id = None
+
+# def getClientID():
+#     global client_id
+#     if clients:
+#         client_id = clients[clientIndex]
+#         print("Updated client_id:")
+#     else:
+#         print("No clients to update with")
 
 client_id = "pi-001"
 

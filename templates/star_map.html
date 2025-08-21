@@ -1,810 +1,296 @@
-{% extends "base.html" %}
-{% block title %}Star Map - Telescope Control{% endblock %}
-
-{% block content %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-
-<style>
-/* Ensure the star map container does not block the navbar/header */
-#starMapPanelContainer {
-    pointer-events: none;
-}
-#starMapPanel, #magnitudePanel, #starLabel, #fullscreenButton {
-    pointer-events: auto;
-}
-#gridToggles {
-    width: 100%;
-    margin-top: auto;
-    margin-bottom: 0;
-    background: rgba(24,24,24,0.95);
-    border-radius: 8px;
-    box-shadow: 0 0 8px #000a;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
-    font-size: 1.08em;
-    padding: 10px 0 8px 0;
-}
-#gridToggles label {
-    cursor: pointer;
-    user-select: none;
-    padding-left: 12px;
-}
-</style>
-
-<div id="starMapPanelContainer" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw;">
-    <div id="starMapPanel" style="width: 80%; height: 80%; position: relative; background-color: black;">
-        <button id="fullscreenButton" style="position: absolute; top: 10px; right: 10px; padding: 10px; background: rgba(0, 0, 0, 0.7); color: white; border: none; cursor: pointer;">⛶ Full Screen</button>
-        <div id="starLabel" style="position: absolute; color: white; background: rgba(0, 0, 0, 0.7); padding: 5px; font-size: 14px; border-radius: 5px; display: none;"></div>
-    </div>
-    <!-- Magnitude filter panel -->
-    <div id="magnitudePanel" style="width: 220px; height: 80%; margin-left: 16px; background: #181818; color: #fff; border-radius: 8px; box-shadow: 0 0 8px #000a; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 18px;">
-        <h4 style="margin-bottom: 12px;">Magnitude Cut off</h4>
-        <label for="magnitudeSlider" style="margin-bottom: 8px;">Show stars brighter than:</label>
-        <input type="range" id="magnitudeSlider" min="0" max="10" step="0.1" value="10" style="width: 90%;">
-        <span id="magnitudeValue" style="margin-top: 8px; font-size: 1.2em;">Mag ≤ 10</span>
-        <hr style="width: 100%; margin: 18px 0 10px 0; border: 0; border-top: 1px solid #333;">
-        <label for="latitudeInput" style="margin-bottom: 6px;">Latitude (°):</label>
-        <input type="number" id="latitudeInput" min="-90" max="90" step="0.01" value="0" style="width: 90%; margin-bottom: 12px; padding: 4px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
-        <label for="datetimeInput" style="margin-bottom: 6px;">Date & Time:</label>
-        <div style="width: 90%; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-right: 0;">
-            <input type="datetime-local" id="datetimeInput" style="width: 100%; padding: 4px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff; text-align: center;">
-            <button id="nowButton" type="button" style="margin-top: 4px; padding: 4px 12px; border-radius: 4px; border: none; background: #444; color: #fff; cursor: pointer; align-self: center;">Now</button>
-        </div>
-        <div style="flex:1"></div>
-        <div id="gridToggles">
-            <label><input type="checkbox" id="toggleHorizonGrid" checked> Show Horizon Grid</label>
-            <label><input type="checkbox" id="toggleEquatorialGrid" checked> Show Equatorial Grid</label>
-        </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Planetarium</title>
+    <style>
+        html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
+        #planetarium { display: block; width: 100vw; height: 100vh; background: #000; }
+        #info { position: absolute; top: 10px; left: 10px; color: #fff; background: rgba(0,0,0,0.6); padding: 8px; border-radius: 4px; font-family: sans-serif; z-index: 10; }
+        #controls {
+            position: absolute; top: 10px; right: 10px; z-index: 20; background: rgba(0,0,0,0.7);
+            color: #fff; padding: 12px 16px; border-radius: 6px; font-family: sans-serif;
+            display: flex; flex-direction: column; gap: 8px; min-width: 220px;
+        }
+        #controls label { font-size: 0.95em; }
+        #controls input[type="range"] { width: 100px; }
+        #controls input[type="number"] { width: 60px; }
+        #controls button { margin-top: 4px; }
+        #loading {
+            position: fixed; left: 0; top: 0; width: 100vw; height: 100vh;
+            background: #111; color: #fff; display: flex; align-items: center; justify-content: center;
+            font-size: 2em; z-index: 100;
+        }
+        #help-modal {
+            display: none; position: fixed; left: 0; top: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center;
+        }
+        #help-content {
+            background: #222; color: #fff; padding: 24px; border-radius: 8px; max-width: 400px;
+            font-family: sans-serif;
+        }
+        #help-content button { margin-top: 12px; }
+    </style>
+</head>
+<body>
+<div id="loading">Loading planetarium...</div>
+<canvas id="planetarium"></canvas>
+<div id="info">Drag to rotate. Click a star/planet for info.</div>
+<div id="controls">
+    <label>
+        Mag ≤ <span id="mag-value">6</span>
+        <input type="range" id="mag-filter" min="-2" max="10" step="0.1" value="6">
+    </label>
+    <label>
+        Latitude:
+        <input type="number" id="latitude" min="-90" max="90" step="0.1" value="0">
+    </label>
+    <label>
+        Longitude:
+        <input type="number" id="longitude" min="-180" max="180" step="0.1" value="0">
+    </label>
+    <label>
+        <input type="checkbox" id="show-stars" checked> Stars
+        <input type="checkbox" id="show-planets" checked> Planets
+    </label>
+    <button id="reset-view">Reset View</button>
+    <button id="help-btn">Help</button>
+</div>
+<div id="help-modal">
+    <div id="help-content">
+        <b>3D Planetarium Controls</b><br><br>
+        <ul>
+            <li>Drag mouse to rotate the sky</li>
+            <li>Click a star/planet for info</li>
+            <li>Adjust magnitude filter to show/hide faint stars</li>
+            <li>Set your latitude/longitude for local sky orientation</li>
+            <li>Toggle stars/planets visibility</li>
+            <li>Reset view to default orientation</li>
+        </ul>
+        <button id="close-help">Close</button>
     </div>
 </div>
-
-<script id="stars-data" type="application/json">{{ stars | tojson }}</script>
-
-<script>
-console.log("Script loaded");
-
-document.addEventListener("DOMContentLoaded", function () {
-    console.log("DOM fully loaded and parsed");
-    
-    const container = document.getElementById("starMapPanel");
-    const mouse = new THREE.Vector2();
-
-    function updateMouseCoords(event) {
-        const rect = container.getBoundingClientRect();
-        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    }
-    
-    
-    const label = document.getElementById("starLabel");
-    const fullscreenButton = document.getElementById("fullscreenButton");
-
-    fullscreenButton.addEventListener("click", function () {
-        console.log("Fullscreen button clicked");
-        if (!document.fullscreenElement) {
-            container.requestFullscreen().catch(err => {
-                console.error(`Error enabling full-screen: ${err.message}`);
-            });
-        } else {
-            document.exitFullscreen();
-        }
-    });
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, container.offsetWidth / container.offsetHeight, 0.1, 1000);
-    camera.position.set(0, 0, 10);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(container.offsetWidth, container.offsetHeight);
-    container.appendChild(renderer.domElement);
-    const controls = new THREE.OrbitControls(camera, renderer.domElement); 
-    const raycaster = new THREE.Raycaster();
-    console.log("Renderer initialized");
-
-    const radius = 500; // arbitrary number
-
-    const starGroup = new THREE.Group();
-    scene.add(starGroup);
-
-    // --- GRID LINES ---
-    // Helper: create a circle (for elevation/DEC lines)
-    function createCircle(radius, segments, color, opacity=0.25) {
-        const geometry = new THREE.BufferGeometry();
-        const vertices = [];
-        for (let i = 0; i <= segments; i++) {
-            const theta = (i / segments) * 2 * Math.PI;
-            vertices.push(
-                radius * Math.cos(theta),
-                0,
-                radius * Math.sin(theta)
-            );
-        }
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        const material = new THREE.LineBasicMaterial({ color: color, opacity: opacity, transparent: true });
-        return new THREE.Line(geometry, material);
-    }
-
-    // Helper: create a meridian (for azimuth/RA lines)
-    function createMeridian(radius, segments, azimuthDeg, color, opacity=0.25) {
-        const geometry = new THREE.BufferGeometry();
-        const vertices = [];
-        const azRad = azimuthDeg * Math.PI / 180;
-        for (let i = 0; i <= segments; i++) {
-            const el = (i / segments) * Math.PI / 2; // 0 (horizon) to pi/2 (zenith)
-            const r = radius * Math.cos(el);
-            const y = radius * Math.sin(el);
-            const x = r * Math.sin(azRad);
-            const z = r * Math.cos(azRad);
-            vertices.push(x, y, z);
-        }
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        const material = new THREE.LineBasicMaterial({ color: color, opacity: opacity, transparent: true });
-        return new THREE.Line(geometry, material);
-    }
-
-    // Helper: create a text sprite for grid labels
-    function makeTextSprite(message, parameters = {}) {
-        const fontface = parameters.fontface || "Arial";
-        const fontsize = parameters.fontsize || 36;
-        const borderThickness = parameters.borderThickness || 2;
-        const borderColor = parameters.borderColor || { r:0, g:0, b:0, a:1.0 };
-        const backgroundColor = parameters.backgroundColor || { r:0, g:0, b:0, a:0.0 };
-        const textColor = parameters.textColor || "#fff";
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        context.font = fontsize + "px " + fontface;
-        // size canvas to fit text
-        const metrics = context.measureText(message);
-        canvas.width = metrics.width + 8;
-        canvas.height = fontsize + 8;
-        // background
-        context.fillStyle = `rgba(${backgroundColor.r},${backgroundColor.g},${backgroundColor.b},${backgroundColor.a})`;
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        // border
-        context.strokeStyle = `rgba(${borderColor.r},${borderColor.g},${borderColor.b},${borderColor.a})`;
-        context.lineWidth = borderThickness;
-        context.strokeRect(0, 0, canvas.width, canvas.height);
-        // text
-        context.font = fontsize + "px " + fontface;
-        context.fillStyle = textColor;
-        context.textAlign = "left";
-        context.textBaseline = "top";
-        context.fillText(message, 4, 4);
-        // texture
-        const texture = new THREE.Texture(canvas);
-        texture.needsUpdate = true;
-        const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.7 });
-        const sprite = new THREE.Sprite(spriteMaterial);
-        sprite.scale.set(30, 15, 1);
-        return sprite;
-    }
-
-    // --- Azimuth/Elevation grid (pink, faint) ---
-    const gridGroup = new THREE.Group();
-
-    // Elevation circles (every 10°, from -80° to +80°)
-    for (let el = -80; el < 90; el += 10) {
-        if (el === 0) continue; // skip horizon, handled by azimuth lines
-        const r = radius * Math.cos(el * Math.PI / 180);
-        const y = radius * Math.sin(el * Math.PI / 180);
-        const circle = createCircle(r, 128, 0xff69b4, 0.25); // faint pink
-        circle.position.y = y;
-        circle.userData.gridType = "horizon";
-        gridGroup.add(circle);
-    }
-    // Place elevation labels only at az=0 (north), for both positive and negative
-    for (let el = -80; el < 90; el += 10) {
-        if (el === 0) continue;
-        const r = radius * Math.cos(el * Math.PI / 180);
-        const y = radius * Math.sin(el * Math.PI / 180);
-        const azRad = 0;
-        const x = r * Math.sin(azRad);
-        const z = r * Math.cos(azRad);
-        const label = makeTextSprite(el + "° (e)", { fontsize: 32, textColor: "#ff69b4" });
-        label.position.set(x, y + 8, z);
-        label.userData.gridType = "horizon";
-        gridGroup.add(label);
-    }
-
-    // Azimuth meridians (every 10°, from 0° to 350°), from el=-80° to el=+90°
-    for (let az = 0; az < 360; az += 10) {
-        const geometry = new THREE.BufferGeometry();
-        const vertices = [];
-        const azRad = az * Math.PI / 180;
-        for (let i = 0; i <= 64; i++) {
-            // el from -80° to +90°
-            const el = (-80 + (i / 64) * 170) * Math.PI / 180;
-            const r = radius * Math.cos(el);
-            const y = radius * Math.sin(el);
-            const x = r * Math.sin(azRad);
-            const z = r * Math.cos(azRad);
-            vertices.push(x, y, z);
-        }
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        const material = new THREE.LineBasicMaterial({ color: 0xff69b4, opacity: 0.25, transparent: true });
-        const line = new THREE.Line(geometry, material);
-        line.userData.gridType = "horizon";
-        gridGroup.add(line);
-    }
-    // Place azimuth labels only at the horizon (el=0)
-    for (let az = 0; az < 360; az += 10) {
-        const azRad = az * Math.PI / 180;
-        const x = radius * Math.cos(0) * Math.sin(azRad);
-        const y = 0;
-        const z = radius * Math.cos(0) * Math.cos(azRad);
-        const label = makeTextSprite(az + "° (a)", { fontsize: 32, textColor: "#ff69b4" });
-        label.position.set(x * 1.04, y - 10, z * 1.04); // slightly outside
-        label.userData.gridType = "horizon";
-        gridGroup.add(label);
-    }
-
-    // Add cardinal direction labels (N, E, S, W)
-    const cardinalDirections = [
-        { az: 0, label: "N" },
-        { az: 90, label: "E" },
-        { az: 180, label: "S" },
-        { az: 270, label: "W" }
-    ];
-    
-    cardinalDirections.forEach(dir => {
-        const azRad = dir.az * Math.PI / 180;
-        const x = radius * Math.cos(0) * Math.sin(azRad);
-        const y = 0;
-        const z = radius * Math.cos(0) * Math.cos(azRad);
-        const cardinalLabel = makeTextSprite(dir.label, { fontsize: 48, textColor: "#ff69b4" });
-        cardinalLabel.position.set(x * 1.12, y - 20, z * 1.12); // further outside than degree labels
-        cardinalLabel.userData.gridType = "horizon";
-        gridGroup.add(cardinalLabel);
-    });
-
-    // --- RA/DEC grid (green, faint) ---
-    const raDecGroup = new THREE.Group();
-
-    // DEC circles (every 10°, from -80° to +80°)
-    for (let dec = -80; dec <= 80; dec += 10) {
-        if (dec === 0) continue; // skip equator, handled by RA lines
-        const decRad = dec * Math.PI / 180;
-        const r = radius * Math.cos(decRad);
-        const y = radius * Math.sin(decRad);
-        const circle = createCircle(r, 128, 0x00ff00, 0.25); // faint green
-        circle.position.y = y;
-        circle.userData.gridType = "equatorial";
-        raDecGroup.add(circle);
-    }
-    // Place DEC labels at RA=0 (north), 90 (east), 180 (south), 270 (west)
-    for (let dec = -80; dec <= 80; dec += 10) {
-        if (dec === 0) continue;
-        const decRad = dec * Math.PI / 180;
-        const r = radius * Math.cos(decRad);
-        const y = radius * Math.sin(decRad);
-        for (let raDeg of [0, 90, 180, 270]) {
-            const raRad = raDeg * Math.PI / 180;
-            const x = r * Math.cos(raRad);
-            const z = r * Math.sin(raRad);
-            const label = makeTextSprite(dec + "° (D)", { fontsize: 32, textColor: "#00ff00" });
-            label.position.set(x, y + 8, z);
-            label.userData.gridType = "equatorial";
-            raDecGroup.add(label);
-        }
-    }
-
-    // RA meridians (every 10°, from 0° to 350°), from DEC=-90° to DEC=+90°
-    for (let ra = 0; ra < 360; ra += 10) {
-        const geometry = new THREE.BufferGeometry();
-        const vertices = [];
-        const raRad = ra * Math.PI / 180;
-        for (let i = 0; i <= 64; i++) {
-            const dec = -90 + (i / 64) * 180; // -90 to +90
-            const decRad = dec * Math.PI / 180;
-            const r = radius * Math.cos(decRad);
-            const y = radius * Math.sin(decRad);
-            const x = r * Math.cos(raRad);
-            const z = r * Math.sin(raRad);
-            vertices.push(x, y, z);
-        }
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        const material = new THREE.LineBasicMaterial({ color: 0x00ff00, opacity: 0.25, transparent: true });
-        const line = new THREE.Line(geometry, material);
-        line.userData.gridType = "equatorial";
-        raDecGroup.add(line);
-
-        // Place RA labels at DEC=0 (celestial equator), for RA=0 (north), 90 (east), 180 (south), 270 (west)
-        if ([0, 90, 180, 270].includes(ra)) {
-            const decRad = 0;
-            const r0 = radius * Math.cos(decRad);
-            const y0 = radius * Math.sin(decRad);
-            const x0 = r0 * Math.cos(raRad);
-            const z0 = r0 * Math.sin(raRad);
-            const label = makeTextSprite(ra + "° (R)", { fontsize: 32, textColor: "#00ff00" });
-            // Place label slightly outside the sphere for visibility
-            label.position.set(x0 * 1.08, y0 + 10, z0 * 1.08);
-            label.userData.gridType = "equatorial";
-            raDecGroup.add(label);
-        }
-    }
-
-    // --- Offset RA/DEC grid so celestial pole is at elevation = latitude ---
-    // Rotate around X axis by (90 - latitude) degrees
-    const latitude = 52.5; // match OBS_LATITUDE
-    raDecGroup.rotation.x = THREE.MathUtils.degToRad(90 - latitude);  // Remove the negative sign
-
-    gridGroup.add(raDecGroup);
-
-    scene.add(gridGroup);
-
-    // --- TOGGLES FOR GRID VISIBILITY ---
-    const toggleHorizonGrid = document.getElementById("toggleHorizonGrid");
-    const toggleEquatorialGrid = document.getElementById("toggleEquatorialGrid");
-
-    function setGridTypeVisible(type, visible, parent) {
-        parent = parent || gridGroup;
-        parent.children.forEach(child => {
-            if (child.userData && child.userData.gridType === type) {
-                child.visible = visible;
-            }
-            // Recursively check children (for raDecGroup)
-            if (child.children && child.children.length > 0) {
-                setGridTypeVisible(type, visible, child);
-            }
-        });
-    }
-
-    toggleHorizonGrid.addEventListener("change", function() {
-        setGridTypeVisible("horizon", this.checked);
-    });
-    toggleEquatorialGrid.addEventListener("change", function() {
-        setGridTypeVisible("equatorial", this.checked);
-    });
-
-    // Set initial visibility
-    setGridTypeVisible("horizon", toggleHorizonGrid.checked);
-    setGridTypeVisible("equatorial", toggleEquatorialGrid.checked);
-
-
-    // --- DEBUG: Hardcoded observer location and time ---
-    const OBS_LATITUDE = latitude; // debug: hardcoded latitude
-    const OBS_LST = 0; // debug: hardcoded LST (hours, GMT)
-
-    // Helper: Convert decimal degrees to [deg, min, sec]
-    function decimalToDMS(deg) {
-        const sign = deg < 0 ? -1 : 1;
-        deg = Math.abs(deg);
-        const d = Math.floor(deg);
-        const m = Math.floor((deg - d) * 60);
-        const s = ((deg - d) * 60 - m) * 60;
-        return [sign * d, m, s];
-    }
-
-    // Helper: Convert decimal hours to [h, m, s]
-    function decimalToHMS(hours) {
-        const sign = hours < 0 ? -1 : 1;
-        hours = Math.abs(hours);
-        const h = Math.floor(hours);
-        const m = Math.floor((hours - h) * 60);
-        const s = ((hours - h) * 60 - m) * 60;
-        return [sign * h, m, s];
-    }
-
-    // Helper: Convert [h, m, s] to decimal hours
-    function hmsToDecimal(h, m, s) {
-        const sign = h < 0 ? -1 : 1;
-        return sign * (Math.abs(h) + Math.abs(m) / 60 + Math.abs(s) / 3600);
-    }
-
-    // Helper: Convert [d, m, s] to decimal degrees
-    function dmsToDecimal(d, m, s) {
-        const sign = d < 0 ? -1 : 1;
-        return sign * (Math.abs(d) + Math.abs(m) / 60 + Math.abs(s) / 3600);
-    }
-
-    // Equatorial to Horizon conversion (JS version of convert.EquatorialToHorizon)
-    function equatorialToHorizon(raDeg, decDeg, latitude, lstHours) {
-        // raDeg: degrees, decDeg: degrees, latitude: degrees, lstHours: hours
-        // Returns: { az: degrees, el: degrees }
-        // Convert RA to hours
-        const raHours = raDeg / 15;
-        // Hour angle in degrees
-        let H = lstHours - raHours;
-        if (H < 0) H += 24;
-        H = H * 15; // to degrees
-
-        // Convert to radians
-        const Hrad = H * Math.PI / 180;
-        const latRad = latitude * Math.PI / 180;
-        const decRad = decDeg * Math.PI / 180;
-
-        // Elevation
-        const sinEl = Math.sin(decRad) * Math.sin(latRad) + Math.cos(decRad) * Math.cos(latRad) * Math.cos(Hrad);
-        const el = Math.asin(sinEl);
-
-        // Azimuth
-        const cosAz = (Math.sin(decRad) - Math.sin(latRad) * Math.sin(el)) / (Math.cos(latRad) * Math.cos(el));
-        let az = Math.acos(Math.max(-1, Math.min(1, cosAz))); // Clamp for safety
-
-        if (Math.sin(Hrad) > 0) {
-            az = 2 * Math.PI - az;
-        }
-
-        return {
-            az: az * 180 / Math.PI,
-            el: el * 180 / Math.PI
-        };
-    }
-
-    // Parse stars + celestial objects from Flask data
-    const starsData = JSON.parse(document.getElementById('stars-data').textContent);
-    console.log("Parsed starsData:", starsData.length);
-
-    // --- Magnitude filter setup ---
-    const magnitudeSlider = document.getElementById("magnitudeSlider");
-    const magnitudeValue = document.getElementById("magnitudeValue");
-
-    // Compute min/max magnitude safely (avoid stack overflow)
-    const magStars = starsData.filter(s => typeof s.mag === "number" && !isNaN(s.mag));
-    let minMag = Infinity;
-    let maxMag = -Infinity;
-    for (const s of magStars) {
-        if (s.mag < minMag) minMag = s.mag;
-        if (s.mag > maxMag) maxMag = s.mag;
-    }
-    console.log(`Min magnitude: ${minMag}, Max magnitude: ${maxMag}`);
-
-    // Set slider bounds
-    magnitudeSlider.min = minMag;
-    magnitudeSlider.max = maxMag;
-    magnitudeSlider.value = maxMag;
-    magnitudeValue.textContent = `Mag ≤ ${maxMag}`;
-
-
-    magnitudeSlider.min = minMag;
-    magnitudeSlider.max = maxMag;
-    magnitudeSlider.value = maxMag;
-    magnitudeValue.textContent = `Mag ≤ ${maxMag}`;
-
-    const starObjects = [];
-    const pointsIndexToStarIndex = [];
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = [];
-    const sizes = [];
-
-    const loader = new THREE.TextureLoader();
-
-    let spritesAdded = 0;
-    let starsWithIconsCount = 0;
-
-    // --- MAIN COORDINATE CHANGE: Convert RA/DEC to Azimuth/Elevation, then plot ---
-    starsData.forEach((star, i) => {
-        // Get current time for LST calculation
-        const now = new Date();
-        
-        // More accurate LST calculation
-        // Julian day number
-        const jd = (now.getTime() / 86400000) + 2440587.5;
-        const T = (jd - 2451545.0) / 36525.0;
-        
-        // Greenwich Mean Sidereal Time at 0h UT
-        let gmst = 280.46061837 + 360.98564736629 * (jd - 2451545.0) + 0.000387933 * T * T - T * T * T / 38710000.0;
-        gmst = gmst % 360;
-        if (gmst < 0) gmst += 360;
-        
-        // Convert to hours and add current UT hours
-        const utHours = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
-        gmst = (gmst / 15 + utHours) % 24;
-        
-        // Local Sidereal Time (assuming longitude 0 for now - you can adjust this)
-        const longitude = 0; // degrees, positive east
-        const lst = (gmst + longitude / 15) % 24;
-        if (lst < 0) lst += 24;
-        
-        // Convert RA/DEC to Azimuth/Elevation
-        const azEl = equatorialToHorizon(star.ra, star.dec, 52.5, lst);
-        
-        // Convert azimuth/elevation to 3D coordinates (same as grid system)
-        const azRad = azEl.az * Math.PI / 180;
-        const elRad = azEl.el * Math.PI / 180;
-        const r = radius * Math.cos(elRad);
-        const y = radius * Math.sin(elRad);
-        const x = r * Math.sin(azRad);
-        const z = r * Math.cos(azRad);
-
-        if (star.icon) {
-            starsWithIconsCount++;
-            loader.load(star.icon, texture => {
-                const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
-                const sprite = new THREE.Sprite(material);
-                sprite.position.set(x, y, z);  // Use direct coordinates
-                sprite.scale.set(20, 20, 1);
-                sprite.userData = { name: star.name, mag: star.mag };
-                sprite.renderOrder = 999;
-
-                starGroup.add(sprite);
-                if (typeof star.mag === "number") {
-                    starObjects.push({ type: "sprite", obj: sprite, mag: star.mag, index: null });
-                }
-                spritesAdded++;
-                console.log(`Sprite added: ${star.name}`);
-            }, undefined, err => {
-                console.warn("Icon failed to load for", star.name, err);
-            });
-        } else {
-            positions.push(x, y, z);  // Use direct coordinates
-            const size = Math.max(0.1, 1.5 - (star.mag * 0.1));
-            sizes.push(size);
-            if (typeof star.mag === "number") {
-                starObjects.push({ type: "point", obj: null, mag: star.mag, index: pointsIndexToStarIndex.length });
-            }
-            pointsIndexToStarIndex.push(i);
-        }
-    });
-
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    const material = new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: true });
-    const starsMesh = new THREE.Points(geometry, material);
-    starGroup.add(starsMesh);
-
-    let visiblePointIndices = [];
-    let allPositions = [];
-    let allPointsIndexToStarIndex = [];
-
-    function buildAllPositions() {
-        allPositions = [];
-        allPointsIndexToStarIndex = [];
-        starsData.forEach((star, i) => {
-            if (!star.icon) {
-                // Get current time for LST calculation
-                const now = new Date();
-                
-                // More accurate LST calculation
-                // Julian day number
-                const jd = (now.getTime() / 86400000) + 2440587.5;
-                const T = (jd - 2451545.0) / 36525.0;
-                
-                // Greenwich Mean Sidereal Time at 0h UT
-                let gmst = 280.46061837 + 360.98564736629 * (jd - 2451545.0) + 0.000387933 * T * T - T * T * T / 38710000.0;
-                gmst = gmst % 360;
-                if (gmst < 0) gmst += 360;
-                
-                // Convert to hours and add current UT hours
-                const utHours = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
-                gmst = (gmst / 15 + utHours) % 24;
-                
-                // Local Sidereal Time (assuming longitude 0 for now - you can adjust this)
-                const longitude = 0; // degrees, positive east
-                const lst = (gmst + longitude / 15) % 24;
-                
-                // Convert RA/DEC to Azimuth/Elevation
-                const azEl = equatorialToHorizon(star.ra, star.dec, 52.5, lst);
-                
-                // Convert azimuth/elevation to 3D coordinates (same as grid system)
-                const azRad = azEl.az * Math.PI / 180;
-                const elRad = azEl.el * Math.PI / 180;
-                const r = radius * Math.cos(elRad);
-                const y = radius * Math.sin(elRad);
-                const x = r * Math.sin(azRad);
-                const z = r * Math.cos(azRad);
-
-                allPositions.push(x, y, z);  // Use direct coordinates
-                allPointsIndexToStarIndex.push(i);
-            }
-        });
-        console.log("Built allPositions:", allPositions.length);
-    }
-
-    buildAllPositions();
-
-    
-    let filteredPointsToStarIndex = [];
-
-    function updateStarVisibility(maxMag) {
-        // Sprites: set visible based on mag
-        starObjects.forEach(starObj => {
-            if (starObj.type === "sprite") {
-                starObj.obj.visible = starObj.mag <= maxMag;
-            }
-        });
-
-        // Points: filter and rebuild geometry and mapping
-        let filteredPositions = [];
-        filteredPointsToStarIndex = [];
-        allPointsIndexToStarIndex.forEach((starIdx, i) => {
-            const star = starsData[starIdx];
-            if (typeof star.mag === "number" && !isNaN(star.mag) && star.mag <= maxMag && !star.icon) {
-                filteredPointsToStarIndex.push(starIdx);
-                filteredPositions.push(
-                    allPositions[i * 3],
-                    allPositions[i * 3 + 1],
-                    allPositions[i * 3 + 2]
-                );
-            }
-        });
-
-        if (filteredPositions.length === 0) {
-            starsMesh.visible = false;
-        } else {
-            starsMesh.visible = true;
-            starsMesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(filteredPositions, 3));
-            starsMesh.geometry.attributes.position.needsUpdate = true;
-            starsMesh.geometry.setDrawRange(0, filteredPositions.length / 3);
-        }
-    }
-
-    // --- Slider event ---
-    magnitudeSlider.addEventListener("input", function () {
-        const val = parseFloat(magnitudeSlider.value);
-        magnitudeValue.textContent = `Mag ≤ ${val}`;
-        updateStarVisibility(val);
-    });
-
-    // --- Right-click to enter value ---
-    magnitudeSlider.addEventListener("contextmenu", function (e) {
-        e.preventDefault();
-        const min = parseFloat(magnitudeSlider.min);
-        const max = parseFloat(magnitudeSlider.max);
-        let val = prompt(`Enter a magnitude value (${min} to ${max}):`, magnitudeSlider.value);
-        if (val !== null) {
-            val = parseFloat(val);
-            if (!isNaN(val) && val >= min && val <= max) {
-                magnitudeSlider.value = val;
-                magnitudeValue.textContent = `Mag ≤ ${val}`;
-                updateStarVisibility(val);
-            } else {
-                alert(`Please enter a number between ${min} and ${max}.`);
-            }
-        }
-    });
-
-    // --- Now button for datetime input ---
-    const nowButton = document.getElementById("nowButton");
-    const datetimeInput = document.getElementById("datetimeInput");
-    nowButton.addEventListener("click", function() {
-        const now = new Date();
-        // Format as yyyy-MM-ddTHH:mm (local time)
-        const pad = n => n.toString().padStart(2, '0');
-        const formatted = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
-        datetimeInput.value = formatted;
-    });
-
-// --- Initial filter (show all) ---
-magnitudeValue.textContent = `Mag ≤ ${magnitudeSlider.value}`;
-updateStarVisibility(parseFloat(magnitudeSlider.value));
-
-
-    function onMouseMove(event) {
-        updateMouseCoords(event);
-        raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObjects(starGroup.children, true);
-        if (intersects.length > 0) {
-            const intersect = intersects[0];
-            let starName = "Unknown";
-            if (intersect.object.type === "Sprite") {
-                starName = intersect.object.userData.name;
-            } else if (intersect.object.type === "Points" && intersect.index !== undefined) {
-                const filteredIdx = intersect.index;
-                const starIdx = filteredPointsToStarIndex[filteredIdx];
-                starName = starsData[starIdx]?.name || starName;
-            }
-            label.innerText = starName;
-            label.style.left = event.clientX + 10 + "px";
-            label.style.top = event.clientY + 10 + "px";
-            label.style.display = "block";
-        } else {
-            label.style.display = "none";
-        }
-    }
-
-    function onMouseDoubleClick(event) {
-        updateMouseCoords(event);
-        raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObjects(starGroup.children, true);
-        if (intersects.length > 0) {
-            const intersect = intersects[0];
-            let star;
-            if (intersect.object.type === "Sprite") {
-                const name = intersect.object.userData.name;
-                star = starsData.find(s => s.name === name);
-            } else if (intersect.object.type === "Points" && intersect.index !== undefined) {
-                const filteredIdx = intersect.index;
-                const starIdx = filteredPointsToStarIndex[filteredIdx];
-                star = starsData[starIdx];
-            }
-            if (star) {
-                fetchStarInfo(star.name);
-            }
-        }
-    }
-
-    function fetchStarInfo(starName) {
-        console.log("Fetching info for star:", starName);
-        fetch(`/star_info/${encodeURIComponent(starName)}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert("No info found for " + starName);
-                    return;
-                }
-                showStarInfo(data);
-            })
-            .catch(error => console.error("Error fetching star info:", error));
-    }
-
-    function showStarInfo(star) {
-        console.log("Showing modal for:", star.name);
-        const existingModal = document.getElementById("starInfoModal");
-        if (existingModal) existingModal.remove();
-
-        const modal = document.createElement("div");
-        modal.id = "starInfoModal";
-        modal.style.position = "fixed";
-        modal.style.top = "50%";
-        modal.style.left = "50%";
-        modal.style.transform = "translate(-50%, -50%)";
-        modal.style.background = "black";
-        modal.style.color = "white";
-        modal.style.padding = "15px";
-        modal.style.borderRadius = "8px";
-        modal.style.zIndex = 1000;
-        modal.style.maxWidth = "300px";
-        modal.style.boxShadow = "0 0 10px #fff";
-
-        modal.innerHTML = `
-            <h2>${star.name}</h2>
-            <p><b>RA:</b> ${star.ra}°</p>
-            <p><b>DEC:</b> ${star.dec}°</p>
-            <p><b>Magnitude:</b> ${star.mag}</p>
-            <p>${star.description || ''}</p>
-            <button id="trackStarBtn" class="btn btn-success" style="margin-right: 8px;">Track</button>
-            <button id="closeStarInfo" class="btn btn-secondary">Close</button>
-        `;
-
-        document.body.appendChild(modal);
-
-        document.getElementById("closeStarInfo").addEventListener("click", () => {
-            modal.remove();
-        });
-
-        document.getElementById("trackStarBtn").addEventListener("click", () => {
-            fetch("/track_star", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    name: star.name,
-                    ra: star.ra,
-                    dec: star.dec,
-                    mag: star.mag
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                modal.remove();
-            })
-            .catch(error => {
-                console.error(error);
-            });
-        });
-    }
-
-    function onWindowResize() {
-        console.log("Resizing...");
-        camera.aspect = container.offsetWidth / container.offsetHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(container.offsetWidth, container.offsetHeight);
-    }
-
-    window.addEventListener("resize", onWindowResize);
-    container.addEventListener("mousemove", onMouseMove);
-    container.addEventListener("dblclick", onMouseDoubleClick);
-
-    function animate() {
-        requestAnimationFrame(animate);
-        controls.update();
-        renderer.render(scene, camera);
-    }
-
-    animate();
-});
+<script type="application/json" id="stars-data">
+    {{ stars|tojson }}
 </script>
+<script>
+    // Get star/planet data from Flask
+    const stars = JSON.parse(document.getElementById('stars-data').textContent);
 
-{% endblock %}
+    // UI elements
+    const magFilter = document.getElementById('mag-filter');
+    const magValue = document.getElementById('mag-value');
+    const latInput = document.getElementById('latitude');
+    const lonInput = document.getElementById('longitude');
+    const showStars = document.getElementById('show-stars');
+    const showPlanets = document.getElementById('show-planets');
+    const resetBtn = document.getElementById('reset-view');
+    const helpBtn = document.getElementById('help-btn');
+    const helpModal = document.getElementById('help-modal');
+    const closeHelp = document.getElementById('close-help');
+    const loading = document.getElementById('loading');
+
+    // Canvas setup
+    const canvas = document.getElementById('planetarium');
+    const ctx = canvas.getContext('2d');
+    let width = window.innerWidth, height = window.innerHeight;
+    canvas.width = width;
+    canvas.height = height;
+
+    // 3D sphere parameters
+    // Increase the sphere radius for a more immersive effect
+    const R = Math.min(width, height) * 0.9 / 2;
+    let rotX = 0, rotY = 0; // rotation angles
+    let dragging = false, lastX = 0, lastY = 0;
+
+    // Camera is inside the sphere: invert z-culling (draw z < 0)
+    // Convert RA/DEC to 3D Cartesian coordinates
+    function radecToXYZ(ra, dec) {
+        // RA in degrees, DEC in degrees
+        const raRad = ra * Math.PI / 180;
+        const decRad = dec * Math.PI / 180;
+        const x = Math.cos(decRad) * Math.cos(raRad);
+        const y = Math.sin(decRad);
+        const z = Math.cos(decRad) * Math.sin(raRad);
+        return [x, y, z];
+    }
+
+    // 3D rotation (including local latitude/longitude)
+    function rotate([x, y, z], rotX, rotY, lat, lon) {
+        // Apply longitude (azimuthal) rotation
+        let x1 = x * Math.cos(lon) - z * Math.sin(lon);
+        let z1 = x * Math.sin(lon) + z * Math.cos(lon);
+        // Apply latitude (altitude) rotation
+        let y1 = y * Math.cos(lat) - z1 * Math.sin(lat);
+        let z2 = y * Math.sin(lat) + z1 * Math.cos(lat);
+        // User rotation (drag)
+        let x2 = x1 * Math.cos(rotY) - z2 * Math.sin(rotY);
+        let z3 = x1 * Math.sin(rotY) + z2 * Math.cos(rotY);
+        let y2 = y1 * Math.cos(rotX) - z3 * Math.sin(rotX);
+        let z4 = y1 * Math.sin(rotX) + z3 * Math.cos(rotX);
+        return [x2, y2, z4];
+    }
+
+    // Project 3D point to 2D canvas (camera at center, looking outward)
+    function project([x, y, z]) {
+        const fov = 1.5;
+        const scale = R / (fov - z); // z > 0 is in front of the camera
+        return [
+            width / 2 + x * scale,
+            height / 2 - y * scale
+        ];
+    }
+
+    // Draw all stars/planets
+    function draw() {
+        ctx.clearRect(0, 0, width, height);
+        // Draw celestial sphere outline
+        ctx.save();
+        ctx.strokeStyle = "#333";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(width/2, height/2, R, 0, 2*Math.PI);
+        ctx.stroke();
+        ctx.restore();
+
+        // Get filter values
+        const magLimit = parseFloat(magFilter.value);
+        const lat = parseFloat(latInput.value) * Math.PI / 180;
+        const lon = parseFloat(lonInput.value) * Math.PI / 180;
+        const showStarsVal = showStars.checked;
+        const showPlanetsVal = showPlanets.checked;
+
+        // Draw stars/planets
+        for (const obj of stars) {
+            if (obj.mag > magLimit) continue;
+            if (obj.type === "star" && !showStarsVal) continue;
+            if (obj.type === "planet" && !showPlanetsVal) continue;
+            let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
+            [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+            // Only render objects in front of the camera (z > 0)
+            if (z <= 0) continue;
+            const [cx, cy] = project([x, y, z]);
+            let size = obj.type === "planet" ? 8 : Math.max(1, 6 - (obj.mag || 6));
+            ctx.save();
+            if (obj.type === "planet") {
+                if (obj.icon) {
+                    let img = new window.Image();
+                    img.src = obj.icon;
+                    ctx.drawImage(img, cx-size, cy-size, size*2, size*2);
+                } else {
+                    ctx.fillStyle = "#ff0";
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, size, 0, 2*Math.PI);
+                    ctx.fill();
+                }
+            } else {
+                ctx.fillStyle = "#fff";
+                ctx.globalAlpha = Math.max(0.5, 1 - (obj.mag || 6)/8);
+                ctx.beginPath();
+                ctx.arc(cx, cy, size, 0, 2*Math.PI);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    // Mouse controls
+    canvas.addEventListener('mousedown', e => {
+        dragging = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+    });
+    window.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        rotY += (e.clientX - lastX) * 0.01;
+        rotX += (e.clientY - lastY) * 0.01;
+        rotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotX));
+        lastX = e.clientX;
+        lastY = e.clientY;
+        draw();
+    });
+    window.addEventListener('mouseup', () => dragging = false);
+
+    // Click to show info
+    canvas.addEventListener('click', function(e) {
+        const mx = e.clientX, my = e.clientY;
+        const magLimit = parseFloat(magFilter.value);
+        const lat = parseFloat(latInput.value) * Math.PI / 180;
+        const lon = parseFloat(lonInput.value) * Math.PI / 180;
+        for (const obj of stars) {
+            if (obj.mag > magLimit) continue;
+            if (obj.type === "star" && !showStars.checked) continue;
+            if (obj.type === "planet" && !showPlanets.checked) continue;
+            let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
+            [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+            if (z <= 0) continue;
+            const [cx, cy] = project([x, y, z]);
+            let size = obj.type === "planet" ? 8 : Math.max(1, 6 - (obj.mag || 6));
+            if ((mx-cx)**2 + (my-cy)**2 < size*size*2) {
+                document.getElementById('info').innerHTML =
+                    `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}°<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${obj.mag}`;
+                return;
+            }
+        }
+        document.getElementById('info').innerHTML = "Drag to rotate. Click a star/planet for info.";
+    });
+
+    // Responsive resize
+    window.addEventListener('resize', () => {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        draw();
+    });
+
+    // Preload planet icons
+    for (const obj of stars) {
+        if (obj.icon) {
+            let img = new window.Image();
+            img.src = obj.icon;
+        }
+    }
+
+    // UI event listeners
+    magFilter.addEventListener('input', () => {
+        magValue.textContent = magFilter.value;
+        draw();
+    });
+    latInput.addEventListener('change', draw);
+    lonInput.addEventListener('change', draw);
+    showStars.addEventListener('change', draw);
+    showPlanets.addEventListener('change', draw);
+    resetBtn.addEventListener('click', () => {
+        rotX = 0; rotY = 0;
+        latInput.value = 0;
+        lonInput.value = 0;
+        magFilter.value = 6;
+        magValue.textContent = "6";
+        showStars.checked = true;
+        showPlanets.checked = true;
+        draw();
+    });
+    helpBtn.addEventListener('click', () => {
+        helpModal.style.display = "flex";
+    });
+    closeHelp.addEventListener('click', () => {
+        helpModal.style.display = "none";
+    });
+    helpModal.addEventListener('click', (e) => {
+        if (e.target === helpModal) helpModal.style.display = "none";
+    });
+
+    // Hide loading screen after first draw
+    function hideLoading() {
+        loading.style.display = "none";
+    }
+
+    // Initial draw and loading
+    window.addEventListener('DOMContentLoaded', () => {
+        draw();
+        setTimeout(hideLoading, 400); // allow a short delay for effect
+    });
+</script>
+</body>
+</html>
