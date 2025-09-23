@@ -13,7 +13,7 @@ import signal
 CLIENT_ID = "pi-001"
 SERVER_URI = "ws://82.36.204.156:8001"
 
-liveview_enabled = True
+liveview_enabled = False
 
 
 # pkill -f gvfs-gphoto2-volume-monitor
@@ -143,12 +143,13 @@ async def run_client():
         print(f"[run_client] Exception: {e}")
 
 def get_liveview_ws_uri():
+    liveViewPort = 4001
     # Extract host from SERVER_URI (e.g., ws://82.36.204.156:8001)
     match = re.match(r"ws://([\w\.-]+):\d+", SERVER_URI)
     if not match:
         raise ValueError("SERVER_URI format invalid")
     host = match.group(1)
-    return f"ws://{host}:4001"
+    return f"ws://{host}:{liveViewPort}"
 
 async def send_frames():
     global liveview_enabled
