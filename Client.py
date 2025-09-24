@@ -11,13 +11,51 @@ import re
 import signal
 
 CLIENT_ID = "pi-001"
-SERVER_URI = "ws://82.36.204.156:8001"
+SERVER_URI = "ws://82.36.204.156:4000"
 
 liveview_enabled = True
 
 
 # pkill -f gvfs-gphoto2-volume-monitor
 # pkill -f gvfsd-gphoto2
+
+
+CLIENT_ID_FILE = "client_id.json"
+SERVER_URL = "http://82.36.204.156"  # Update with your server's URL
+
+# def get_client_id():
+#     print(f"[DEBUG] Sending POST request to {SERVER_URL}/client/register")
+#     # Check if client_id is already stored locally
+#     if os.path.exists(CLIENT_ID_FILE):
+#         with open(CLIENT_ID_FILE, "r") as f:
+#             data = json.load(f)
+#             print(f"[DEBUG] Loaded client_id from file: {data}")
+#             return data.get("client_id")
+    
+#     # If not, register with the server to get a new client_id
+#     response = requests.post(f"{SERVER_URL}/client/register")
+#     print(f"[DEBUG] Response received: {response.status_code} - {response.text}")
+#     if response.status_code == 200:
+#         try:
+#             resp_json = response.json()
+#             print(f"[DEBUG] Response JSON: {resp_json}")
+#             client_id = resp_json.get("client_id")
+#             if client_id:
+#                 # Save the client_id locally for future use
+#                 with open(CLIENT_ID_FILE, "w") as f:
+#                     json.dump({"client_id": client_id}, f)
+#                 return client_id
+#             else:
+#                 print("[ERROR] No client_id in server response!")
+#                 return None
+#         except Exception as e:
+#             print(f"[ERROR] Failed to parse JSON: {e}")
+#             return None
+#     else:
+#         raise Exception(f"Failed to register with server: {response.text}")
+    
+# CLIENT_ID = get_client_id()
+
 
 
 
@@ -77,7 +115,7 @@ def capturePhoto(currentid):
         print(f"[ERROR] The following files are missing: {missing_files}")
         return
     
-    server_url = "http://82.36.204.156:25566/upload"
+    server_url = f"{SERVER_URL}/upload"
 
     file_data = {f"file{index}": open(file, "rb") for index, file in enumerate(files)}
 
@@ -143,12 +181,13 @@ async def run_client():
         print(f"[run_client] Exception: {e}")
 
 def get_liveview_ws_uri():
+    liveViewPort = 8000
     # Extract host from SERVER_URI (e.g., ws://82.36.204.156:8001)
     match = re.match(r"ws://([\w\.-]+):\d+", SERVER_URI)
     if not match:
         raise ValueError("SERVER_URI format invalid")
     host = match.group(1)
-    return f"ws://{host}:4001"
+    return f"ws://{host}:{liveViewPort}"
 
 async def send_frames():
     global liveview_enabled
@@ -156,6 +195,9 @@ async def send_frames():
     JPEG_START = b'\xff\xd8'
     JPEG_END = b'\xff\xd9'
     proc = None
+    last_frame_time = 0
+    frame_interval = 1 / 10  # 10 FPS
+
     try:
         async with websockets.connect(uri, max_size=2*1024*1024) as ws:
             await ws.send(CLIENT_ID)
@@ -177,8 +219,11 @@ async def send_frames():
                             start = buffer.find(JPEG_START)
                             end = buffer.find(JPEG_END, start)
                             if start != -1 and end != -1 and end > start:
-                                jpeg = buffer[start:end+2]
-                                await ws.send(jpeg)
+                                now = time.time()
+                                if now - last_frame_time >= frame_interval:
+                                    jpeg = buffer[start:end+2]
+                                    await ws.send(jpeg)
+                                    last_frame_time = now
                                 buffer = buffer[end+2:]
                             else:
                                 break
