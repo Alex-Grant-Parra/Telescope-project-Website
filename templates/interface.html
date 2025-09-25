@@ -66,6 +66,28 @@
             <button id="liveViewToggleBtn" class="btn btn-outline-primary" onclick="toggleLiveView()">Start</button>
         </div>
     </div>
+
+    <!-- Draggable Telescope Selection Panel -->
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="telescopeSelectionPanel" style="top: 300px; left: 80vw; min-width: 250px;">
+        <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Telescope Selection</div>
+        <div class="control-row my-2">
+            <label for="telescopeSelect">Connected Telescopes</label>
+            <select id="telescopeSelect" class="form-select" onchange="selectTelescope()">
+                <option value="">Select a telescope...</option>
+            </select>
+        </div>
+        <div class="control-row my-2" id="telescopeInfo" style="display: none;">
+            <div class="small text-muted">
+                <div><strong>ID:</strong> <span id="telescopeId"></span></div>
+                <div><strong>IP:</strong> <span id="telescopeIp"></span></div>
+                <div><strong>Version:</strong> <span id="telescopeVersion"></span></div>
+                <div><strong>Status:</strong> <span id="telescopeStatus"></span></div>
+            </div>
+        </div>
+        <div class="control-row my-2">
+            <button class="btn btn-info btn-sm w-100" onclick="refreshTelescopes()">🔄 Refresh</button>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -137,6 +159,8 @@
     // Call on page load
     document.addEventListener("DOMContentLoaded", function() {
         populateCameraChoices();
+        loadTelescopes();
+        loadSelectedTelescope();
     });
 
     // Update settings to backend
@@ -279,6 +303,100 @@ function searchObject() {
     } else {
         alert("Please enter a valid HD, NGC, or IC number.");
     }
+}
+
+// Telescope selection functions
+function loadTelescopes() {
+    fetch("{{ url_for('interface.get_telescopes') }}")
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === "success") {
+                populateTelescopeDropdown(data.telescopes);
+            } else {
+                console.error("Failed to load telescopes:", data.message);
+            }
+        })
+        .catch(error => {
+            console.error("Error loading telescopes:", error);
+        });
+}
+
+function populateTelescopeDropdown(telescopes) {
+    const select = document.getElementById("telescopeSelect");
+    select.innerHTML = '<option value="">Select a telescope...</option>';
+    
+    telescopes.forEach(telescope => {
+        const option = document.createElement("option");
+        option.value = telescope.telescopeId;
+        option.text = `${telescope.telescopeId} (${telescope.online ? 'Online' : 'Offline'})`;
+        option.dataset.telescope = JSON.stringify(telescope);
+        select.appendChild(option);
+    });
+}
+
+function selectTelescope() {
+    const select = document.getElementById("telescopeSelect");
+    const selectedValue = select.value;
+    
+    if (!selectedValue) {
+        document.getElementById("telescopeInfo").style.display = "none";
+        return;
+    }
+    
+    const selectedOption = select.options[select.selectedIndex];
+    const telescope = JSON.parse(selectedOption.dataset.telescope);
+    
+    // Update UI with telescope info
+    document.getElementById("telescopeId").textContent = telescope.telescopeId;
+    document.getElementById("telescopeIp").textContent = telescope.ipAddress;
+    document.getElementById("telescopeVersion").textContent = telescope.firmwareVersion;
+    document.getElementById("telescopeStatus").textContent = telescope.online ? 'Online' : 'Offline';
+    document.getElementById("telescopeStatus").className = telescope.online ? 'text-success' : 'text-danger';
+    document.getElementById("telescopeInfo").style.display = "block";
+    
+    // Send selection to backend
+    fetch("{{ url_for('interface.select_telescope') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telescopeId: selectedValue })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === "success") {
+            console.log("Telescope selected:", data.message);
+        } else {
+            alert("Failed to select telescope: " + data.message);
+        }
+    })
+    .catch(error => {
+        console.error("Error selecting telescope:", error);
+        alert("Error selecting telescope");
+    });
+}
+
+function refreshTelescopes() {
+    loadTelescopes();
+}
+
+function loadSelectedTelescope() {
+    fetch("{{ url_for('interface.get_selected_telescope') }}")
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === "success" && data.telescope) {
+                // Set the dropdown to show the selected telescope
+                const select = document.getElementById("telescopeSelect");
+                for (let i = 0; i < select.options.length; i++) {
+                    if (select.options[i].value === data.telescope.telescopeId) {
+                        select.selectedIndex = i;
+                        selectTelescope(); // Update the info panel
+                        break;
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error("Error loading selected telescope:", error);
+        });
 }
 
 
