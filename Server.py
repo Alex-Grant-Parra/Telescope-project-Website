@@ -68,6 +68,11 @@ def register_blueprints():
 
 register_blueprints()
 
+# Register user blueprint from models
+from models.user import user_bp
+app.register_blueprint(user_bp)
+print(f"Registered Blueprint: {user_bp.name}")
+
 # Debugging - Print all registered routes
 print("\nRegistered Routes:")
 for rule in app.url_map.iter_rules():
@@ -84,6 +89,25 @@ def load_user(user_id):
 # Ensure Tables Exist in the Database
 with app.app_context():
     db.create_all()
+    
+    # Add night_mode column to user table if it doesn't exist
+    from sqlalchemy import text
+    try:
+        # Check if night_mode column exists
+        result = db.session.execute(text("PRAGMA table_info(user)"))
+        columns = [row[1] for row in result.fetchall()]
+        
+        if 'night_mode' not in columns:
+            print("Adding night_mode column to user table...")
+            db.session.execute(text("ALTER TABLE user ADD COLUMN night_mode BOOLEAN DEFAULT 0"))
+            db.session.commit()
+            print("Successfully added night_mode column")
+        else:
+            print("night_mode column already exists")
+            
+    except Exception as e:
+        print(f"Error updating user table: {e}")
+        db.session.rollback()
 
 # Homepage Redirection
 @app.route("/")
