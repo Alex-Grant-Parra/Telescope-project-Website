@@ -134,8 +134,9 @@
     // Project 3D point to 2D canvas (camera at center, looking outward)
     function project([x, y, z]) {
         // Perspective projection for camera inside sphere looking outward
+        // Use full screen dimensions instead of sphere radius
         const fov = 1.2; // field of view
-        const scale = R / (fov + z); // z ranges from -1 to 1, we want positive z in front
+        const scale = Math.max(width, height) * 0.8 / (fov + z); // Scale to fill screen
         return [
             width / 2 + x * scale,
             height / 2 - y * scale
@@ -145,14 +146,7 @@
     // Draw all stars/planets
     function draw() {
         ctx.clearRect(0, 0, width, height);
-        // Draw celestial sphere outline
-        ctx.save();
-        ctx.strokeStyle = "#333";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(width/2, height/2, R, 0, 2*Math.PI);
-        ctx.stroke();
-        ctx.restore();
+        // Remove celestial sphere outline to let stars fill entire screen
 
         // Get filter values
         const magLimit = parseFloat(magFilter.value);
@@ -172,8 +166,7 @@
             if (z <= -0.1) continue; // Show objects in front of camera
             const [cx, cy] = project([x, y, z]);
             
-            // Only draw if within reasonable bounds
-            if (cx < 0 || cx > width || cy < 0 || cy > height) continue;
+            // Allow stars to fill entire screen - remove bounds checking
             
             let size = obj.type === "planet" ? 8 : Math.max(1, 6 - (obj.mag || 6));
             ctx.save();
@@ -231,8 +224,7 @@
             if (z <= -0.1) continue;
             const [cx, cy] = project([x, y, z]);
             
-            // Check if within screen bounds
-            if (cx < 0 || cx > width || cy < 0 || cy > height) continue;
+            // Allow clicking stars anywhere on screen - remove bounds checking
             
             let size = obj.type === "planet" ? 8 : Math.max(1, 6 - (obj.mag || 6));
             if ((mx-cx)**2 + (my-cy)**2 < size*size*2) {
