@@ -3,7 +3,7 @@ import ujson
 import asyncio
 import websockets
 import subprocess
-from Server import clients
+from WebsocketServer import clients
 from time import sleep
 
 flaskLinkIp = "localhost"
