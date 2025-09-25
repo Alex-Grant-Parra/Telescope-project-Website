@@ -133,8 +133,9 @@
 
     // Project 3D point to 2D canvas (camera at center, looking outward)
     function project([x, y, z]) {
-        const fov = 1.5;
-        const scale = R / (fov - z); // z > 0 is in front of the camera
+        // Perspective projection for camera inside sphere looking outward
+        const fov = 1.2; // field of view
+        const scale = R / (fov + z); // z ranges from -1 to 1, we want positive z in front
         return [
             width / 2 + x * scale,
             height / 2 - y * scale
@@ -167,9 +168,13 @@
             if (obj.type === "planet" && !showPlanetsVal) continue;
             let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
             [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
-            // Only render objects in front of the camera (z > 0)
-            if (z <= 0) continue;
+            // Only render objects in the front hemisphere (camera inside sphere looking out)
+            if (z <= -0.1) continue; // Show objects in front of camera
             const [cx, cy] = project([x, y, z]);
+            
+            // Only draw if within reasonable bounds
+            if (cx < 0 || cx > width || cy < 0 || cy > height) continue;
+            
             let size = obj.type === "planet" ? 8 : Math.max(1, 6 - (obj.mag || 6));
             ctx.save();
             if (obj.type === "planet") {
@@ -223,8 +228,12 @@
             if (obj.type === "planet" && !showPlanets.checked) continue;
             let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
             [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
-            if (z <= 0) continue;
+            if (z <= -0.1) continue;
             const [cx, cy] = project([x, y, z]);
+            
+            // Check if within screen bounds
+            if (cx < 0 || cx > width || cy < 0 || cy > height) continue;
+            
             let size = obj.type === "planet" ? 8 : Math.max(1, 6 - (obj.mag || 6));
             if ((mx-cx)**2 + (my-cy)**2 < size*size*2) {
                 document.getElementById('info').innerHTML =
