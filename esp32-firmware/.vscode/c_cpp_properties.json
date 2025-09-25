@@ -10,6 +10,8 @@
             "includePath": [
                 "/home/alex/Rpi5Client/esp32-firmware/include",
                 "/home/alex/Rpi5Client/esp32-firmware/src",
+                "/home/alex/Rpi5Client/esp32-firmware/.pio/libdeps/esp32dev/TMCStepper/src",
+                "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SPI/src",
                 "/home/alex/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                 "/home/alex/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
                 "/home/alex/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/esp_additions/freertos",
@@ -228,7 +230,6 @@
                 "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/RainMaker/src",
                 "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SD/src",
                 "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SD_MMC/src",
-                "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SPI/src",
                 "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SPIFFS/src",
                 "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SimpleBLE/src",
                 "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/Ticker/src",
@@ -246,6 +247,8 @@
                 "path": [
                     "/home/alex/Rpi5Client/esp32-firmware/include",
                     "/home/alex/Rpi5Client/esp32-firmware/src",
+                    "/home/alex/Rpi5Client/esp32-firmware/.pio/libdeps/esp32dev/TMCStepper/src",
+                    "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SPI/src",
                     "/home/alex/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                     "/home/alex/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
                     "/home/alex/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/esp_additions/freertos",
@@ -464,7 +467,6 @@
                     "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/RainMaker/src",
                     "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SD/src",
                     "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SD_MMC/src",
-                    "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SPI/src",
                     "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SPIFFS/src",
                     "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SimpleBLE/src",
                     "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/Ticker/src",
