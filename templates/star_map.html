@@ -39,7 +39,7 @@
 <div id="controls">
     <label>
         Mag ≤ <span id="mag-value">6</span>
-        <input type="range" id="mag-filter" min="-2" max="10" step="0.1" value="6">
+        <input type="range" id="mag-filter">
     </label>
     <label>
         Latitude:
@@ -77,6 +77,19 @@
     // Get star/planet data from Flask
     const stars = JSON.parse(document.getElementById('stars-data').textContent);
 
+    // Find the actual magnitude range in the data
+    let minMag = Infinity, maxMag = -Infinity;
+    for (const obj of stars) {
+        if (obj.mag != null && !isNaN(obj.mag)) {
+            minMag = Math.min(minMag, obj.mag);
+            maxMag = Math.max(maxMag, obj.mag);
+        }
+    }
+    
+    // Set reasonable defaults if no valid magnitudes found
+    if (minMag === Infinity) minMag = -2;
+    if (maxMag === -Infinity) maxMag = 10;
+
     // UI elements
     const magFilter = document.getElementById('mag-filter');
     const magValue = document.getElementById('mag-value');
@@ -96,6 +109,13 @@
     let width = window.innerWidth, height = window.innerHeight;
     canvas.width = width;
     canvas.height = height;
+
+    // Set up the magnitude slider with actual data range
+    magFilter.min = minMag.toFixed(1);
+    magFilter.max = maxMag.toFixed(1);
+    magFilter.step = "0.1";
+    magFilter.value = maxMag.toFixed(1); // Start showing all objects
+    magValue.textContent = maxMag.toFixed(1);
 
     // 3D sphere parameters
     // Increase the sphere radius for a more immersive effect
@@ -201,7 +221,7 @@
     window.addEventListener('mousemove', e => {
         if (!dragging) return;
         rotY += (e.clientX - lastX) * 0.01;
-        rotX += (e.clientY - lastY) * 0.01;
+        rotX -= (e.clientY - lastY) * 0.01;
         rotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotX));
         lastX = e.clientX;
         lastY = e.clientY;
@@ -266,8 +286,8 @@
         rotX = 0; rotY = 0;
         latInput.value = 0;
         lonInput.value = 0;
-        magFilter.value = 6;
-        magValue.textContent = "6";
+        magFilter.value = maxMag.toFixed(1); // Reset to show all objects
+        magValue.textContent = maxMag.toFixed(1);
         showStars.checked = true;
         showPlanets.checked = true;
         draw();
