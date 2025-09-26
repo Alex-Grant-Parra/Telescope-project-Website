@@ -15,7 +15,7 @@ def loadStarsFromTables(tables):
         stars = table.query.all()
         for star in stars:
             try:
-                ra = float(star.RA) * 15 if star.RA is not None else 0
+                ra = float(star.RA) if star.RA is not None else 0
                 dec = float(star.DEC) if star.DEC is not None else 0
                 mag = getattr(star, "V-Mag", 30)
                 all_stars.append({

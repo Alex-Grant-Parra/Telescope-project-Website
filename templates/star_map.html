@@ -500,7 +500,8 @@
             if ((mx-cx)**2 + (my-cy)**2 < hitRadius*hitRadius*1.5) {
                 const displayMag = obj.mag == null ? "null" : obj.mag;
                 document.getElementById('info').innerHTML =
-                    `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}°<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}`;
+                    `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}°<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}<br>
+                     <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
                 return;
             }
         }
@@ -641,6 +642,38 @@
     // Hide loading screen after first draw
     function hideLoading() {
         loading.style.display = "none";
+    }
+
+    // Function to track a celestial object
+    function trackObject(name, ra, dec, mag) {
+        fetch('/track_star', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                name: name,
+                ra: ra,
+                dec: dec,
+                mag: mag
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'tracking') {
+                document.getElementById('info').innerHTML = 
+                    `<b>${name}</b><br>RA: ${ra.toFixed(2)}°<br>DEC: ${dec.toFixed(2)}°<br>Mag: ${mag}<br>
+                     <span style="color: #4CAF50; font-weight: bold;">✓ Tracking ${name}</span>`;
+                console.log(`Successfully started tracking ${name}`);
+            } else {
+                console.error('Tracking failed:', data);
+                alert('Failed to start tracking. Please try again.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to start tracking. Please check your connection.');
+        });
     }
 
     // Initial draw and loading
