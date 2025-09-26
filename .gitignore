@@ -2,3 +2,5 @@
 venv
 camera_photos
 __pycache__
+security/logs/
+security/blacklist.txt
