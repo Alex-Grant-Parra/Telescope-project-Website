@@ -15,6 +15,9 @@ import base64
 import logging
 import subprocess
 
+# Import security components
+from security import SecurityMiddleware, register_security_error_handlers
+
 # Get the base dir
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -52,6 +55,15 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 
 mail = Mail(app)
+
+# Initialize Security Middleware
+security_middleware = SecurityMiddleware()
+security_middleware.init_app(app)
+
+# Register security error handlers
+register_security_error_handlers(app)
+
+print("Security middleware initialized - IP blacklist active")
 
 # Register Blueprints
 controllers_dir = os.path.join(os.path.dirname(__file__), "controllers")
