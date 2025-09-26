@@ -63,7 +63,7 @@ def search_object():
 
     searchableCelestials = ["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"]
     try:
-        # Determine the table based on prefix
+        # Determine the table based on prefix or content
         if search_value.startswith("HD"):
             # search_value = "HD" + search_value[2:]  # Ensure full name format
             print(f"Querying HDSTARtable for {search_value}")
@@ -78,6 +78,11 @@ def search_object():
             print(f"Querying IndexTable for {search_value}")
             result = IndexTable.query_by_name(search_value)
 
+        elif search_value.upper().startswith("M") and len(search_value) > 1 and search_value[1:].isdigit():
+            # Handle Messier objects (e.g., "M1", "m42", "M104")
+            messier_designation = search_value.upper()
+            print(f"Querying NGCtable for Messier object {messier_designation}")
+            result = NGCtable.query_by_messier(messier_designation)
 
         elif search_value.lower() in searchableCelestials:
             search_value = search_value.lower()
@@ -91,10 +96,14 @@ def search_object():
             else:
                 print("Celestial object not found.")
 
-
-
         else:
-            return jsonify({"status": "error", "message": "Invalid prefix"})
+            # Try searching by common name in NGCtable
+            print(f"Searching for common name: {search_value}")
+            result = NGCtable.query_by_common_name(search_value)
+            
+            if not result:
+                print("Object not found by common name")
+                return jsonify({"status": "error", "message": "Object not found"})
 
     except ValueError as e:
         print(f"Error during search: {e}")
