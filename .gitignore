@@ -1,3 +1,4 @@
 .env
 venv
 camera_photos
+__pycache__

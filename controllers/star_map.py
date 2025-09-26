@@ -97,7 +97,8 @@ def star_map():
                 "ra": ra_deg,
                 "dec": dec_deg,
                 "mag": mag,
-                "icon": f"/static/icons/planets/{obj_name.lower()}.png"
+                "icon": f"/static/icons/planets/{obj_name.lower()}.png",
+                "type": "planet"
             })
 
     return render_template("star_map.html", stars=all_stars)
