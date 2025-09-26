@@ -30,6 +30,20 @@
             font-family: sans-serif;
         }
         #help-content button { margin-top: 12px; }
+        #mag-context-menu {
+            display: none; position: fixed; background: #333; color: #fff; padding: 12px;
+            border-radius: 6px; box-shadow: 0 4px 8px rgba(0,0,0,0.6); z-index: 1000;
+            min-width: 180px; font-family: sans-serif;
+        }
+        #mag-context-menu input[type="number"] {
+            width: 80px; padding: 4px; margin: 4px 0; border: 1px solid #555;
+            background: #222; color: #fff; border-radius: 3px;
+        }
+        #mag-context-menu button {
+            padding: 4px 8px; margin: 2px; border: 1px solid #555;
+            background: #444; color: #fff; border-radius: 3px; cursor: pointer;
+        }
+        #mag-context-menu button:hover { background: #555; }
     </style>
 </head>
 <body>
@@ -70,6 +84,14 @@
         <button id="close-help">Close</button>
     </div>
 </div>
+<div id="mag-context-menu">
+    <div style="margin-bottom: 8px; font-size: 0.9em;">Set Magnitude Limit:</div>
+    <input type="number" id="mag-custom-input" step="0.1" min="-2" max="15" placeholder="e.g. 6.5">
+    <div style="margin-top: 8px;">
+        <button id="mag-apply">Apply</button>
+        <button id="mag-cancel">Cancel</button>
+    </div>
+</div>
 <script type="application/json" id="stars-data">
     {{ stars|tojson }}
 </script>
@@ -106,6 +128,12 @@
     const helpModal = document.getElementById('help-modal');
     const closeHelp = document.getElementById('close-help');
     const loading = document.getElementById('loading');
+
+    // Context menu elements
+    const magContextMenu = document.getElementById('mag-context-menu');
+    const magCustomInput = document.getElementById('mag-custom-input');
+    const magApplyBtn = document.getElementById('mag-apply');
+    const magCancelBtn = document.getElementById('mag-cancel');
 
     // Canvas setup
     const canvas = document.getElementById('planetarium');
@@ -336,6 +364,53 @@
     });
     helpModal.addEventListener('click', (e) => {
         if (e.target === helpModal) helpModal.style.display = "none";
+    });
+
+    // Magnitude slider context menu
+    magFilter.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        magContextMenu.style.display = 'block';
+        magContextMenu.style.left = e.pageX + 'px';
+        magContextMenu.style.top = e.pageY + 'px';
+        magCustomInput.value = magFilter.value;
+        magCustomInput.focus();
+        magCustomInput.select();
+    });
+
+    // Context menu functionality
+    function hideContextMenu() {
+        magContextMenu.style.display = 'none';
+    }
+
+    magApplyBtn.addEventListener('click', () => {
+        const customValue = parseFloat(magCustomInput.value);
+        if (!isNaN(customValue) && customValue >= minMag && customValue <= maxMag) {
+            magFilter.value = customValue.toFixed(1);
+            magValue.textContent = customValue.toFixed(1);
+            draw();
+        } else {
+            alert(`Please enter a magnitude value between ${minMag.toFixed(1)} and ${maxMag.toFixed(1)}`);
+            return;
+        }
+        hideContextMenu();
+    });
+
+    magCancelBtn.addEventListener('click', hideContextMenu);
+
+    // Handle Enter key in the input field
+    magCustomInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            magApplyBtn.click();
+        } else if (e.key === 'Escape') {
+            hideContextMenu();
+        }
+    });
+
+    // Hide context menu when clicking elsewhere
+    document.addEventListener('click', (e) => {
+        if (!magContextMenu.contains(e.target) && e.target !== magFilter) {
+            hideContextMenu();
+        }
     });
 
     // Hide loading screen after first draw
