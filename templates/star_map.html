@@ -77,6 +77,10 @@
     // Get star/planet data from Flask
     const stars = JSON.parse(document.getElementById('stars-data').textContent);
 
+    // Image cache for planet sprites
+    const planetImages = {};
+    const fixedPlanetSize = 24; // Fixed size for all planets (increased for better visibility)
+
     // Find the actual magnitude range in the data
     let minMag = Infinity, maxMag = -Infinity;
     for (const obj of stars) {
@@ -188,20 +192,28 @@
             
             // Allow stars to fill entire screen - remove bounds checking
             
-            let size = obj.type === "planet" ? 8 : Math.max(1, 6 - (obj.mag || 6));
+            let size;
             ctx.save();
             if (obj.type === "planet") {
-                if (obj.icon) {
-                    let img = new window.Image();
-                    img.src = obj.icon;
-                    ctx.drawImage(img, cx-size, cy-size, size*2, size*2);
+                size = fixedPlanetSize; // Use fixed size for all planets
+                if (obj.icon && planetImages[obj.icon]) {
+                    // Draw the preloaded sprite image
+                    const img = planetImages[obj.icon];
+                    ctx.drawImage(img, cx - size/2, cy - size/2, size, size);
+                    // Debug log for first few renders
+                    if (Math.random() < 0.01) console.log(`Rendered ${obj.name} sprite at (${cx}, ${cy})`);
                 } else {
-                    ctx.fillStyle = "#ff0";
+                    // Fallback to colored circle if image isn't loaded
+                    ctx.fillStyle = "#ffa500"; // Orange color for better visibility
                     ctx.beginPath();
-                    ctx.arc(cx, cy, size, 0, 2*Math.PI);
+                    ctx.arc(cx, cy, size/2, 0, 2*Math.PI);
                     ctx.fill();
+                    // Debug log for fallback renders
+                    if (Math.random() < 0.01) console.log(`Rendered ${obj.name} fallback circle - icon: ${obj.icon}, in cache: ${!!planetImages[obj.icon]}`);
                 }
             } else {
+                // Star rendering remains the same
+                size = Math.max(1, 6 - (obj.mag || 6));
                 ctx.fillStyle = "#fff";
                 ctx.globalAlpha = Math.max(0.5, 1 - (obj.mag || 6)/8);
                 ctx.beginPath();
@@ -246,8 +258,9 @@
             
             // Allow clicking stars anywhere on screen - remove bounds checking
             
-            let size = obj.type === "planet" ? 8 : Math.max(1, 6 - (obj.mag || 6));
-            if ((mx-cx)**2 + (my-cy)**2 < size*size*2) {
+            let size = obj.type === "planet" ? fixedPlanetSize : Math.max(1, 6 - (obj.mag || 6));
+            let hitRadius = obj.type === "planet" ? fixedPlanetSize/2 : size;
+            if ((mx-cx)**2 + (my-cy)**2 < hitRadius*hitRadius*1.5) {
                 document.getElementById('info').innerHTML =
                     `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}°<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${obj.mag}`;
                 return;
@@ -265,12 +278,35 @@
         draw();
     });
 
-    // Preload planet icons
-    for (const obj of stars) {
-        if (obj.icon) {
-            let img = new window.Image();
-            img.src = obj.icon;
+    // Preload planet icons with proper error handling
+    function preloadPlanetImages() {
+        const loadPromises = [];
+        console.log('Starting to preload planet images...');
+        
+        for (const obj of stars) {
+            if (obj.type === "planet" && obj.icon && !planetImages[obj.icon]) {
+                console.log(`Loading planet icon for ${obj.name}: ${obj.icon}`);
+                const loadPromise = new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        planetImages[obj.icon] = img;
+                        console.log(`Successfully loaded icon for ${obj.name}`);
+                        resolve();
+                    };
+                    img.onerror = () => {
+                        console.warn(`Failed to load planet icon: ${obj.icon} for ${obj.name}`);
+                        resolve(); // Continue even if image fails to load
+                    };
+                    img.src = obj.icon;
+                });
+                loadPromises.push(loadPromise);
+            }
         }
+        
+        console.log(`Loading ${loadPromises.length} planet images...`);
+        return Promise.all(loadPromises).then(() => {
+            console.log('All planet images loaded. Cache contains:', Object.keys(planetImages));
+        });
     }
 
     // UI event listeners
@@ -309,8 +345,13 @@
 
     // Initial draw and loading
     window.addEventListener('DOMContentLoaded', () => {
-        draw();
-        setTimeout(hideLoading, 400); // allow a short delay for effect
+        console.log('DOM loaded. Star data:', stars.filter(s => s.type === 'planet'));
+        // Preload planet images first, then draw
+        preloadPlanetImages().then(() => {
+            console.log('Images preloaded, starting first draw...');
+            draw();
+            setTimeout(hideLoading, 400); // allow a short delay for effect
+        });
     });
 </script>
 </body>
