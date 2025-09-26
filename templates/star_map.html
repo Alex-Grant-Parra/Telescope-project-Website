@@ -218,7 +218,8 @@
 
         // Draw stars/planets
         for (const obj of stars) {
-            if (obj.mag > magLimit) continue;
+            const effectiveMag = obj.mag == null ? 50 : obj.mag; // Treat null magnitudes as 50
+            if (effectiveMag > magLimit) continue;
             if (obj.type === "star" && !showStarsVal) continue;
             if (obj.type === "planet" && !showPlanetsVal) continue;
             let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
@@ -250,9 +251,9 @@
                 }
             } else {
                 // Star rendering remains the same
-                size = Math.max(1, 6 - (obj.mag || 6));
+                size = Math.max(1, 6 - effectiveMag);
                 ctx.fillStyle = "#fff";
-                ctx.globalAlpha = Math.max(0.5, 1 - (obj.mag || 6)/8);
+                ctx.globalAlpha = Math.max(0.5, 1 - effectiveMag/8);
                 ctx.beginPath();
                 ctx.arc(cx, cy, size, 0, 2*Math.PI);
                 ctx.fill();
@@ -285,7 +286,8 @@
         const lat = parseFloat(latInput.value) * Math.PI / 180;
         const lon = parseFloat(lonInput.value) * Math.PI / 180;
         for (const obj of stars) {
-            if (obj.mag > magLimit) continue;
+            const effectiveMag = obj.mag == null ? 50 : obj.mag; // Treat null magnitudes as 50
+            if (effectiveMag > magLimit) continue;
             if (obj.type === "star" && !showStars.checked) continue;
             if (obj.type === "planet" && !showPlanets.checked) continue;
             let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
@@ -295,11 +297,12 @@
             
             // Allow clicking stars anywhere on screen - remove bounds checking
             
-            let size = obj.type === "planet" ? fixedPlanetSize : Math.max(1, 6 - (obj.mag || 6));
+            let size = obj.type === "planet" ? fixedPlanetSize : Math.max(1, 6 - effectiveMag);
             let hitRadius = obj.type === "planet" ? fixedPlanetSize/2 : size;
             if ((mx-cx)**2 + (my-cy)**2 < hitRadius*hitRadius*1.5) {
+                const displayMag = obj.mag == null ? "null" : obj.mag;
                 document.getElementById('info').innerHTML =
-                    `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}°<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${obj.mag}`;
+                    `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}°<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}`;
                 return;
             }
         }
