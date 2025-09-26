@@ -30,6 +30,20 @@
             font-family: sans-serif;
         }
         #help-content button { margin-top: 12px; }
+        #mag-context-menu {
+            display: none; position: fixed; background: #333; color: #fff; padding: 12px;
+            border-radius: 6px; box-shadow: 0 4px 8px rgba(0,0,0,0.6); z-index: 1000;
+            min-width: 180px; font-family: sans-serif;
+        }
+        #mag-context-menu input[type="number"] {
+            width: 80px; padding: 4px; margin: 4px 0; border: 1px solid #555;
+            background: #222; color: #fff; border-radius: 3px;
+        }
+        #mag-context-menu button {
+            padding: 4px 8px; margin: 2px; border: 1px solid #555;
+            background: #444; color: #fff; border-radius: 3px; cursor: pointer;
+        }
+        #mag-context-menu button:hover { background: #555; }
     </style>
 </head>
 <body>
@@ -53,6 +67,18 @@
         <input type="checkbox" id="show-stars" checked> Stars
         <input type="checkbox" id="show-planets" checked> Planets
     </label>
+    <label>
+        <input type="checkbox" id="show-horizon-grid"> Horizon Grid
+        <input type="checkbox" id="show-equatorial-grid"> Equatorial Grid
+    </label>
+    <div style="margin-top: 8px;">
+        <label>Search Object:</label>
+        <input type="text" id="search-object" placeholder="HD, NGC, IC, M, or planet name" style="width: 100%; padding: 4px; margin: 4px 0; border: 1px solid #555; background: #222; color: #fff; border-radius: 3px;">
+        <div style="display: flex; gap: 4px;">
+            <button id="search-btn" style="flex: 1; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Search</button>
+            <button id="clear-search-btn" style="flex: 1; padding: 4px 8px; background: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer;">Clear</button>
+        </div>
+    </div>
     <button id="reset-view">Reset View</button>
     <button id="help-btn">Help</button>
 </div>
@@ -61,13 +87,25 @@
         <b>3D Planetarium Controls</b><br><br>
         <ul>
             <li>Drag mouse to rotate the sky</li>
+            <li>Scroll wheel to zoom in/out</li>
             <li>Click a star/planet for info</li>
+            <li>Right-click magnitude slider for custom values</li>
             <li>Adjust magnitude filter to show/hide faint stars</li>
             <li>Set your latitude/longitude for local sky orientation</li>
             <li>Toggle stars/planets visibility</li>
-            <li>Reset view to default orientation</li>
+            <li>Toggle horizon grid (altitude/azimuth with N/E/S/W)</li>
+            <li>Toggle equatorial grid (RA/DEC coordinates)</li>
+            <li>Reset view to default orientation and zoom</li>
         </ul>
         <button id="close-help">Close</button>
+    </div>
+</div>
+<div id="mag-context-menu">
+    <div style="margin-bottom: 8px; font-size: 0.9em;">Set Magnitude Limit:</div>
+    <input type="number" id="mag-custom-input" step="0.1" min="-2" max="15" placeholder="e.g. 6.5">
+    <div style="margin-top: 8px;">
+        <button id="mag-apply">Apply</button>
+        <button id="mag-cancel">Cancel</button>
     </div>
 </div>
 <script type="application/json" id="stars-data">
@@ -76,6 +114,10 @@
 <script>
     // Get star/planet data from Flask
     const stars = JSON.parse(document.getElementById('stars-data').textContent);
+
+    // Image cache for planet sprites
+    const planetImages = {};
+    const fixedPlanetSize = 24; // Fixed size for all planets (increased for better visibility)
 
     // Find the actual magnitude range in the data
     let minMag = Infinity, maxMag = -Infinity;
@@ -97,11 +139,28 @@
     const lonInput = document.getElementById('longitude');
     const showStars = document.getElementById('show-stars');
     const showPlanets = document.getElementById('show-planets');
+    const showHorizonGrid = document.getElementById('show-horizon-grid');
+    const showEquatorialGrid = document.getElementById('show-equatorial-grid');
     const resetBtn = document.getElementById('reset-view');
     const helpBtn = document.getElementById('help-btn');
     const helpModal = document.getElementById('help-modal');
     const closeHelp = document.getElementById('close-help');
     const loading = document.getElementById('loading');
+
+    // Context menu elements
+    const magContextMenu = document.getElementById('mag-context-menu');
+    const magCustomInput = document.getElementById('mag-custom-input');
+    const magApplyBtn = document.getElementById('mag-apply');
+    const magCancelBtn = document.getElementById('mag-cancel');
+
+    // Search elements
+    const searchInput = document.getElementById('search-object');
+    const searchBtn = document.getElementById('search-btn');
+    const clearSearchBtn = document.getElementById('clear-search-btn');
+
+    // Search state
+    let searchedObject = null;
+    let highlightAnimation = 0;
 
     // Canvas setup
     const canvas = document.getElementById('planetarium');
@@ -114,14 +173,20 @@
     magFilter.min = minMag.toFixed(1);
     magFilter.max = maxMag.toFixed(1);
     magFilter.step = "0.1";
-    magFilter.value = maxMag.toFixed(1); // Start showing all objects
-    magValue.textContent = maxMag.toFixed(1);
+    magFilter.value = "4.0"; // Start at magnitude 4
+    magValue.textContent = "4.0";
 
     // 3D sphere parameters
     // Increase the sphere radius for a more immersive effect
     const R = Math.min(width, height) * 0.9 / 2;
     let rotX = 0, rotY = 0; // rotation angles
     let dragging = false, lastX = 0, lastY = 0;
+
+    // Zoom parameters
+    let zoom = 1.0; // Default zoom level
+    const minZoom = 0.8; // 80% - only slightly zoomed out
+    const maxZoom = 5.0; // 500% - zoomed way in
+    const zoomStep = 0.1; // Zoom increment per scroll
 
     // Camera is inside the sphere: invert z-culling (draw z < 0)
     // Convert RA/DEC to 3D Cartesian coordinates
@@ -156,11 +221,194 @@
         // Perspective projection for camera inside sphere looking outward
         // Use full screen dimensions instead of sphere radius
         const fov = 1.2; // field of view
-        const scale = Math.max(width, height) * 0.8 / (fov + z); // Scale to fill screen
+        const scale = Math.max(width, height) * 0.8 * zoom / (fov + z); // Apply zoom factor
         return [
             width / 2 + x * scale,
             height / 2 - y * scale
         ];
+    }
+
+    // Convert altitude/azimuth to Cartesian coordinates
+    function altazToXYZ(alt, az) {
+        const altRad = alt * Math.PI / 180;
+        const azRad = az * Math.PI / 180;
+        const x = Math.cos(altRad) * Math.sin(azRad);
+        const y = Math.sin(altRad);
+        const z = Math.cos(altRad) * Math.cos(azRad);
+        return [x, y, z];
+    }
+
+    // Draw horizon coordinate grid
+    function drawHorizonGrid(lat, lon) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(100, 150, 255, 0.3)"; // Light blue
+        ctx.lineWidth = 1;
+        ctx.font = "12px sans-serif";
+        ctx.fillStyle = "rgba(100, 150, 255, 0.6)";
+
+        // Simple back-face culling - only draw lines facing the viewer
+        const cullThreshold = 0;
+
+        // Draw altitude circles (elevation lines) - include negative altitudes
+        for (let alt = -90; alt <= 90; alt += 10) {
+            ctx.beginPath();
+            let firstPoint = true;
+            for (let az = 0; az <= 360; az += 3) {
+                let [x, y, z] = altazToXYZ(alt, az);
+                // Only apply user rotation, not lat/lon (horizon stays fixed)
+                [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+                if (z <= cullThreshold) continue; // Adaptive culling based on zoom
+                const [cx, cy] = project([x, y, z]);
+                
+                if (firstPoint) {
+                    ctx.moveTo(cx, cy);
+                    firstPoint = false;
+                } else {
+                    ctx.lineTo(cx, cy);
+                }
+            }
+            ctx.stroke();
+            
+            // Label altitude lines more frequently
+            if (alt % 20 === 0 && alt !== 0) {
+                let [x, y, z] = altazToXYZ(alt, 0); // North point
+                [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+                if (z > cullThreshold) {
+                    const [cx, cy] = project([x, y, z]);
+                    ctx.fillText(`${alt}°`, cx + 5, cy - 5);
+                }
+            }
+        }
+
+        // Draw azimuth lines (compass directions)
+        for (let az = 0; az < 360; az += 10) {
+            ctx.beginPath();
+            let firstPoint = true;
+            for (let alt = -90; alt <= 90; alt += 2) {
+                let [x, y, z] = altazToXYZ(alt, az);
+                [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+                if (z <= cullThreshold) continue; // Adaptive culling
+                const [cx, cy] = project([x, y, z]);
+                
+                if (firstPoint) {
+                    ctx.moveTo(cx, cy);
+                    firstPoint = false;
+                } else {
+                    ctx.lineTo(cx, cy);
+                }
+            }
+            ctx.stroke();
+            
+            // Label azimuth lines more frequently
+            if (az % 30 === 0) {
+                let [x, y, z] = altazToXYZ(5, az); // 5° above horizon
+                [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+                if (z > cullThreshold) {
+                    const [cx, cy] = project([x, y, z]);
+                    ctx.fillText(`${az}°`, cx - 8, cy + 15);
+                }
+            }
+        }
+
+        // Draw and label cardinal directions
+        const cardinals = [
+            { az: 0, label: "N" },
+            { az: 90, label: "E" },
+            { az: 180, label: "S" },
+            { az: 270, label: "W" }
+        ];
+        
+        ctx.font = "16px sans-serif";
+        ctx.fillStyle = "rgba(100, 150, 255, 0.8)";
+        for (const cardinal of cardinals) {
+            let [x, y, z] = altazToXYZ(5, cardinal.az); // 5° above horizon
+            [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+            if (z > cullThreshold) {
+                const [cx, cy] = project([x, y, z]);
+                ctx.fillText(cardinal.label, cx - 8, cy + 5);
+            }
+        }
+        
+        ctx.restore();
+    }
+
+    // Draw equatorial coordinate grid
+    function drawEquatorialGrid(lat, lon) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 150, 100, 0.3)"; // Light orange
+        ctx.lineWidth = 1;
+        ctx.font = "12px sans-serif";
+        ctx.fillStyle = "rgba(255, 150, 100, 0.6)";
+
+        // Simple back-face culling - only draw lines facing the viewer
+        const cullThreshold = 0;
+
+        // Draw declination circles
+        for (let dec = -90; dec <= 90; dec += 10) {
+            if (dec === 0) ctx.strokeStyle = "rgba(255, 150, 100, 0.5)"; // Celestial equator more visible
+            else ctx.strokeStyle = "rgba(255, 150, 100, 0.3)";
+            
+            ctx.beginPath();
+            let firstPoint = true;
+            for (let ra = 0; ra <= 360; ra += 3) {
+                let [x, y, z] = radecToXYZ(ra, dec);
+                [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+                if (z <= cullThreshold) continue; // Adaptive culling based on zoom
+                const [cx, cy] = project([x, y, z]);
+                
+                if (firstPoint) {
+                    ctx.moveTo(cx, cy);
+                    firstPoint = false;
+                } else {
+                    ctx.lineTo(cx, cy);
+                }
+            }
+            ctx.stroke();
+            
+            // Label declination lines more frequently
+            if (dec % 30 === 0) {
+                let [x, y, z] = radecToXYZ(0, dec); // 0h RA
+                [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+                if (z > cullThreshold) {
+                    const [cx, cy] = project([x, y, z]);
+                    ctx.fillText(`${dec}°`, cx + 5, cy - 5);
+                }
+            }
+        }
+
+        // Draw right ascension lines
+        ctx.strokeStyle = "rgba(255, 150, 100, 0.3)";
+        for (let ra = 0; ra < 360; ra += 10) {
+            ctx.beginPath();
+            let firstPoint = true;
+            for (let dec = -90; dec <= 90; dec += 2) {
+                let [x, y, z] = radecToXYZ(ra, dec);
+                [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+                if (z <= cullThreshold) continue; // Adaptive culling
+                const [cx, cy] = project([x, y, z]);
+                
+                if (firstPoint) {
+                    ctx.moveTo(cx, cy);
+                    firstPoint = false;
+                } else {
+                    ctx.lineTo(cx, cy);
+                }
+            }
+            ctx.stroke();
+            
+            // Label RA lines at celestial equator more frequently
+            if (ra % 30 === 0) {
+                let [x, y, z] = radecToXYZ(ra, 0);
+                [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+                if (z > cullThreshold) {
+                    const [cx, cy] = project([x, y, z]);
+                    const hours = Math.round(ra / 15);
+                    ctx.fillText(`${hours}h`, cx - 8, cy + 15);
+                }
+            }
+        }
+        
+        ctx.restore();
     }
 
     // Draw all stars/planets
@@ -175,9 +423,18 @@
         const showStarsVal = showStars.checked;
         const showPlanetsVal = showPlanets.checked;
 
+        // Draw coordinate grids (before stars so they appear behind)
+        if (showHorizonGrid.checked) {
+            drawHorizonGrid(lat, lon);
+        }
+        if (showEquatorialGrid.checked) {
+            drawEquatorialGrid(lat, lon);
+        }
+
         // Draw stars/planets
         for (const obj of stars) {
-            if (obj.mag > magLimit) continue;
+            const effectiveMag = obj.mag == null ? 50 : obj.mag; // Treat null magnitudes as 50
+            if (effectiveMag > magLimit) continue;
             if (obj.type === "star" && !showStarsVal) continue;
             if (obj.type === "planet" && !showPlanetsVal) continue;
             let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
@@ -188,27 +445,61 @@
             
             // Allow stars to fill entire screen - remove bounds checking
             
-            let size = obj.type === "planet" ? 8 : Math.max(1, 6 - (obj.mag || 6));
+            let size;
             ctx.save();
             if (obj.type === "planet") {
-                if (obj.icon) {
-                    let img = new window.Image();
-                    img.src = obj.icon;
-                    ctx.drawImage(img, cx-size, cy-size, size*2, size*2);
+                size = fixedPlanetSize; // Use fixed size for all planets
+                if (obj.icon && planetImages[obj.icon]) {
+                    // Draw the preloaded sprite image
+                    const img = planetImages[obj.icon];
+                    ctx.drawImage(img, cx - size/2, cy - size/2, size, size);
+                    // Debug log for first few renders
+                    if (Math.random() < 0.01) console.log(`Rendered ${obj.name} sprite at (${cx}, ${cy})`);
                 } else {
-                    ctx.fillStyle = "#ff0";
+                    // Fallback to colored circle if image isn't loaded
+                    ctx.fillStyle = "#ffa500"; // Orange color for better visibility
                     ctx.beginPath();
-                    ctx.arc(cx, cy, size, 0, 2*Math.PI);
+                    ctx.arc(cx, cy, size/2, 0, 2*Math.PI);
                     ctx.fill();
+                    // Debug log for fallback renders
+                    if (Math.random() < 0.01) console.log(`Rendered ${obj.name} fallback circle - icon: ${obj.icon}, in cache: ${!!planetImages[obj.icon]}`);
                 }
             } else {
+                // Star rendering remains the same
+                size = Math.max(1, 6 - effectiveMag);
                 ctx.fillStyle = "#fff";
-                ctx.globalAlpha = Math.max(0.5, 1 - (obj.mag || 6)/8);
+                ctx.globalAlpha = Math.max(0.5, 1 - effectiveMag/8);
                 ctx.beginPath();
                 ctx.arc(cx, cy, size, 0, 2*Math.PI);
                 ctx.fill();
             }
             ctx.restore();
+        }
+
+        // Draw orange highlight ring for searched object
+        if (searchedObject) {
+            const magLimit = parseFloat(magFilter.value);
+            const effectiveMag = searchedObject.mag == null ? 50 : searchedObject.mag;
+            if (effectiveMag <= magLimit) {
+                let [x, y, z] = radecToXYZ(searchedObject.ra, searchedObject.dec);
+                [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+                if (z > -0.1) { // Object is visible
+                    const [cx, cy] = project([x, y, z]);
+                    
+                    // Animate the ring
+                    highlightAnimation += 0.1;
+                    const ringSize = 20 + Math.sin(highlightAnimation) * 5;
+                    const opacity = 0.7 + Math.sin(highlightAnimation * 2) * 0.3;
+                    
+                    ctx.save();
+                    ctx.strokeStyle = `rgba(255, 165, 0, ${opacity})`;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, ringSize, 0, 2*Math.PI);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
         }
     }
 
@@ -236,7 +527,8 @@
         const lat = parseFloat(latInput.value) * Math.PI / 180;
         const lon = parseFloat(lonInput.value) * Math.PI / 180;
         for (const obj of stars) {
-            if (obj.mag > magLimit) continue;
+            const effectiveMag = obj.mag == null ? 50 : obj.mag; // Treat null magnitudes as 50
+            if (effectiveMag > magLimit) continue;
             if (obj.type === "star" && !showStars.checked) continue;
             if (obj.type === "planet" && !showPlanets.checked) continue;
             let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
@@ -246,10 +538,13 @@
             
             // Allow clicking stars anywhere on screen - remove bounds checking
             
-            let size = obj.type === "planet" ? 8 : Math.max(1, 6 - (obj.mag || 6));
-            if ((mx-cx)**2 + (my-cy)**2 < size*size*2) {
+            let size = obj.type === "planet" ? fixedPlanetSize : Math.max(1, 6 - effectiveMag);
+            let hitRadius = obj.type === "planet" ? fixedPlanetSize/2 : size;
+            if ((mx-cx)**2 + (my-cy)**2 < hitRadius*hitRadius*1.5) {
+                const displayMag = obj.mag == null ? "null" : obj.mag;
                 document.getElementById('info').innerHTML =
-                    `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}°<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${obj.mag}`;
+                    `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}°<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}<br>
+                     <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
                 return;
             }
         }
@@ -265,12 +560,47 @@
         draw();
     });
 
-    // Preload planet icons
-    for (const obj of stars) {
-        if (obj.icon) {
-            let img = new window.Image();
-            img.src = obj.icon;
+    // Scroll wheel zoom
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault(); // Prevent page scroll
+        
+        const scrollDirection = e.deltaY > 0 ? -1 : 1; // Inverted for natural zoom feel
+        const zoomChange = scrollDirection * zoomStep;
+        
+        zoom = Math.max(minZoom, Math.min(maxZoom, zoom + zoomChange));
+        
+        draw();
+    }, { passive: false });
+
+    // Preload planet icons with proper error handling
+    function preloadPlanetImages() {
+        const loadPromises = [];
+        console.log('Starting to preload planet images...');
+        
+        for (const obj of stars) {
+            if (obj.type === "planet" && obj.icon && !planetImages[obj.icon]) {
+                console.log(`Loading planet icon for ${obj.name}: ${obj.icon}`);
+                const loadPromise = new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        planetImages[obj.icon] = img;
+                        console.log(`Successfully loaded icon for ${obj.name}`);
+                        resolve();
+                    };
+                    img.onerror = () => {
+                        console.warn(`Failed to load planet icon: ${obj.icon} for ${obj.name}`);
+                        resolve(); // Continue even if image fails to load
+                    };
+                    img.src = obj.icon;
+                });
+                loadPromises.push(loadPromise);
+            }
         }
+        
+        console.log(`Loading ${loadPromises.length} planet images...`);
+        return Promise.all(loadPromises).then(() => {
+            console.log('All planet images loaded. Cache contains:', Object.keys(planetImages));
+        });
     }
 
     // UI event listeners
@@ -282,15 +612,30 @@
     lonInput.addEventListener('change', draw);
     showStars.addEventListener('change', draw);
     showPlanets.addEventListener('change', draw);
+    showHorizonGrid.addEventListener('change', draw);
+    showEquatorialGrid.addEventListener('change', draw);
     resetBtn.addEventListener('click', () => {
         rotX = 0; rotY = 0;
+        zoom = 1.0; // Reset zoom level
         latInput.value = 0;
         lonInput.value = 0;
         magFilter.value = maxMag.toFixed(1); // Reset to show all objects
         magValue.textContent = maxMag.toFixed(1);
         showStars.checked = true;
         showPlanets.checked = true;
+        clearSearch(); // Clear search when resetting view
         draw();
+    });
+
+    // Search event listeners
+    searchBtn.addEventListener('click', searchObject);
+    clearSearchBtn.addEventListener('click', clearSearch);
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            searchObject();
+        } else if (e.key === 'Escape') {
+            clearSearch();
+        }
     });
     helpBtn.addEventListener('click', () => {
         helpModal.style.display = "flex";
@@ -302,15 +647,290 @@
         if (e.target === helpModal) helpModal.style.display = "none";
     });
 
+    // Magnitude slider context menu
+    magFilter.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        magContextMenu.style.display = 'block';
+        magContextMenu.style.left = e.pageX + 'px';
+        magContextMenu.style.top = e.pageY + 'px';
+        magCustomInput.value = magFilter.value;
+        magCustomInput.focus();
+        magCustomInput.select();
+    });
+
+    // Context menu functionality
+    function hideContextMenu() {
+        magContextMenu.style.display = 'none';
+    }
+
+    magApplyBtn.addEventListener('click', () => {
+        const customValue = parseFloat(magCustomInput.value);
+        if (!isNaN(customValue) && customValue >= minMag && customValue <= maxMag) {
+            magFilter.value = customValue.toFixed(1);
+            magValue.textContent = customValue.toFixed(1);
+            draw();
+        } else {
+            alert(`Please enter a magnitude value between ${minMag.toFixed(1)} and ${maxMag.toFixed(1)}`);
+            return;
+        }
+        hideContextMenu();
+    });
+
+    magCancelBtn.addEventListener('click', hideContextMenu);
+
+    // Handle Enter key in the input field
+    magCustomInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            magApplyBtn.click();
+        } else if (e.key === 'Escape') {
+            hideContextMenu();
+        }
+    });
+
+    // Hide context menu when clicking elsewhere
+    document.addEventListener('click', (e) => {
+        if (!magContextMenu.contains(e.target) && e.target !== magFilter) {
+            hideContextMenu();
+        }
+    });
+
     // Hide loading screen after first draw
     function hideLoading() {
         loading.style.display = "none";
     }
 
+    // Function to track a celestial object
+    function trackObject(name, ra, dec, mag) {
+        fetch('/track_star', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                name: name,
+                ra: ra,
+                dec: dec,
+                mag: mag
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'tracking') {
+                document.getElementById('info').innerHTML = 
+                    `<b>${name}</b><br>RA: ${ra.toFixed(2)}°<br>DEC: ${dec.toFixed(2)}°<br>Mag: ${mag}<br>
+                     <span style="color: #4CAF50; font-weight: bold;">✓ Tracking ${name}</span>`;
+                console.log(`Successfully started tracking ${name}`);
+            } else {
+                console.error('Tracking failed:', data);
+                alert('Failed to start tracking. Please try again.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to start tracking. Please check your connection.');
+        });
+    }
+
+    // Function to search for objects
+    function searchObject() {
+        const searchValue = searchInput.value.trim();
+        if (!searchValue) {
+            alert('Please enter a search term.');
+            return;
+        }
+
+        fetch('/interface/search_object', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ searchValue: searchValue })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && data.data) {
+                const objData = data.data;
+                // Find the object in our stars array or use the search result
+                let foundObject = null;
+                
+                // First try to find it in the existing stars array
+                for (const obj of stars) {
+                    if (obj.name && objData.Name && 
+                        obj.name.toLowerCase() === objData.Name.toLowerCase()) {
+                        foundObject = obj;
+                        break;
+                    }
+                }
+                
+                // If not found in stars array, create from search result
+                if (!foundObject) {
+                    foundObject = {
+                        name: objData.Name,
+                        ra: parseFloat(objData.RA) || 0,
+                        dec: parseFloat(objData.DEC) || 0,
+                        mag: objData['V-Mag'] || 30,
+                        type: objData.type || 'star'
+                    };
+                }
+                
+                // Set as searched object and move camera to it
+                searchedObject = foundObject;
+                highlightAnimation = 0;
+                moveToObject(foundObject);
+                
+                // Show info
+                document.getElementById('info').innerHTML = 
+                    `<b>🔍 ${foundObject.name}</b><br>RA: ${foundObject.ra.toFixed(2)}°<br>DEC: ${foundObject.dec.toFixed(2)}°<br>Mag: ${foundObject.mag}<br>
+                     <button onclick="trackObject('${foundObject.name}', ${foundObject.ra}, ${foundObject.dec}, ${foundObject.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
+            } else {
+                alert(data.message || 'Object not found.');
+            }
+        })
+        .catch(error => {
+            console.error('Search error:', error);
+            alert('Search failed. Please try again.');
+        });
+    }
+
+    // Function to move camera to look at an object
+    function moveToObject(obj) {
+        // Get observer settings
+        const lat = parseFloat(latInput.value) * Math.PI / 180;
+        const lon = parseFloat(lonInput.value) * Math.PI / 180;
+        
+        // Convert RA/DEC to Azimuth/Elevation
+        // This is a simplified conversion - for a proper implementation you'd need
+        // to account for the current time and date, but for now we'll use the 
+        // horizon coordinate system mapping that's already in the code
+        
+        // Since the sky is plotted in az/elv, we need to work with altitude/azimuth
+        // The existing rotate() function handles the conversion from RA/DEC to the 
+        // final 3D position. We need to find what user rotations center the object.
+        
+        // Let's use a different approach: find the rotation that puts the object at screen center
+        function testRotation(testRotX, testRotY) {
+            let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
+            [x, y, z] = rotate([x, y, z], testRotX, testRotY, lat, lon);
+            if (z <= -0.1) return null; // Behind camera
+            const [screenX, screenY] = project([x, y, z]);
+            return [screenX, screenY, z];
+        }
+        
+        // Simple search approach - try different rotations to find one that centers the object
+        const centerX = width / 2;
+        const centerY = height / 2;
+        let bestRotX = rotX;
+        let bestRotY = rotY;
+        let bestDistance = Infinity;
+        
+        // Search in a reasonable range around current position
+        const searchRange = Math.PI; // 180 degrees
+        const searchSteps = 20;
+        
+        for (let i = 0; i < searchSteps; i++) {
+            for (let j = 0; j < searchSteps; j++) {
+                const testRotY = rotY + (i - searchSteps/2) * searchRange / searchSteps;
+                const testRotX = rotX + (j - searchSteps/2) * searchRange / searchSteps;
+                
+                // Constrain rotX
+                const constrainedRotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, testRotX));
+                
+                const result = testRotation(constrainedRotX, testRotY);
+                if (result) {
+                    const [screenX, screenY, z] = result;
+                    const distance = Math.sqrt((screenX - centerX)**2 + (screenY - centerY)**2);
+                    
+                    if (distance < bestDistance && z > 0) {
+                        bestDistance = distance;
+                        bestRotX = constrainedRotX;
+                        bestRotY = testRotY;
+                    }
+                }
+            }
+        }
+        
+        // If we didn't find a good position, try a wider search
+        if (bestDistance > 100) {
+            for (let i = 0; i < searchSteps; i++) {
+                for (let j = 0; j < searchSteps; j++) {
+                    const testRotY = (i / searchSteps) * 2 * Math.PI - Math.PI;
+                    const testRotX = (j / searchSteps) * Math.PI - Math.PI/2;
+                    
+                    const constrainedRotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, testRotX));
+                    
+                    const result = testRotation(constrainedRotX, testRotY);
+                    if (result) {
+                        const [screenX, screenY, z] = result;
+                        const distance = Math.sqrt((screenX - centerX)**2 + (screenY - centerY)**2);
+                        
+                        if (distance < bestDistance && z > 0) {
+                            bestDistance = distance;
+                            bestRotX = constrainedRotX;
+                            bestRotY = testRotY;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Normalize rotY for smooth animation
+        while (bestRotY - rotY > Math.PI) bestRotY -= 2*Math.PI;
+        while (bestRotY - rotY < -Math.PI) bestRotY += 2*Math.PI;
+        
+        console.log(`Moving to ${obj.name}:`);
+        console.log(`  Found position at distance ${bestDistance.toFixed(1)} pixels from center`);
+        console.log(`  Target: rotY=${(bestRotY*180/Math.PI).toFixed(1)}°, rotX=${(bestRotX*180/Math.PI).toFixed(1)}°`);
+        console.log(`  Current: rotY=${(rotY*180/Math.PI).toFixed(1)}°, rotX=${(rotX*180/Math.PI).toFixed(1)}°`);
+        
+        // Animate to the target position
+        const startRotX = rotX;
+        const startRotY = rotY;
+        const steps = 30;
+        let step = 0;
+        
+        function animateMove() {
+            if (step <= steps) {
+                const progress = step / steps;
+                const eased = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
+                
+                rotX = startRotX + (bestRotX - startRotX) * eased;
+                rotY = startRotY + (bestRotY - startRotY) * eased;
+                
+                draw();
+                step++;
+                requestAnimationFrame(animateMove);
+            }
+        }
+        
+        animateMove();
+    }
+
+    // Function to clear search
+    function clearSearch() {
+        searchedObject = null;
+        searchInput.value = '';
+        document.getElementById('info').innerHTML = "Drag to rotate. Click a star/planet for info.";
+        draw();
+    }
+
     // Initial draw and loading
     window.addEventListener('DOMContentLoaded', () => {
-        draw();
-        setTimeout(hideLoading, 400); // allow a short delay for effect
+        console.log('DOM loaded. Star data:', stars.filter(s => s.type === 'planet'));
+        // Preload planet images first, then draw
+        preloadPlanetImages().then(() => {
+            console.log('Images preloaded, starting first draw...');
+            draw();
+            setTimeout(hideLoading, 400); // allow a short delay for effect
+            
+            // Start animation loop for search highlighting
+            function animate() {
+                if (searchedObject) {
+                    draw();
+                }
+                requestAnimationFrame(animate);
+            }
+            animate();
+        });
     });
 </script>
 </body>

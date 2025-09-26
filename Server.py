@@ -3,9 +3,9 @@ LiveViewPort = 8000
 FlaskServerPort = 8080
 
 from flask import Flask, request, jsonify, redirect, url_for, Response
-from flask_login import LoginManager # type: ignore # type: ignore
-from flask_mail import Mail # type: ignore
-from dotenv import load_dotenv # type: ignore
+from flask_login import LoginManager
+from flask_mail import Mail 
+from dotenv import load_dotenv
 import os
 import importlib
 import threading
@@ -14,6 +14,9 @@ from db import db
 import base64
 import logging
 import subprocess
+
+# Import security components
+from security import SecurityMiddleware, register_security_error_handlers
 
 # Get the base dir
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -53,6 +56,15 @@ login_manager.init_app(app)
 
 mail = Mail(app)
 
+# Initialize Security Middleware
+security_middleware = SecurityMiddleware()
+security_middleware.init_app(app)
+
+# Register security error handlers
+register_security_error_handlers(app)
+
+print("Security middleware initialized - IP blacklist active")
+
 # Register Blueprints
 controllers_dir = os.path.join(os.path.dirname(__file__), "controllers")
 
@@ -80,7 +92,7 @@ for rule in app.url_map.iter_rules():
 print("")
 
 # User Loader for Flask-Login
-from models.user import User # type: ignore
+from models.user import User
 
 @login_manager.user_loader
 def load_user(user_id):
