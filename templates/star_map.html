@@ -67,6 +67,10 @@
         <input type="checkbox" id="show-stars" checked> Stars
         <input type="checkbox" id="show-planets" checked> Planets
     </label>
+    <label>
+        <input type="checkbox" id="show-horizon-grid"> Horizon Grid
+        <input type="checkbox" id="show-equatorial-grid"> Equatorial Grid
+    </label>
     <button id="reset-view">Reset View</button>
     <button id="help-btn">Help</button>
 </div>
@@ -81,8 +85,9 @@
             <li>Adjust magnitude filter to show/hide faint stars</li>
             <li>Set your latitude/longitude for local sky orientation</li>
             <li>Toggle stars/planets visibility</li>
+            <li>Toggle horizon grid (altitude/azimuth with N/E/S/W)</li>
+            <li>Toggle equatorial grid (RA/DEC coordinates)</li>
             <li>Reset view to default orientation and zoom</li>
-
         </ul>
         <button id="close-help">Close</button>
     </div>
@@ -126,6 +131,8 @@
     const lonInput = document.getElementById('longitude');
     const showStars = document.getElementById('show-stars');
     const showPlanets = document.getElementById('show-planets');
+    const showHorizonGrid = document.getElementById('show-horizon-grid');
+    const showEquatorialGrid = document.getElementById('show-equatorial-grid');
     const resetBtn = document.getElementById('reset-view');
     const helpBtn = document.getElementById('help-btn');
     const helpModal = document.getElementById('help-modal');
@@ -204,6 +211,189 @@
         ];
     }
 
+    // Convert altitude/azimuth to Cartesian coordinates
+    function altazToXYZ(alt, az) {
+        const altRad = alt * Math.PI / 180;
+        const azRad = az * Math.PI / 180;
+        const x = Math.cos(altRad) * Math.sin(azRad);
+        const y = Math.sin(altRad);
+        const z = Math.cos(altRad) * Math.cos(azRad);
+        return [x, y, z];
+    }
+
+    // Draw horizon coordinate grid
+    function drawHorizonGrid(lat, lon) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(100, 150, 255, 0.3)"; // Light blue
+        ctx.lineWidth = 1;
+        ctx.font = "12px sans-serif";
+        ctx.fillStyle = "rgba(100, 150, 255, 0.6)";
+
+        // Simple back-face culling - only draw lines facing the viewer
+        const cullThreshold = 0;
+
+        // Draw altitude circles (elevation lines) - include negative altitudes
+        for (let alt = -90; alt <= 90; alt += 10) {
+            ctx.beginPath();
+            let firstPoint = true;
+            for (let az = 0; az <= 360; az += 3) {
+                let [x, y, z] = altazToXYZ(alt, az);
+                // Only apply user rotation, not lat/lon (horizon stays fixed)
+                [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+                if (z <= cullThreshold) continue; // Adaptive culling based on zoom
+                const [cx, cy] = project([x, y, z]);
+                
+                if (firstPoint) {
+                    ctx.moveTo(cx, cy);
+                    firstPoint = false;
+                } else {
+                    ctx.lineTo(cx, cy);
+                }
+            }
+            ctx.stroke();
+            
+            // Label altitude lines more frequently
+            if (alt % 20 === 0 && alt !== 0) {
+                let [x, y, z] = altazToXYZ(alt, 0); // North point
+                [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+                if (z > cullThreshold) {
+                    const [cx, cy] = project([x, y, z]);
+                    ctx.fillText(`${alt}°`, cx + 5, cy - 5);
+                }
+            }
+        }
+
+        // Draw azimuth lines (compass directions)
+        for (let az = 0; az < 360; az += 10) {
+            ctx.beginPath();
+            let firstPoint = true;
+            for (let alt = -90; alt <= 90; alt += 2) {
+                let [x, y, z] = altazToXYZ(alt, az);
+                [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+                if (z <= cullThreshold) continue; // Adaptive culling
+                const [cx, cy] = project([x, y, z]);
+                
+                if (firstPoint) {
+                    ctx.moveTo(cx, cy);
+                    firstPoint = false;
+                } else {
+                    ctx.lineTo(cx, cy);
+                }
+            }
+            ctx.stroke();
+            
+            // Label azimuth lines more frequently
+            if (az % 30 === 0) {
+                let [x, y, z] = altazToXYZ(5, az); // 5° above horizon
+                [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+                if (z > cullThreshold) {
+                    const [cx, cy] = project([x, y, z]);
+                    ctx.fillText(`${az}°`, cx - 8, cy + 15);
+                }
+            }
+        }
+
+        // Draw and label cardinal directions
+        const cardinals = [
+            { az: 0, label: "N" },
+            { az: 90, label: "E" },
+            { az: 180, label: "S" },
+            { az: 270, label: "W" }
+        ];
+        
+        ctx.font = "16px sans-serif";
+        ctx.fillStyle = "rgba(100, 150, 255, 0.8)";
+        for (const cardinal of cardinals) {
+            let [x, y, z] = altazToXYZ(5, cardinal.az); // 5° above horizon
+            [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+            if (z > cullThreshold) {
+                const [cx, cy] = project([x, y, z]);
+                ctx.fillText(cardinal.label, cx - 8, cy + 5);
+            }
+        }
+        
+        ctx.restore();
+    }
+
+    // Draw equatorial coordinate grid
+    function drawEquatorialGrid(lat, lon) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 150, 100, 0.3)"; // Light orange
+        ctx.lineWidth = 1;
+        ctx.font = "12px sans-serif";
+        ctx.fillStyle = "rgba(255, 150, 100, 0.6)";
+
+        // Simple back-face culling - only draw lines facing the viewer
+        const cullThreshold = 0;
+
+        // Draw declination circles
+        for (let dec = -90; dec <= 90; dec += 10) {
+            if (dec === 0) ctx.strokeStyle = "rgba(255, 150, 100, 0.5)"; // Celestial equator more visible
+            else ctx.strokeStyle = "rgba(255, 150, 100, 0.3)";
+            
+            ctx.beginPath();
+            let firstPoint = true;
+            for (let ra = 0; ra <= 360; ra += 3) {
+                let [x, y, z] = radecToXYZ(ra, dec);
+                [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+                if (z <= cullThreshold) continue; // Adaptive culling based on zoom
+                const [cx, cy] = project([x, y, z]);
+                
+                if (firstPoint) {
+                    ctx.moveTo(cx, cy);
+                    firstPoint = false;
+                } else {
+                    ctx.lineTo(cx, cy);
+                }
+            }
+            ctx.stroke();
+            
+            // Label declination lines more frequently
+            if (dec % 30 === 0) {
+                let [x, y, z] = radecToXYZ(0, dec); // 0h RA
+                [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+                if (z > cullThreshold) {
+                    const [cx, cy] = project([x, y, z]);
+                    ctx.fillText(`${dec}°`, cx + 5, cy - 5);
+                }
+            }
+        }
+
+        // Draw right ascension lines
+        ctx.strokeStyle = "rgba(255, 150, 100, 0.3)";
+        for (let ra = 0; ra < 360; ra += 10) {
+            ctx.beginPath();
+            let firstPoint = true;
+            for (let dec = -90; dec <= 90; dec += 2) {
+                let [x, y, z] = radecToXYZ(ra, dec);
+                [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+                if (z <= cullThreshold) continue; // Adaptive culling
+                const [cx, cy] = project([x, y, z]);
+                
+                if (firstPoint) {
+                    ctx.moveTo(cx, cy);
+                    firstPoint = false;
+                } else {
+                    ctx.lineTo(cx, cy);
+                }
+            }
+            ctx.stroke();
+            
+            // Label RA lines at celestial equator more frequently
+            if (ra % 30 === 0) {
+                let [x, y, z] = radecToXYZ(ra, 0);
+                [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+                if (z > cullThreshold) {
+                    const [cx, cy] = project([x, y, z]);
+                    const hours = Math.round(ra / 15);
+                    ctx.fillText(`${hours}h`, cx - 8, cy + 15);
+                }
+            }
+        }
+        
+        ctx.restore();
+    }
+
     // Draw all stars/planets
     function draw() {
         ctx.clearRect(0, 0, width, height);
@@ -215,6 +405,14 @@
         const lon = parseFloat(lonInput.value) * Math.PI / 180;
         const showStarsVal = showStars.checked;
         const showPlanetsVal = showPlanets.checked;
+
+        // Draw coordinate grids (before stars so they appear behind)
+        if (showHorizonGrid.checked) {
+            drawHorizonGrid(lat, lon);
+        }
+        if (showEquatorialGrid.checked) {
+            drawEquatorialGrid(lat, lon);
+        }
 
         // Draw stars/planets
         for (const obj of stars) {
@@ -370,6 +568,8 @@
     lonInput.addEventListener('change', draw);
     showStars.addEventListener('change', draw);
     showPlanets.addEventListener('change', draw);
+    showHorizonGrid.addEventListener('change', draw);
+    showEquatorialGrid.addEventListener('change', draw);
     resetBtn.addEventListener('click', () => {
         rotX = 0; rotY = 0;
         zoom = 1.0; // Reset zoom level
