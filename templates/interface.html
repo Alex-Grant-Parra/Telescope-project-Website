@@ -5,18 +5,16 @@
 {% block content %}
 <div class="container-fluid">
     <!-- Main Panel and Take Photo Button Row -->
-    <div class="d-flex align-items-start" style="position: relative;">
+    <div class="d-flex align-items-start" style="position: relative; height: 80vh;">
         <!-- Main Panel -->
-        <div class="main-panel border rounded p-3 position-relative" id="mainPanel">
+        <div class="main-panel border rounded p-3 position-relative flex-grow-1" id="mainPanel" style="min-width: 0; width: 75vw; height: 100%;">
             <button class="fullscreen-toggle btn btn-danger btn-sm position-absolute top-0 end-0 m-2" onclick="toggleFullscreen()">⛶</button>
             <h2 class="text-center">Main Panel</h2>
         </div>
-        <!-- Take Photo Button just to the right of the main panel -->
-        <button id="takePhotoBtn" class="btn btn-primary btn-sm ms-3 mt-2" style="height: 40px;" onclick="takePhoto()">📷 Take Photo</button>
     </div>
 
     <!-- Draggable Camera Controls Panel -->
-    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="cameraPanel" style="top: 50px; left: 20px;">
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="cameraPanel" style="top: 100px; left: 20px;">
         <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Camera Controls</div>  <!-- non-selectable title -->
         <div class="control-row d-flex justify-content-between my-2">
             <span>Shutter Speed</span>
@@ -47,15 +45,47 @@
                 <option>RAW</option>
             </select>
         </div>
+        <button id="takePhotoBtn" class="btn btn-primary mt-3 w-100" style="height: 60px; font-size: 1.25rem;" onclick="takePhoto()">📷 Take Photo</button>
     </div>
 
     <!-- Draggable Telescope Controls Panel -->
-    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="telescopePanel" style="top: 300px; left: 20px;">
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="telescopePanel" style="top: 500px; left: 20px;">
         <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Telescope Controls</div>  <!-- non-selectable title -->
         <div class="control-row my-2">
             <label for="searchObject">Search Object</label>
             <input type="text" class="form-control" id="searchObject" placeholder="Enter HD, NGC, or IC number">
             <button class="btn btn-primary mt-2" onclick="searchObject()">Search</button>
+        </div>
+    </div>
+
+    <!-- Draggable Live View Controls Panel -->
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="liveViewPanel" style="top: 100px; left: 80vw; min-width: 220px;">
+        <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Live View Controls</div>
+        <div class="control-row my-3 d-flex justify-content-between align-items-center">
+            <span>Live View</span>
+            <button id="liveViewToggleBtn" class="btn btn-outline-primary" onclick="toggleLiveView()">Start</button>
+        </div>
+    </div>
+
+    <!-- Draggable Telescope Selection Panel -->
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="telescopeSelectionPanel" style="top: 300px; left: 80vw; min-width: 250px;">
+        <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Telescope Selection</div>
+        <div class="control-row my-2">
+            <label for="telescopeSelect">Connected Telescopes</label>
+            <select id="telescopeSelect" class="form-select" onchange="selectTelescope()">
+                <option value="">Select a telescope...</option>
+            </select>
+        </div>
+        <div class="control-row my-2" id="telescopeInfo" style="display: none;">
+            <div class="small text-muted">
+                <div><strong>ID:</strong> <span id="telescopeId"></span></div>
+                <div><strong>IP:</strong> <span id="telescopeIp"></span></div>
+                <div><strong>Version:</strong> <span id="telescopeVersion"></span></div>
+                <div><strong>Status:</strong> <span id="telescopeStatus"></span></div>
+            </div>
+        </div>
+        <div class="control-row my-2">
+            <button class="btn btn-info btn-sm w-100" onclick="refreshTelescopes()">🔄 Refresh</button>
         </div>
     </div>
 </div>
@@ -129,6 +159,8 @@
     // Call on page load
     document.addEventListener("DOMContentLoaded", function() {
         populateCameraChoices();
+        loadTelescopes();
+        loadSelectedTelescope();
     });
 
     // Update settings to backend
@@ -164,6 +196,17 @@
         .catch(error => {
             alert("Error taking photo: " + error);
         });
+    }
+
+    // Live View Toggle Logic
+    let liveViewActive = false;
+    function toggleLiveView() {
+        liveViewActive = !liveViewActive;
+        const btn = document.getElementById("liveViewToggleBtn");
+        btn.textContent = liveViewActive ? "Stop" : "Start";
+        btn.classList.toggle("btn-outline-primary", !liveViewActive);
+        btn.classList.toggle("btn-outline-danger", liveViewActive);
+        // Add your start/stop live view logic here
     }
 
     // // Function to search for an object
@@ -260,6 +303,100 @@ function searchObject() {
     } else {
         alert("Please enter a valid HD, NGC, or IC number.");
     }
+}
+
+// Telescope selection functions
+function loadTelescopes() {
+    fetch("{{ url_for('interface.get_telescopes') }}")
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === "success") {
+                populateTelescopeDropdown(data.telescopes);
+            } else {
+                console.error("Failed to load telescopes:", data.message);
+            }
+        })
+        .catch(error => {
+            console.error("Error loading telescopes:", error);
+        });
+}
+
+function populateTelescopeDropdown(telescopes) {
+    const select = document.getElementById("telescopeSelect");
+    select.innerHTML = '<option value="">Select a telescope...</option>';
+    
+    telescopes.forEach(telescope => {
+        const option = document.createElement("option");
+        option.value = telescope.telescopeId;
+        option.text = `${telescope.telescopeId} (${telescope.online ? 'Online' : 'Offline'})`;
+        option.dataset.telescope = JSON.stringify(telescope);
+        select.appendChild(option);
+    });
+}
+
+function selectTelescope() {
+    const select = document.getElementById("telescopeSelect");
+    const selectedValue = select.value;
+    
+    if (!selectedValue) {
+        document.getElementById("telescopeInfo").style.display = "none";
+        return;
+    }
+    
+    const selectedOption = select.options[select.selectedIndex];
+    const telescope = JSON.parse(selectedOption.dataset.telescope);
+    
+    // Update UI with telescope info
+    document.getElementById("telescopeId").textContent = telescope.telescopeId;
+    document.getElementById("telescopeIp").textContent = telescope.ipAddress;
+    document.getElementById("telescopeVersion").textContent = telescope.firmwareVersion;
+    document.getElementById("telescopeStatus").textContent = telescope.online ? 'Online' : 'Offline';
+    document.getElementById("telescopeStatus").className = telescope.online ? 'text-success' : 'text-danger';
+    document.getElementById("telescopeInfo").style.display = "block";
+    
+    // Send selection to backend
+    fetch("{{ url_for('interface.select_telescope') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telescopeId: selectedValue })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === "success") {
+            console.log("Telescope selected:", data.message);
+        } else {
+            alert("Failed to select telescope: " + data.message);
+        }
+    })
+    .catch(error => {
+        console.error("Error selecting telescope:", error);
+        alert("Error selecting telescope");
+    });
+}
+
+function refreshTelescopes() {
+    loadTelescopes();
+}
+
+function loadSelectedTelescope() {
+    fetch("{{ url_for('interface.get_selected_telescope') }}")
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === "success" && data.telescope) {
+                // Set the dropdown to show the selected telescope
+                const select = document.getElementById("telescopeSelect");
+                for (let i = 0; i < select.options.length; i++) {
+                    if (select.options[i].value === data.telescope.telescopeId) {
+                        select.selectedIndex = i;
+                        selectTelescope(); // Update the info panel
+                        break;
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error("Error loading selected telescope:", error);
+        });
 }
 
 
