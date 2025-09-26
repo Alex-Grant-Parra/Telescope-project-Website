@@ -75,11 +75,14 @@
         <b>3D Planetarium Controls</b><br><br>
         <ul>
             <li>Drag mouse to rotate the sky</li>
+            <li>Scroll wheel to zoom in/out</li>
             <li>Click a star/planet for info</li>
+            <li>Right-click magnitude slider for custom values</li>
             <li>Adjust magnitude filter to show/hide faint stars</li>
             <li>Set your latitude/longitude for local sky orientation</li>
             <li>Toggle stars/planets visibility</li>
-            <li>Reset view to default orientation</li>
+            <li>Reset view to default orientation and zoom</li>
+
         </ul>
         <button id="close-help">Close</button>
     </div>
@@ -146,14 +149,20 @@
     magFilter.min = minMag.toFixed(1);
     magFilter.max = maxMag.toFixed(1);
     magFilter.step = "0.1";
-    magFilter.value = maxMag.toFixed(1); // Start showing all objects
-    magValue.textContent = maxMag.toFixed(1);
+    magFilter.value = "4.0"; // Start at magnitude 4
+    magValue.textContent = "4.0";
 
     // 3D sphere parameters
     // Increase the sphere radius for a more immersive effect
     const R = Math.min(width, height) * 0.9 / 2;
     let rotX = 0, rotY = 0; // rotation angles
     let dragging = false, lastX = 0, lastY = 0;
+
+    // Zoom parameters
+    let zoom = 1.0; // Default zoom level
+    const minZoom = 0.8; // 80% - only slightly zoomed out
+    const maxZoom = 5.0; // 500% - zoomed way in
+    const zoomStep = 0.1; // Zoom increment per scroll
 
     // Camera is inside the sphere: invert z-culling (draw z < 0)
     // Convert RA/DEC to 3D Cartesian coordinates
@@ -188,7 +197,7 @@
         // Perspective projection for camera inside sphere looking outward
         // Use full screen dimensions instead of sphere radius
         const fov = 1.2; // field of view
-        const scale = Math.max(width, height) * 0.8 / (fov + z); // Scale to fill screen
+        const scale = Math.max(width, height) * 0.8 * zoom / (fov + z); // Apply zoom factor
         return [
             width / 2 + x * scale,
             height / 2 - y * scale
@@ -306,6 +315,18 @@
         draw();
     });
 
+    // Scroll wheel zoom
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault(); // Prevent page scroll
+        
+        const scrollDirection = e.deltaY > 0 ? -1 : 1; // Inverted for natural zoom feel
+        const zoomChange = scrollDirection * zoomStep;
+        
+        zoom = Math.max(minZoom, Math.min(maxZoom, zoom + zoomChange));
+        
+        draw();
+    }, { passive: false });
+
     // Preload planet icons with proper error handling
     function preloadPlanetImages() {
         const loadPromises = [];
@@ -348,6 +369,7 @@
     showPlanets.addEventListener('change', draw);
     resetBtn.addEventListener('click', () => {
         rotX = 0; rotY = 0;
+        zoom = 1.0; // Reset zoom level
         latInput.value = 0;
         lonInput.value = 0;
         magFilter.value = maxMag.toFixed(1); // Reset to show all objects
