@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body data-authenticated="{{ current_user.is_authenticated|tojson|lower }}">
 
     <div class="content">
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -34,8 +34,27 @@
             {% block content %}{% endblock %}
         </div>
     </div>
-    <footer class="footer bg-dark text-white text-center py-3">
+    <footer class="footer bg-dark text-white text-center py-3 position-relative">
         <div class="container">
+            <button id="nightModeToggle" class="btn btn-outline-light position-absolute start-0 bottom-0 mb-2 ms-2 d-flex align-items-center" style="z-index:2;">
+                <span class="nightmode-icon me-2" aria-hidden="true">
+                    <span class="sun">
+                        <span class="sun-core"></span>
+                        <span class="sun-ray ray1"></span>
+                        <span class="sun-ray ray2"></span>
+                        <span class="sun-ray ray3"></span>
+                        <span class="sun-ray ray4"></span>
+                    </span>
+                    <span class="moon-stars">
+                        <span class="moon"></span>
+                        <span class="star star1"></span>
+                        <span class="star star2"></span>
+                        <span class="star star3"></span>
+                    </span>
+                    <img class="evil-grin-gif" src="{{ url_for('static', filename='evil-grin.gif') }}" alt="evil grin" style="display:none; width:28px; height:28px; position:absolute; left:0; top:0; z-index:10; border-radius:50%;" />
+                </span>
+                <span class="nightmode-label">Night Mode</span>
+            </button>
             <p>
                 <a href="{{ url_for('about.about') }}" class="text-white">About</a> |
                 <a href="{{ url_for('about.privacy') }}" class="text-white">Privacy Policy</a> | 
@@ -43,6 +62,116 @@
             </p>
         </div>
     </footer>
+    <script type="text/javascript">
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get authentication state from body data attribute
+        const isAuthenticated = document.body.getAttribute('data-authenticated') === 'true';
+        
+        const btn = document.getElementById('nightModeToggle');
+        const label = btn.querySelector('.nightmode-label');
+        const icon = btn.querySelector('.nightmode-icon');
+        const sun = icon.querySelector('.sun');
+        const moon = icon.querySelector('.moon-stars');
+        const grin = icon.querySelector('.evil-grin-gif');
+        let clickCount = 0;
+        let lastClickTime = 0;
+        let grinTrigger = Math.floor(Math.random() * 11) + 10; // 10-20
+        
+        // Load saved night mode preference for logged-in users
+        function loadNightModePreference() {
+            if (isAuthenticated) {
+                fetch('/user/night_mode', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        const isNightMode = data.night_mode;
+                        if (isNightMode) {
+                            document.body.classList.add('night-mode');
+                            label.textContent = 'Day Mode';
+                            sun.style.display = 'none';
+                            moon.style.display = 'flex';
+                        } else {
+                            document.body.classList.remove('night-mode');
+                            label.textContent = 'Night Mode';
+                            sun.style.display = 'flex';
+                            moon.style.display = 'none';
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.log('Not logged in or error loading night mode preference:', error);
+                });
+            }
+        }
+        
+        // Save night mode preference for logged-in users
+        function saveNightModePreference(isNightMode) {
+            if (isAuthenticated) {
+                fetch('/user/night_mode', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ night_mode: isNightMode })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        console.log('Night mode preference saved:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error saving night mode preference:', error);
+                });
+            }
+        }
+        
+        // Load preference on page load
+        loadNightModePreference();
+        
+        btn.addEventListener('click', function() {
+            const now = Date.now();
+            if (now - lastClickTime > 2000) {
+                clickCount = 0;
+                grinTrigger = Math.floor(Math.random() * 11) + 10;
+            }
+            lastClickTime = now;
+            clickCount++;
+            if (clickCount === grinTrigger) {
+                sun.style.display = 'none';
+                moon.style.display = 'none';
+                grin.style.display = 'block';
+                btn.disabled = true;
+                setTimeout(() => {
+                    grin.style.display = 'none';
+                    sun.style.display = document.body.classList.contains('night-mode') ? 'none' : 'flex';
+                    moon.style.display = document.body.classList.contains('night-mode') ? 'flex' : 'none';
+                    btn.disabled = false;
+                    clickCount = 0;
+                    grinTrigger = Math.floor(Math.random() * 11) + 10;
+                }, 2500);
+                return;
+            }
+            
+            // Toggle night mode
+            document.body.classList.toggle('night-mode');
+            const isNightMode = document.body.classList.contains('night-mode');
+            
+            // Update UI
+            label.textContent = isNightMode ? 'Day Mode' : 'Night Mode';
+            sun.style.display = isNightMode ? 'none' : 'flex';
+            moon.style.display = isNightMode ? 'flex' : 'none';
+            
+            // Save preference
+            saveNightModePreference(isNightMode);
+        });
+    });
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

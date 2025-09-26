@@ -27,6 +27,7 @@ class User(UserMixin, db.Model):
     AccountType = db.Column(db.String(32), nullable=False, default="Standard")  # "Standard", "Administrator", "Limited", or "None"
     totp_secret = db.Column(db.String(16))
     current_2fa_code = db.Column(db.String(6))
+    night_mode = db.Column(db.Boolean, default=False, nullable=False)  # Night mode preference
 
     @property
     def is_admin(self):
@@ -108,6 +109,16 @@ class User(UserMixin, db.Model):
     def get_account_type(self):
         return self.AccountType
 
+    # Night mode preference methods
+    def set_night_mode(self, is_night_mode):
+        """Set the user's night mode preference"""
+        self.night_mode = bool(is_night_mode)
+        db.session.commit()
+
+    def get_night_mode(self):
+        """Get the user's night mode preference"""
+        return bool(self.night_mode) if self.night_mode is not None else False
+
 
 user_bp = Blueprint("user", __name__)
 
@@ -115,3 +126,32 @@ user_bp = Blueprint("user", __name__)
 @login_required
 def get_account_type_route():
     return jsonify({"account_type": current_user.get_account_type()})
+
+@user_bp.route("/user/night_mode", methods=["GET"])
+@login_required
+def get_night_mode():
+    """Get the current user's night mode preference"""
+    try:
+        night_mode = current_user.get_night_mode()
+        return jsonify({"status": "success", "night_mode": night_mode})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+@user_bp.route("/user/night_mode", methods=["POST"])
+@login_required
+def set_night_mode():
+    """Set the current user's night mode preference"""
+    try:
+        from flask import request
+        data = request.get_json()
+        night_mode = data.get('night_mode', False)
+        
+        current_user.set_night_mode(night_mode)
+        
+        return jsonify({
+            "status": "success", 
+            "message": f"Night mode {'enabled' if night_mode else 'disabled'}",
+            "night_mode": night_mode
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})

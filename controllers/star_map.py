@@ -7,6 +7,8 @@ from algorithms2 import getAllCelestialData
 
 star_map_bp = Blueprint("star_map", __name__)
 
+now = datetime.utcnow()
+
 def loadStarsFromTables(tables):
     all_stars = []
     for table in tables:
@@ -36,7 +38,6 @@ def get_all_celestial_objects():
 
 
     # Get celestial objects positions for current UTC date
-    now = datetime.utcnow()
     celestial_data = getAllCelestialData(now.year, now.month, now.day)
 
     for obj_name, coords in celestial_data.items():
@@ -77,8 +78,6 @@ def star_map():
     if RenderStars:
         all_stars = loadStarsFromTables(tables)
 
-
-    now = datetime.utcnow()
     celestial_data = getAllCelestialData(now.year, now.month, now.day)
 
     if RenderPlanets:
@@ -118,7 +117,7 @@ def star_info(star_name):
                 "type": "star"
             })
 
-    celestial_data = getAllCelestialData(datetime.utcnow().year, datetime.utcnow().month, datetime.utcnow().day)
+    celestial_data = getAllCelestialData(now.year, now.month, now.day)
     obj_name_lower = star_name.lower()
     if obj_name_lower in celestial_data:
         coords = celestial_data[obj_name_lower]
