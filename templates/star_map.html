@@ -71,6 +71,14 @@
         <input type="checkbox" id="show-horizon-grid"> Horizon Grid
         <input type="checkbox" id="show-equatorial-grid"> Equatorial Grid
     </label>
+    <div style="margin-top: 8px;">
+        <label>Search Object:</label>
+        <input type="text" id="search-object" placeholder="HD, NGC, IC, M, or planet name" style="width: 100%; padding: 4px; margin: 4px 0; border: 1px solid #555; background: #222; color: #fff; border-radius: 3px;">
+        <div style="display: flex; gap: 4px;">
+            <button id="search-btn" style="flex: 1; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Search</button>
+            <button id="clear-search-btn" style="flex: 1; padding: 4px 8px; background: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer;">Clear</button>
+        </div>
+    </div>
     <button id="reset-view">Reset View</button>
     <button id="help-btn">Help</button>
 </div>
@@ -144,6 +152,15 @@
     const magCustomInput = document.getElementById('mag-custom-input');
     const magApplyBtn = document.getElementById('mag-apply');
     const magCancelBtn = document.getElementById('mag-cancel');
+
+    // Search elements
+    const searchInput = document.getElementById('search-object');
+    const searchBtn = document.getElementById('search-btn');
+    const clearSearchBtn = document.getElementById('clear-search-btn');
+
+    // Search state
+    let searchedObject = null;
+    let highlightAnimation = 0;
 
     // Canvas setup
     const canvas = document.getElementById('planetarium');
@@ -458,6 +475,32 @@
             }
             ctx.restore();
         }
+
+        // Draw orange highlight ring for searched object
+        if (searchedObject) {
+            const magLimit = parseFloat(magFilter.value);
+            const effectiveMag = searchedObject.mag == null ? 50 : searchedObject.mag;
+            if (effectiveMag <= magLimit) {
+                let [x, y, z] = radecToXYZ(searchedObject.ra, searchedObject.dec);
+                [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+                if (z > -0.1) { // Object is visible
+                    const [cx, cy] = project([x, y, z]);
+                    
+                    // Animate the ring
+                    highlightAnimation += 0.1;
+                    const ringSize = 20 + Math.sin(highlightAnimation) * 5;
+                    const opacity = 0.7 + Math.sin(highlightAnimation * 2) * 0.3;
+                    
+                    ctx.save();
+                    ctx.strokeStyle = `rgba(255, 165, 0, ${opacity})`;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, ringSize, 0, 2*Math.PI);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+        }
     }
 
     // Mouse controls
@@ -580,7 +623,19 @@
         magValue.textContent = maxMag.toFixed(1);
         showStars.checked = true;
         showPlanets.checked = true;
+        clearSearch(); // Clear search when resetting view
         draw();
+    });
+
+    // Search event listeners
+    searchBtn.addEventListener('click', searchObject);
+    clearSearchBtn.addEventListener('click', clearSearch);
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            searchObject();
+        } else if (e.key === 'Escape') {
+            clearSearch();
+        }
     });
     helpBtn.addEventListener('click', () => {
         helpModal.style.display = "flex";
@@ -676,6 +731,188 @@
         });
     }
 
+    // Function to search for objects
+    function searchObject() {
+        const searchValue = searchInput.value.trim();
+        if (!searchValue) {
+            alert('Please enter a search term.');
+            return;
+        }
+
+        fetch('/interface/search_object', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ searchValue: searchValue })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && data.data) {
+                const objData = data.data;
+                // Find the object in our stars array or use the search result
+                let foundObject = null;
+                
+                // First try to find it in the existing stars array
+                for (const obj of stars) {
+                    if (obj.name && objData.Name && 
+                        obj.name.toLowerCase() === objData.Name.toLowerCase()) {
+                        foundObject = obj;
+                        break;
+                    }
+                }
+                
+                // If not found in stars array, create from search result
+                if (!foundObject) {
+                    foundObject = {
+                        name: objData.Name,
+                        ra: parseFloat(objData.RA) || 0,
+                        dec: parseFloat(objData.DEC) || 0,
+                        mag: objData['V-Mag'] || 30,
+                        type: objData.type || 'star'
+                    };
+                }
+                
+                // Set as searched object and move camera to it
+                searchedObject = foundObject;
+                highlightAnimation = 0;
+                moveToObject(foundObject);
+                
+                // Show info
+                document.getElementById('info').innerHTML = 
+                    `<b>🔍 ${foundObject.name}</b><br>RA: ${foundObject.ra.toFixed(2)}°<br>DEC: ${foundObject.dec.toFixed(2)}°<br>Mag: ${foundObject.mag}<br>
+                     <button onclick="trackObject('${foundObject.name}', ${foundObject.ra}, ${foundObject.dec}, ${foundObject.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
+            } else {
+                alert(data.message || 'Object not found.');
+            }
+        })
+        .catch(error => {
+            console.error('Search error:', error);
+            alert('Search failed. Please try again.');
+        });
+    }
+
+    // Function to move camera to look at an object
+    function moveToObject(obj) {
+        // Get observer settings
+        const lat = parseFloat(latInput.value) * Math.PI / 180;
+        const lon = parseFloat(lonInput.value) * Math.PI / 180;
+        
+        // Convert RA/DEC to Azimuth/Elevation
+        // This is a simplified conversion - for a proper implementation you'd need
+        // to account for the current time and date, but for now we'll use the 
+        // horizon coordinate system mapping that's already in the code
+        
+        // Since the sky is plotted in az/elv, we need to work with altitude/azimuth
+        // The existing rotate() function handles the conversion from RA/DEC to the 
+        // final 3D position. We need to find what user rotations center the object.
+        
+        // Let's use a different approach: find the rotation that puts the object at screen center
+        function testRotation(testRotX, testRotY) {
+            let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
+            [x, y, z] = rotate([x, y, z], testRotX, testRotY, lat, lon);
+            if (z <= -0.1) return null; // Behind camera
+            const [screenX, screenY] = project([x, y, z]);
+            return [screenX, screenY, z];
+        }
+        
+        // Simple search approach - try different rotations to find one that centers the object
+        const centerX = width / 2;
+        const centerY = height / 2;
+        let bestRotX = rotX;
+        let bestRotY = rotY;
+        let bestDistance = Infinity;
+        
+        // Search in a reasonable range around current position
+        const searchRange = Math.PI; // 180 degrees
+        const searchSteps = 20;
+        
+        for (let i = 0; i < searchSteps; i++) {
+            for (let j = 0; j < searchSteps; j++) {
+                const testRotY = rotY + (i - searchSteps/2) * searchRange / searchSteps;
+                const testRotX = rotX + (j - searchSteps/2) * searchRange / searchSteps;
+                
+                // Constrain rotX
+                const constrainedRotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, testRotX));
+                
+                const result = testRotation(constrainedRotX, testRotY);
+                if (result) {
+                    const [screenX, screenY, z] = result;
+                    const distance = Math.sqrt((screenX - centerX)**2 + (screenY - centerY)**2);
+                    
+                    if (distance < bestDistance && z > 0) {
+                        bestDistance = distance;
+                        bestRotX = constrainedRotX;
+                        bestRotY = testRotY;
+                    }
+                }
+            }
+        }
+        
+        // If we didn't find a good position, try a wider search
+        if (bestDistance > 100) {
+            for (let i = 0; i < searchSteps; i++) {
+                for (let j = 0; j < searchSteps; j++) {
+                    const testRotY = (i / searchSteps) * 2 * Math.PI - Math.PI;
+                    const testRotX = (j / searchSteps) * Math.PI - Math.PI/2;
+                    
+                    const constrainedRotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, testRotX));
+                    
+                    const result = testRotation(constrainedRotX, testRotY);
+                    if (result) {
+                        const [screenX, screenY, z] = result;
+                        const distance = Math.sqrt((screenX - centerX)**2 + (screenY - centerY)**2);
+                        
+                        if (distance < bestDistance && z > 0) {
+                            bestDistance = distance;
+                            bestRotX = constrainedRotX;
+                            bestRotY = testRotY;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Normalize rotY for smooth animation
+        while (bestRotY - rotY > Math.PI) bestRotY -= 2*Math.PI;
+        while (bestRotY - rotY < -Math.PI) bestRotY += 2*Math.PI;
+        
+        console.log(`Moving to ${obj.name}:`);
+        console.log(`  Found position at distance ${bestDistance.toFixed(1)} pixels from center`);
+        console.log(`  Target: rotY=${(bestRotY*180/Math.PI).toFixed(1)}°, rotX=${(bestRotX*180/Math.PI).toFixed(1)}°`);
+        console.log(`  Current: rotY=${(rotY*180/Math.PI).toFixed(1)}°, rotX=${(rotX*180/Math.PI).toFixed(1)}°`);
+        
+        // Animate to the target position
+        const startRotX = rotX;
+        const startRotY = rotY;
+        const steps = 30;
+        let step = 0;
+        
+        function animateMove() {
+            if (step <= steps) {
+                const progress = step / steps;
+                const eased = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
+                
+                rotX = startRotX + (bestRotX - startRotX) * eased;
+                rotY = startRotY + (bestRotY - startRotY) * eased;
+                
+                draw();
+                step++;
+                requestAnimationFrame(animateMove);
+            }
+        }
+        
+        animateMove();
+    }
+
+    // Function to clear search
+    function clearSearch() {
+        searchedObject = null;
+        searchInput.value = '';
+        document.getElementById('info').innerHTML = "Drag to rotate. Click a star/planet for info.";
+        draw();
+    }
+
     // Initial draw and loading
     window.addEventListener('DOMContentLoaded', () => {
         console.log('DOM loaded. Star data:', stars.filter(s => s.type === 'planet'));
@@ -684,6 +921,15 @@
             console.log('Images preloaded, starting first draw...');
             draw();
             setTimeout(hideLoading, 400); // allow a short delay for effect
+            
+            // Start animation loop for search highlighting
+            function animate() {
+                if (searchedObject) {
+                    draw();
+                }
+                requestAnimationFrame(animate);
+            }
+            animate();
         });
     });
 </script>

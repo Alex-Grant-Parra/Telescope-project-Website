@@ -3,9 +3,9 @@ LiveViewPort = 8000
 FlaskServerPort = 8080
 
 from flask import Flask, request, jsonify, redirect, url_for, Response
-from flask_login import LoginManager # type: ignore # type: ignore
-from flask_mail import Mail # type: ignore
-from dotenv import load_dotenv # type: ignore
+from flask_login import LoginManager
+from flask_mail import Mail 
+from dotenv import load_dotenv
 import os
 import importlib
 import threading
@@ -80,7 +80,7 @@ for rule in app.url_map.iter_rules():
 print("")
 
 # User Loader for Flask-Login
-from models.user import User # type: ignore
+from models.user import User
 
 @login_manager.user_loader
 def load_user(user_id):

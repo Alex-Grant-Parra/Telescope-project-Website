@@ -89,20 +89,6 @@ class NGCtable(BaseTable):
         return None
 
     @staticmethod
-    def query_by_messier(messier_designation):
-        """
-        Query NGCtable by Messier designation (e.g., 'M1', 'M31', 'M104')
-        """
-        print(f"Querying NGCtable for Messier: {messier_designation}")
-        result = db.session.query(NGCtable).filter_by(Messier=messier_designation).first()
-        if result:
-            if isinstance(result, dict):
-                return result
-            result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
-            return result_data
-        return None
-
-    @staticmethod
     def query_by_common_name(common_name):
         """
         Query NGCtable by common name using case-insensitive exact matching
