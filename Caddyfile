@@ -3,7 +3,7 @@ http://telescopes.dev {
 	redir https://telescopes.dev{uri} permanent
 }
 
-# HTTPS only
+# HTTPS only - Main website (direct connection)
 telescopes.dev {
 	reverse_proxy 127.0.0.1:8080
 	# Add security headers
@@ -13,12 +13,4 @@ telescopes.dev {
 		X-Frame-Options "DENY"
 		X-XSS-Protection "1; mode=block"
 	}
-}
-
-telescopes.dev:4000 {
-	reverse_proxy 127.0.0.1:4000
-}
-
-telescopes.dev:8000 {
-	reverse_proxy 127.0.0.1:8000
 }
