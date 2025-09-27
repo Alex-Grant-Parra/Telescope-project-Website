@@ -11,7 +11,7 @@ from function_handlers import function_map, is_liveview_enabled
 
 CLIENT_ID_FILE = "client_id.json"
 CONFIG_FILE = "client_config.json"
-SERVER_URI = "ws://82.36.204.156:4000"
+SERVER_URI = "wss://ws.telescopes.dev"
 CLIENT_ID = "pi-001"
 
 def load_config():
@@ -97,15 +97,15 @@ async def run_client():
     except Exception as e:
         print(f"[run_client] Exception: {e}")
 
-def get_liveview_ws_uri():
-    """Generate the live view WebSocket URI"""
-    liveViewPort = 8000
-    # Extract host from SERVER_URI
-    match = re.match(r"ws://([\w\.-]+):\d+", SERVER_URI)
-    if not match:
-        raise ValueError("SERVER_URI format invalid")
-    host = match.group(1)
-    return f"ws://{host}:{liveViewPort}"
+# def get_liveview_ws_uri():
+#     """Generate the live view WebSocket URI"""
+#     liveViewPort = 8000
+#     # Extract host from SERVER_URI
+#     match = re.match(r"ws://([\w\.-]+):\d+", SERVER_URI)
+#     if not match:
+#         raise ValueError("SERVER_URI format invalid")
+#     host = match.group(1)
+#     return f"ws://{host}:{liveViewPort}"
 
 async def authenticate_liveview(ws):
     """Send authentication message to liveview server"""
@@ -122,7 +122,7 @@ async def authenticate_liveview(ws):
 
 async def send_frames():
     """Send live camera frames via WebSocket"""
-    uri = get_liveview_ws_uri()
+    uri = "wss://liveview.telescopes.dev"
     JPEG_START = b'\xff\xd8'
     JPEG_END = b'\xff\xd9'
     proc = None
