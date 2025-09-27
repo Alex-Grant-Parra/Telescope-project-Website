@@ -1,5 +1,3 @@
-commandPort = 4000
-LiveViewPort = 8000
 FlaskServerPort = 8080
 
 from flask import Flask, request, jsonify, redirect, url_for, Response
@@ -65,6 +63,15 @@ register_security_error_handlers(app)
 
 print("Security middleware initialized - IP blacklist active")
 
+# HTTPS Enforcement Middleware
+@app.before_request
+def force_https():
+    if not request.is_secure and request.headers.get('X-Forwarded-Proto') != 'https':
+        # Allow localhost for development/testing
+        if request.host.startswith('127.0.0.1') or request.host.startswith('localhost'):
+            return None
+        return redirect(request.url.replace('http://', 'https://'), code=301)
+
 # Register Blueprints
 controllers_dir = os.path.join(os.path.dirname(__file__), "controllers")
 
@@ -97,29 +104,6 @@ from models.user import User
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
-
-# Ensure Tables Exist in the Database
-with app.app_context():
-    db.create_all()
-    
-    # Add night_mode column to user table if it doesn't exist
-    from sqlalchemy import text
-    try:
-        # Check if night_mode column exists
-        result = db.session.execute(text("PRAGMA table_info(user)"))
-        columns = [row[1] for row in result.fetchall()]
-        
-        if 'night_mode' not in columns:
-            print("Adding night_mode column to user table...")
-            db.session.execute(text("ALTER TABLE user ADD COLUMN night_mode BOOLEAN DEFAULT 0"))
-            db.session.commit()
-            print("Successfully added night_mode column")
-        else:
-            print("night_mode column already exists")
-            
-    except Exception as e:
-        print(f"Error updating user table: {e}")
-        db.session.rollback()
 
 # Homepage Redirection
 @app.route("/")
@@ -161,7 +145,7 @@ if __name__ == '__main__':
     # Start websocket servers using the new module
     start_websocket_servers()
 
-    print(f"Starting Flask server on {gethostname()} at http://0.0.0.0:{FlaskServerPort}")
-    app.run(host="0.0.0.0", port=FlaskServerPort, debug=False)
+    print(f"Starting Flask server on {gethostname()} at http://127.0.0.1:{FlaskServerPort}")
+    app.run(host="127.0.0.1", port=FlaskServerPort, debug=False)
 
     

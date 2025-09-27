@@ -10,6 +10,8 @@ from typing import Dict, Any
 import json
 from pathlib import Path
 from .ip_blacklist import get_blacklist
+from .config import REQUEST_LOGGING_CONFIG
+from logging.handlers import RotatingFileHandler
 
 class SecurityMiddleware:
     def __init__(self, app: Flask = None, log_file: str = None):
@@ -48,6 +50,11 @@ class SecurityMiddleware:
         if not self.security_logger.handlers:
             self.security_logger.addHandler(file_handler)
         
+        # Setup request logging if enabled
+        self.request_logger = None
+        if REQUEST_LOGGING_CONFIG.get('enabled', False):
+            self._setup_request_logger()
+        
         if app is not None:
             self.init_app(app)
     
@@ -62,6 +69,99 @@ class SecurityMiddleware:
         self._register_security_routes()
         
         self.security_logger.info("Security middleware initialized")
+    
+    def _setup_request_logger(self):
+        """Setup comprehensive request logging"""
+        request_log_file = Path(__file__).parent / 'logs' / 'requests.log'
+        request_log_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Create request logger with unique name to avoid conflicts
+        self.request_logger = logging.getLogger('telescope_requests')
+        self.request_logger.setLevel(logging.INFO)
+        
+        # Clear any existing handlers to avoid duplicates
+        self.request_logger.handlers.clear()
+        
+        # Use rotating file handler to manage log size
+        max_bytes = REQUEST_LOGGING_CONFIG.get('max_log_size_mb', 50) * 1024 * 1024
+        backup_count = REQUEST_LOGGING_CONFIG.get('backup_count', 10)
+        
+        request_handler = RotatingFileHandler(
+            request_log_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count
+        )
+        request_handler.setLevel(logging.INFO)
+        
+        # Create formatter for request logs
+        request_formatter = logging.Formatter('%(asctime)s - %(message)s')
+        request_handler.setFormatter(request_formatter)
+        
+        # Add handler
+        self.request_logger.addHandler(request_handler)
+        
+        # Prevent propagation to root logger
+        self.request_logger.propagate = False
+        
+        # Test that the logger works
+        try:
+            test_log = {"test": "Request logging initialized", "timestamp": datetime.now().isoformat()}
+            self.request_logger.info(json.dumps(test_log))
+            # Force flush
+            for handler in self.request_logger.handlers:
+                handler.flush()
+        except Exception as e:
+            self.security_logger.error(f"Failed to initialize request logging: {e}")
+        
+        self.security_logger.info("Request logging initialized")
+    
+    def _log_request(self):
+        """Log every request with true client IP and details"""
+        if not self.request_logger:
+            return
+            
+        # Check if we should exclude this path
+        exclude_paths = REQUEST_LOGGING_CONFIG.get('exclude_paths', [])
+        for exclude_path in exclude_paths:
+            if request.path.startswith(exclude_path):
+                return
+        
+        client_ip = self._get_client_ip()
+        
+        # Prepare request data
+        request_data = {
+            'timestamp': datetime.now().isoformat(),
+            'client_ip': client_ip,
+            'method': request.method,
+            'path': request.path,
+            'url': request.url,
+            'query_string': request.query_string.decode('utf-8') if request.query_string else '',
+            'remote_addr': request.remote_addr,  # This will be 127.0.0.1 from Caddy
+            'scheme': request.scheme,
+            'headers': {}
+        }
+        
+        # Add specified headers
+        include_headers = REQUEST_LOGGING_CONFIG.get('include_headers', [])
+        for header_name in include_headers:
+            header_value = request.headers.get(header_name)
+            if header_value:
+                request_data['headers'][header_name] = header_value
+        
+        # Log in JSON format for easy parsing
+        try:
+            if REQUEST_LOGGING_CONFIG.get('log_format') == 'json':
+                self.request_logger.info(json.dumps(request_data))
+            else:
+                # Text format
+                log_msg = f"{client_ip} - {request.method} {request.path} - {request.headers.get('User-Agent', 'unknown')}"
+                self.request_logger.info(log_msg)
+            
+            # Force flush to ensure immediate write
+            for handler in self.request_logger.handlers:
+                handler.flush()
+        except Exception as e:
+            self.security_logger.error(f"Error writing request log: {e}")
     
     def _get_client_ip(self) -> str:
         """Get the real client IP address"""
@@ -146,6 +246,9 @@ class SecurityMiddleware:
     
     def _before_request(self):
         """Handle request before processing"""
+        # Log all requests with true client IP
+        self._log_request()
+        
         client_ip = self._get_client_ip()
         
         # Skip security checks for localhost in development

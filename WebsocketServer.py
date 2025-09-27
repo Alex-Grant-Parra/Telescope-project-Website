@@ -6,20 +6,76 @@ import time
 import tempfile
 import os
 import threading
+import hashlib
+import secrets
 from flask import jsonify, request, Response
 
 # WebSocket Configuration - using the same ports as defined in Server.py
 commandPort = 4000
 LiveViewPort = 8000
-WS_IP = "0.0.0.0"
+WS_IP = os.getenv("WS_IP", "0.0.0.0")  # Use environment variable, default to all interfaces
 WS_PORT = commandPort
 LIVEVIEW_WS_PORT = LiveViewPort
+
+# Security Configuration
+def load_api_tokens():
+    """Load API tokens from file"""
+    tokens_file = "api_tokens.json"
+    if os.path.exists(tokens_file):
+        try:
+            with open(tokens_file, 'r') as f:
+                tokens = json.load(f)
+            print(f"[TOKENS] Loaded {len(tokens)} API tokens from {tokens_file}")
+            for token, info in tokens.items():
+                print(f"[TOKENS] - {info.get('name', 'Unknown')} ({info.get('client_type', 'unknown')})")
+            return tokens
+        except Exception as e:
+            print(f"[WARNING] Failed to load API tokens: {e}")
+    
+    # Return empty dict if no file or error
+    print(f"[WARNING] No API tokens file found. Create '{tokens_file}' or use manage_tokens.py")
+    return {}
+
+API_TOKENS = load_api_tokens()
+
+# Rate limiting
+client_request_counts = {}
+REQUEST_LIMIT_PER_MINUTE = 60
 
 # Global variables
 pending = {}
 latest_frames = {}
 last_frame_log_time = {}
 clients = []
+clients = []
+
+def authenticate_token(token):
+    """Validate client authentication token"""
+    return token in API_TOKENS
+
+def check_rate_limit(client_ip):
+    """Simple rate limiting check"""
+    current_time = time.time()
+    minute_key = int(current_time // 60)
+    
+    if client_ip not in client_request_counts:
+        client_request_counts[client_ip] = {}
+    
+    if minute_key not in client_request_counts[client_ip]:
+        client_request_counts[client_ip][minute_key] = 0
+    
+    client_request_counts[client_ip][minute_key] += 1
+    
+    # Clean old entries
+    old_keys = [k for k in client_request_counts[client_ip].keys() if k < minute_key - 1]
+    for k in old_keys:
+        del client_request_counts[client_ip][k]
+    
+    return client_request_counts[client_ip][minute_key] <= REQUEST_LIMIT_PER_MINUTE
+
+def generate_token():
+    """Generate a secure token for new clients"""
+    return secrets.token_urlsafe(32)
 
 class Client:
     def __init__(self, client_id, ws):
@@ -67,12 +123,58 @@ class ClientManager:
 client_manager = ClientManager()
 
 async def handle_client(ws):
-    client_id = await ws.recv()
+    client_ip = ws.remote_address[0] if ws.remote_address else "unknown"
+    
+    # Rate limiting check
+    if not check_rate_limit(client_ip):
+        print(f"[SECURITY] Rate limit exceeded for {client_ip}")
+        await ws.close(code=4008, reason='Rate limit exceeded')
+        return
+    
+    try:
+        # First message should be authentication
+        auth_message = await asyncio.wait_for(ws.recv(), timeout=10)
+        auth_data = json.loads(auth_message)
+        
+        token = auth_data.get('token')
+        client_id = auth_data.get('client_id')
+        
+        if not token or not authenticate_token(token):
+            print(f"[SECURITY] Authentication failed for {client_ip}")
+            await ws.close(code=4001, reason='Authentication failed')
+            return
+            
+        if not client_id:
+            print(f"[SECURITY] No client_id provided from {client_ip}")
+            await ws.close(code=4002, reason='Client ID required')
+            return
+            
+    except asyncio.TimeoutError:
+        print(f"[SECURITY] Authentication timeout for {client_ip}")
+        await ws.close(code=4003, reason='Authentication timeout')
+        return
+    except json.JSONDecodeError:
+        print(f"[SECURITY] Invalid JSON from {client_ip}")
+        await ws.close(code=4004, reason='Invalid JSON')
+        return
+    except Exception as e:
+        print(f"[SECURITY] Authentication error for {client_ip}: {e}")
+        await ws.close(code=4000, reason='Authentication error')
+        return
+    
+    # Authentication successful
     client_manager.add_client(client_id, ws)
-    print(f"[+] {client_id} connected.")
+    client_type = API_TOKENS[token].get('client_type', 'unknown')
+    client_name = API_TOKENS[token].get('name', client_id)
+    print(f"[+] {client_name} ({client_type}) connected from {client_ip}")
 
     try:
         async for message in ws:
+            # Rate limiting for each message
+            if not check_rate_limit(client_ip):
+                print(f"[SECURITY] Rate limit exceeded for {client_id} from {client_ip}")
+                break
+                
             data = json.loads(message)
             msg_id = data.get("id")
             if msg_id in pending:
@@ -81,15 +183,61 @@ async def handle_client(ws):
             else:
                 print(f"[{client_id}] -> {data}")
     except websockets.exceptions.ConnectionClosed:
-        print(f"[-] {client_id} disconnected")
+        print(f"[-] {client_name} disconnected")
+    except json.JSONDecodeError:
+        print(f"[SECURITY] Invalid JSON from {client_id}")
+    except Exception as e:
+        print(f"[ERROR] Error handling {client_id}: {e}")
     finally:
         client_manager.remove_client(client_id)
 
 # WebSocket handler for live view frames from client
 async def handle_liveview_client(ws):
+    client_ip = ws.remote_address[0] if ws.remote_address else "unknown"
+    
+    # Rate limiting check
+    if not check_rate_limit(client_ip):
+        print(f"[SECURITY] LiveView rate limit exceeded for {client_ip}")
+        await ws.close(code=4008, reason='Rate limit exceeded')
+        return
+    
     try:
-        client_id = await ws.recv()
-        print(f"[LiveView] {client_id} connected for live view.")
+        # First message should be authentication
+        auth_message = await asyncio.wait_for(ws.recv(), timeout=10)
+        auth_data = json.loads(auth_message)
+        
+        token = auth_data.get('token')
+        client_id = auth_data.get('client_id')
+        
+        if not token or not authenticate_token(token):
+            print(f"[SECURITY] LiveView authentication failed for {client_ip}")
+            await ws.close(code=4001, reason='Authentication failed')
+            return
+            
+        if not client_id:
+            print(f"[SECURITY] LiveView no client_id provided from {client_ip}")
+            await ws.close(code=4002, reason='Client ID required')
+            return
+            
+    except asyncio.TimeoutError:
+        print(f"[SECURITY] LiveView authentication timeout for {client_ip}")
+        await ws.close(code=4003, reason='Authentication timeout')
+        return
+    except json.JSONDecodeError:
+        print(f"[SECURITY] LiveView invalid JSON from {client_ip}")
+        await ws.close(code=4004, reason='Invalid JSON')
+        return
+    except Exception as e:
+        print(f"[SECURITY] LiveView authentication error for {client_ip}: {e}")
+        await ws.close(code=4000, reason='Authentication error')
+        return
+    
+    # Authentication successful
+    client_type = API_TOKENS[token].get('client_type', 'unknown')
+    client_name = API_TOKENS[token].get('name', client_id)
+    print(f"[LiveView] {client_name} ({client_type}) connected from {client_ip}")
+    
+    try:
         while True:
             try:
                 message = await ws.recv()
@@ -97,13 +245,13 @@ async def handle_liveview_client(ws):
                 now = time.time()
                 # Only log every 2 seconds per client
                 if (client_id not in last_frame_log_time) or (now - last_frame_log_time[client_id] > 2):
-                    print(f"[LiveView] Received frame from {client_id}, size: {len(message)} bytes")
+                    print(f"[LiveView] Received frame from {client_name}, size: {len(message)} bytes")
                     last_frame_log_time[client_id] = now
             except websockets.exceptions.ConnectionClosed:
-                print(f"[LiveView] {client_id} disconnected from live view.")
+                print(f"[LiveView] {client_name} disconnected from live view.")
                 break
             except Exception as e:
-                print(f"[LiveView] Error receiving frame from {client_id}: {e}")
+                print(f"[LiveView] Error receiving frame from {client_name}: {e}")
     except Exception as e:
         print(f"[LiveView] Error in connection: {e}")
     finally:
@@ -205,15 +353,47 @@ def liveview_handler(client_id):
 
 def register_client_handler():
     """Handler for /client/register route"""
-    # Generate a unique client_id
     print("Client requesting client ID")
     client_id = str(uuid.uuid4())
-
+    
+    # Generate a secure token for the client
+    token = generate_token()
+    
+    # For now, we'll allow registration but you should add your own authorization logic
+    # In production, you might want to require admin approval or other validation
+    
     clients.append(client_id)
     
-    # Optionally, store the client_id in a database or in-memory structure
-    # For example: registered_clients[client_id] = {"timestamp": time.time()}
-    
     print(f"[+] New client registered: {client_id}")
+    print(f"[SECURITY] Generated token for client (store this securely): {token}")
+    
+    return jsonify({
+        "client_id": client_id,
+        "token": token,
+        "message": "Store this token securely - you'll need it to connect via WebSocket"
+    })
 
-    return jsonify({"client_id": client_id})
+def add_api_token_handler():
+    """Handler for /admin/add_token route - for manually adding authorized tokens"""
+    data = request.get_json()
+    
+    # Add your admin authentication here
+    # For example: check if request is from admin user
+    
+    token = data.get('token') or generate_token()
+    client_type = data.get('client_type', 'observer')  # telescope, observer
+    name = data.get('name', 'Unknown Client')
+    
+    API_TOKENS[token] = {
+        "client_type": client_type,
+        "name": name
+    }
+    
+    print(f"[ADMIN] Added API token for {name} ({client_type})")
+    
+    return jsonify({
+        "token": token,
+        "client_type": client_type,
+        "name": name,
+        "message": "Token added successfully"
+    })

@@ -75,3 +75,24 @@ LOGGING_CONFIG = {
     'max_log_size_mb': 10,  # Rotate logs when they exceed 10MB
     'backup_count': 5       # Keep 5 backup log files
 }
+
+# Request logging - logs ALL requests with true client IPs
+REQUEST_LOGGING_CONFIG = {
+    'enabled': True,
+    'log_file': 'security/logs/requests.log',
+    'log_format': 'json',  # 'json' or 'text'
+    'exclude_paths': [     # Don't log these paths to reduce noise
+        '/static/',
+        '/favicon.ico',
+        '/robots.txt'
+    ],
+    'include_headers': [   # Additional headers to log
+        'User-Agent',
+        'Referer', 
+        'Accept-Language',
+        'X-Forwarded-For',
+        'X-Real-IP'
+    ],
+    'max_log_size_mb': 50, # Larger size for request logs
+    'backup_count': 10     # Keep more backups for request logs
+}
