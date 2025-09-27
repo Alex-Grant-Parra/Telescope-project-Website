@@ -6,15 +6,10 @@ from flask_mail import Mail
 from dotenv import load_dotenv
 import os
 import importlib
-import threading
 from socket import gethostname
 from db import db
-import base64
-import logging
 import subprocess
 import atexit
-import signal
-
 # Import security components
 from security import SecurityMiddleware, register_security_error_handlers
 
