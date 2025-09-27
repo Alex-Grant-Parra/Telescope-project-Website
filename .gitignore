@@ -4,3 +4,4 @@ camera_photos
 __pycache__
 security/logs/
 security/blacklist.txt
+api_tokens.json
