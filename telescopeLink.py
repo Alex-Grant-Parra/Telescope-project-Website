@@ -59,9 +59,10 @@ class Cameralink:
         
         return data
 
-    def start_liveview_client(server_ip, client_id):
+    def start_liveview_client(server_ip=None, client_id=None):
         async def send_frames():
-            uri = f"ws://{server_ip}:8002"
+            # Use new WSS endpoint through Cloudflare Tunnel
+            uri = "wss://liveview.telescopes.dev"
             async with websockets.connect(uri, max_size=2*1024*1024) as ws:
                 await ws.send(client_id)
                 # Use gphoto2 to capture preview frames

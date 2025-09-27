@@ -12,6 +12,8 @@ from db import db
 import base64
 import logging
 import subprocess
+import atexit
+import signal
 
 # Import security components
 from security import SecurityMiddleware, register_security_error_handlers
@@ -20,10 +22,36 @@ from security import SecurityMiddleware, register_security_error_handlers
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 # Startup caddy
-
 caddyPath = os.path.join(BASE_DIR, "caddy_windows_amd64.exe") 
 caddyProc = subprocess.Popen([caddyPath, "run"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 print("Caddy started in the background")
+
+# Startup Cloudflare Tunnel
+cloudflaredPath = os.path.join(BASE_DIR, "cloudflared.exe")
+configPath = os.path.join(BASE_DIR, "config.yml")
+cloudflaredProc = subprocess.Popen([cloudflaredPath, "tunnel", "--config", configPath, "run", "telescope-websockets"], 
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+print("Cloudflare Tunnel started in the background")
+
+# Cleanup function for shutting down processes
+def cleanup_processes():
+    """Clean up Caddy and Cloudflare Tunnel processes on exit"""
+    try:
+        if 'caddyProc' in globals() and caddyProc.poll() is None:
+            print("Terminating Caddy process...")
+            caddyProc.terminate()
+    except Exception as e:
+        print(f"Error terminating Caddy: {e}")
+    
+    try:
+        if 'cloudflaredProc' in globals() and cloudflaredProc.poll() is None:
+            print("Terminating Cloudflare Tunnel process...")
+            cloudflaredProc.terminate()
+    except Exception as e:
+        print(f"Error terminating Cloudflare Tunnel: {e}")
+
+# Register cleanup function
+atexit.register(cleanup_processes)
 
 # Flask App Initialization
 app = Flask(__name__)

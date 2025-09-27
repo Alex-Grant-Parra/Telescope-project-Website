@@ -1,6 +1,15 @@
 # Secure WebSocket Setup for External Clients
 
-This guide explains how to securely allow external clients to connect to your telescope WebSocket server.
+This guide explains how to securely allow ```python
+import asyncio
+import websockets
+import json
+
+async def connect_to_telescope():
+    # Use secure WSS endpoints through Cloudflare Tunnel
+    uri = "wss://ws.telescopes.dev"
+    
+    async with websockets.connect(uri) as websocket:clients to connect to your telescope WebSocket server.
 
 ## Security Features Implemented
 
