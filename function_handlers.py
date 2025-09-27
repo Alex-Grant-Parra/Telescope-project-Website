@@ -1,9 +1,9 @@
 import time
 import requests
 import os
-from cameraController import Camera
+from cameraController import Camera # type: ignore
 
-SERVER_URL = "http://82.36.204.156"  # Update with your server's URL
+SERVER_URL = "http://telescopes.dev"  # Update with your server's URL
 
 liveview_enabled = False
 
