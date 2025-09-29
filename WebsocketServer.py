@@ -244,13 +244,27 @@ async def handle_liveview_client(ws):
                 now = time.time()
                 # Only log every 2 seconds per client
                 if (client_id not in last_frame_log_time) or (now - last_frame_log_time[client_id] > 2):
-                    print(f"[LiveView] Received frame from {client_name}, size: {len(message)} bytes")
+                    # print(f"[LiveView] Received frame from {client_name}, size: {len(message)} bytes")
                     last_frame_log_time[client_id] = now
             except websockets.exceptions.ConnectionClosed:
                 print(f"[LiveView] {client_name} disconnected from live view.")
                 break
+            except websockets.exceptions.ConnectionClosedError as e:
+                # Check if it's a frame size error
+                if "payload length" in str(e) and "max_size" in str(e):
+                    print(f"[LiveView] Frame too large from {client_name}, skipping and continuing...")
+                    continue  # Skip this frame and continue receiving
+                else:
+                    print(f"[LiveView] Connection closed for {client_name}: {e}")
+                    break
+            except websockets.exceptions.PayloadTooBig:
+                print(f"[LiveView] Frame too large from {client_name}, skipping and continuing...")
+                continue  # Skip this frame and continue receiving
             except Exception as e:
+                # Log the error but continue trying to receive frames
                 print(f"[LiveView] Error receiving frame from {client_name}: {e}")
+                # Small delay to prevent tight error loops
+                await asyncio.sleep(0.1)
     except Exception as e:
         print(f"[LiveView] Error in connection: {e}")
     finally:
@@ -265,7 +279,7 @@ def save_latest_frame(client_id):
             file_path = os.path.join(tmp_dir, f"{client_id}_latest.jpg")
             with open(file_path, "wb") as f:
                 f.write(frame)
-            print(f"[DEBUG] Saved {file_path}")
+            # print(f"[DEBUG] Saved {file_path}")
         except Exception as e:
             print(f"[DEBUG] Failed to save frame for {client_id}: {e}")
 
