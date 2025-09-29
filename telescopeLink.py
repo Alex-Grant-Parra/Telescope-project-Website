@@ -164,7 +164,9 @@ class Cameralink:
                     proc.terminate()
         asyncio.run(send_frames())
 
+    @staticmethod
     def startLiveView():
+        print("Starting Live View from telescopeLink.py")
         payload = {"client_id": client_id, "command": "startLiveView"}
         response = requests.post(url, json=payload).text
 
@@ -173,7 +175,9 @@ class Cameralink:
         
         return extracted_data
     
-    def startLiveView():
+    @staticmethod
+    def stopLiveView():
+        print("Stopping Live View from telescopeLink.py")
         payload = {"client_id": client_id, "command": "stopLiveView"}
         response = requests.post(url, json=payload).text
 
