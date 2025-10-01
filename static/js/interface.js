@@ -109,12 +109,77 @@ function takePhoto() {
 // Live View Toggle Logic
 let liveViewActive = false;
 function toggleLiveView() {
-    liveViewActive = !liveViewActive;
+    console.log("Live view toggled");
+    
     const btn = document.getElementById("liveViewToggleBtn");
-    btn.textContent = liveViewActive ? "Stop" : "Start";
-    btn.classList.toggle("btn-outline-primary", !liveViewActive);
-    btn.classList.toggle("btn-outline-danger", liveViewActive);
-    // Add your start/stop live view logic here
+    
+    if (!btn) {
+        console.error("Live view button not found! Make sure an element with ID 'liveViewToggleBtn' exists.");
+        alert("Live view button not found in the page!");
+        return;
+    }
+    
+    // console.log("Button found, current liveViewActive state:", liveViewActive);
+    
+    if (liveViewActive) {
+        // Stop live view
+        console.log("Attempting to stop live view...");
+        console.log("Making POST request to /interface/stop_live_view");
+        fetch("/interface/stop_live_view", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+        })
+        .then(response => {
+            console.log("Stop live view response received:", response);
+            return response.json();
+        })
+        .then(data => {
+            console.log("Stop live view data:", data);
+            if (data.status === "success") {
+                liveViewActive = false;
+                btn.textContent = "Start";
+                btn.classList.remove("btn-outline-danger");
+                btn.classList.add("btn-outline-primary");
+                console.log("Live view stopped successfully");
+            } else {
+                console.error("Failed to stop live view:", data.message);
+                alert("Error stopping live view: " + data.message);
+            }
+        })
+        .catch(error => {
+            console.error("Error stopping live view:", error);
+            alert("Error stopping live view: " + error);
+        });
+    } else {
+        // Start live view
+        console.log("Attempting to start live view...");
+        console.log("Making POST request to /interface/start_live_view");
+        fetch("/interface/start_live_view", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+        })
+        .then(response => {
+            console.log("Start live view response received:", response);
+            return response.json();
+        })
+        .then(data => {
+            console.log("Start live view data:", data);
+            if (data.status === "success") {
+                liveViewActive = true;
+                btn.textContent = "Stop";
+                btn.classList.remove("btn-outline-primary");
+                btn.classList.add("btn-outline-danger");
+                console.log("Live view started successfully");
+            } else {
+                console.error("Failed to start live view:", data.message);
+                alert("Error starting live view: " + data.message);
+            }
+        })
+        .catch(error => {
+            console.error("Error starting live view:", error);
+            alert("Error starting live view: " + error);
+        });
+    }
 }
 
 function showStarInfo(star) {
