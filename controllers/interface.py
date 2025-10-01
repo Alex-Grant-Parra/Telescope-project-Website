@@ -150,20 +150,13 @@ def format_celestial_data(name, data):
 
 @interface_bp.route("/get_camera_choices")
 def get_camera_choices():
-    # # Map setting names to gphoto2 config paths
-    # settings = {
-    #     "shutterSpeed": "/main/capturesettings/shutterspeed",
-    #     "iso": "/main/imgsettings/iso",
-    #     # Add more settings as needed
-    # }
-    # choices = {}
-    # start = time.time()
-    # for label, path in settings.items():
-    #     result = Camera.getSettingChoices(label, path)
-    #     choices[label] = result if result else []
-    # print(f"get_camera_choices took {time.time() - start:.2f} seconds")
-    choices = Cameralink.getSettings()
-    return jsonify(choices)
+    try:
+        choices = Cameralink.getSettings()
+        # print(choices)
+        return jsonify(choices)
+    except (KeyError, TypeError) as e:
+        print(f"{e}. Maybe camera is not connected?")
+    
 
 @interface_bp.route("/take_photo", methods=["POST"])
 def take_photo():
@@ -327,3 +320,23 @@ def update_telescope_heartbeat():
         
     except Exception as e:
         return jsonify({"status": "error", "message": f"Failed to update telescope heartbeat: {str(e)}"})
+
+@interface_bp.route("/start_live_view", methods=["POST"])
+def start_live_view():
+    """Start live view on the telescope"""
+    print("Started live view")
+    try:
+        result = Cameralink.startLiveView()
+        return jsonify({"status": "success", "message": "Live view started", "result": result})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Failed to start live view: {str(e)}"})
+
+@interface_bp.route("/stop_live_view", methods=["POST"])
+def stop_live_view():
+    """Stop live view on the telescope"""
+    print("Stopped live view")
+    try:
+        result = Cameralink.stopLiveView()
+        return jsonify({"status": "success", "message": "Live view stopped", "result": result})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Failed to stop live view: {str(e)}"})
