@@ -19,7 +19,7 @@ LIVEVIEW_WS_PORT = LiveViewPort
 # Security Configuration
 def load_api_tokens():
     """Load API tokens from file"""
-    tokens_file = "api_tokens.json"
+    tokens_file = "security/api_tokens.json"
     if os.path.exists(tokens_file):
         try:
             with open(tokens_file, 'r') as f:

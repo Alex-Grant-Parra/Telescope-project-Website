@@ -33,7 +33,7 @@ client_id = "pi-001"
 def load_api_token():
     """Load API token from api_tokens.json file"""
     try:
-        with open("api_tokens.json", "r") as f:
+        with open("security/api_tokens.json", "r") as f:
             tokens = ujson.load(f)
             # Return the first token found (assumes telescope has one token)
             for token, info in tokens.items():
