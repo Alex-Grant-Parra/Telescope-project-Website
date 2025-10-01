@@ -1,11 +1,33 @@
 import time
 import requests
 import os
+import json
 from cameraController import Camera # type: ignore
 
 SERVER_URL = "https://telescopes.dev"  # Update with your server's URL
+LIVEVIEW_STATE_FILE = "liveview_state.json"
 
-liveview_enabled = True
+def load_liveview_state():
+    """Load live view state from file"""
+    if os.path.exists(LIVEVIEW_STATE_FILE):
+        try:
+            with open(LIVEVIEW_STATE_FILE, 'r') as f:
+                state = json.load(f)
+                return state.get("enabled", False)  # Default to False
+        except Exception:
+            pass
+    return False  # Default to disabled
+
+def save_liveview_state(enabled):
+    """Save live view state to file"""
+    try:
+        with open(LIVEVIEW_STATE_FILE, 'w') as f:
+            json.dump({"enabled": enabled}, f)
+    except Exception:
+        pass
+
+# Load the live view state from file, or default to True
+liveview_enabled = load_liveview_state()
 
 def echo(message):
     return f"Echo: {message}"
@@ -73,12 +95,18 @@ def capturePhoto(currentid):
 def startLiveView():
     global liveview_enabled
     liveview_enabled = True
+    save_liveview_state(True)
     print("[liveview] Live view started.")
     return "Live view started"
 
 def stopLiveView():
     global liveview_enabled
     liveview_enabled = False
+    save_liveview_state(False)
+    
+    # Release camera viewfinder using the Camera class
+    Camera.releaseViewfinder()
+    
     print("[liveview] Live view stopped.")
     return "Live view stopped"
 

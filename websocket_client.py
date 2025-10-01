@@ -7,6 +7,7 @@ import sys
 import re
 import signal
 import os
+from datetime import datetime
 from function_handlers import function_map, is_liveview_enabled
 
 CLIENT_ID_FILE = "client_id.json"
@@ -71,41 +72,84 @@ async def handle_server(ws):
     # Send authentication as first message
     await authenticate_with_server(ws)
     
-    async for message in ws:
-        try:
-            data = json.loads(message)
-            function_name = data.get("function")
+    last_message_time = time.time()
+    
+    try:
+        async for message in ws:
+            try:
+                last_message_time = time.time()
+                data = json.loads(message)
+                function_name = data.get("function")
 
-            if function_name in function_map:
-                func = function_map[function_name]
-                args = data.get("args", [])
-                result = func(*args)
-                response = json.dumps({"result": result, "id": data.get("id")})
-            else:
-                response = json.dumps({"error": f"Function '{function_name}' not found", "id": data.get("id")})
+                if function_name in function_map:
+                    func = function_map[function_name]
+                    args = data.get("args", [])
+                    result = func(*args)
+                    response = json.dumps({"result": result, "id": data.get("id")})
+                else:
+                    response = json.dumps({"error": f"Function '{function_name}' not found", "id": data.get("id")})
 
-            await ws.send(response)
-        except Exception as e:
-            await ws.send(json.dumps({"error": str(e)}))
+                await ws.send(response)
+            except Exception as e:
+                error_response = json.dumps({"error": str(e)})
+                try:
+                    await ws.send(error_response)
+                except:
+                    print(f"[handle_server] Failed to send error response: {e}")
+                    raise
+    except Exception as e:
+        error_type = type(e).__name__
+        connection_duration = time.time() - last_message_time
+        print(f"[handle_server] Connection ended at {datetime.now()}: {error_type} - {str(e)}")
+        print(f"[handle_server] Connection was active for {connection_duration:.1f} seconds since last message")
+        raise
 
 async def run_client():
-    """Run the main WebSocket client"""
-    try:
-        async with websockets.connect(SERVER_URI, ping_interval=20) as ws:
-            print(f"[{CLIENT_ID}] Connected to {SERVER_URI}")
+    """Run the main WebSocket client with automatic reconnection"""
+    
+    while True:  # Outer reconnection loop
+        connection_start_time = time.time()
+        ws = None
+        try:
+            print(f"[run_client] Connecting to {SERVER_URI} at {datetime.now()}...")
+            ws = await websockets.connect(SERVER_URI, ping_interval=20, ping_timeout=10)
+            print(f"[{CLIENT_ID}] Connected to {SERVER_URI} at {datetime.now()}")
             await handle_server(ws)
-    except Exception as e:
-        print(f"[run_client] Exception: {e}")
-
-# def get_liveview_ws_uri():
-#     """Generate the live view WebSocket URI"""
-#     liveViewPort = 8000
-#     # Extract host from SERVER_URI
-#     match = re.match(r"ws://([\w\.-]+):\d+", SERVER_URI)
-#     if not match:
-#         raise ValueError("SERVER_URI format invalid")
-#     host = match.group(1)
-#     return f"ws://{host}:{liveViewPort}"
+                
+        except Exception as e:
+            error_type = type(e).__name__
+            error_msg = str(e)
+            connection_duration = time.time() - connection_start_time
+            
+            # Provide more specific error information but suppress verbose details
+            if 'ConnectionClosed' in error_type or 'ConnectionClosedError' in error_type:
+                print(f"[run_client] WebSocket connection closed at {datetime.now()}")
+            elif 'ConnectionRefused' in error_type:
+                print(f"[run_client] Server appears to be down or unreachable at {datetime.now()}")
+            elif 'timeout' in error_msg.lower():
+                print(f"[run_client] Connection timeout at {datetime.now()}")
+            elif 'authentication' in error_msg.lower() or 'unauthorized' in error_msg.lower():
+                print(f"[run_client] Authentication failed at {datetime.now()}")
+            elif 'ssl' in error_msg.lower() or 'certificate' in error_msg.lower():
+                print(f"[run_client] SSL/TLS error at {datetime.now()}")
+            elif 'network' in error_msg.lower() or 'unreachable' in error_msg.lower():
+                print(f"[run_client] Network error at {datetime.now()}")
+            else:
+                print(f"[run_client] Connection lost at {datetime.now()}: {error_type}")
+            
+            print(f"[run_client] Connection lasted {connection_duration:.1f} seconds")
+            print(f"[run_client] Reconnecting in 5 seconds...")
+            
+        finally:
+            # Ensure proper cleanup
+            if ws and ws.close_code is None:
+                try:
+                    await asyncio.wait_for(ws.close(), timeout=2.0)
+                except:
+                    pass
+        
+        # Wait before reconnecting
+        await asyncio.sleep(5)
 
 async def authenticate_liveview(ws):
     """Send authentication message to liveview server"""
@@ -121,7 +165,7 @@ async def authenticate_liveview(ws):
     print(f"[liveview] Sent authentication for client: {CLIENT_ID}")
 
 async def send_frames():
-    """Send live camera frames via WebSocket"""
+    """Send live camera frames via WebSocket with automatic reconnection"""
     uri = "wss://liveview.telescopes.dev"
     JPEG_START = b'\xff\xd8'
     JPEG_END = b'\xff\xd9'
@@ -129,8 +173,13 @@ async def send_frames():
     last_frame_time = 0
     frame_interval = 1 / 10  # 10 FPS
 
-    try:
-        async with websockets.connect(uri, max_size=2*1024*1024) as ws:
+    while True:  # Outer reconnection loop
+        connection_start_time = time.time()
+        ws = None
+        try:
+            print(f"[send_frames] Connecting to {uri} at {datetime.now()}...")
+            ws = await websockets.connect(uri, max_size=2*1024*1024, ping_interval=20, ping_timeout=10)
+            print(f"[send_frames] Connected successfully at {datetime.now()}")
             # Send authentication as first message
             await authenticate_liveview(ws)
             
@@ -138,43 +187,137 @@ async def send_frames():
                 if not is_liveview_enabled():
                     await asyncio.sleep(0.2)
                     continue
-                proc = subprocess.Popen([
-                    "gphoto2", "--capture-movie", "--stdout"
-                ], stdout=subprocess.PIPE)
+                
+                # Check if WebSocket is still open
+                if ws.close_code is not None:
+                    connection_duration = time.time() - connection_start_time
+                    print(f"[send_frames] WebSocket closed silently at {datetime.now()}")
+                    print(f"[send_frames] Connection lasted {connection_duration:.1f} seconds")
+                    print(f"[send_frames] Close code: {ws.close_code}")
+                    break
+                
+                # Start camera capture process
+                if proc is None or proc.poll() is not None:
+                    if proc is not None:
+                        try:
+                            proc.terminate()
+                            proc.wait(timeout=2)
+                        except:
+                            pass
+                    
+                    try:
+                        proc = subprocess.Popen([
+                            "gphoto2", "--capture-movie", "--stdout"
+                        ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                    except Exception as proc_error:
+                        print(f"[send_frames] Failed to start gphoto2: {proc_error}")
+                        await asyncio.sleep(1)
+                        continue
+                
                 buffer = b''
                 try:
-                    while is_liveview_enabled():
-                        chunk = proc.stdout.read(4096)
-                        if not chunk:
-                            break
-                        buffer += chunk
-                        while True:
-                            start = buffer.find(JPEG_START)
-                            end = buffer.find(JPEG_END, start)
-                            if start != -1 and end != -1 and end > start:
-                                now = time.time()
-                                if now - last_frame_time >= frame_interval:
-                                    jpeg = buffer[start:end+2]
-                                    await ws.send(jpeg)
-                                    last_frame_time = now
-                                buffer = buffer[end+2:]
-                            else:
+                    while is_liveview_enabled() and ws.close_code is None:
+                        try:
+                            chunk = proc.stdout.read(4096)
+                            if not chunk:
                                 break
+                            buffer += chunk
+                            
+                            while True:
+                                start = buffer.find(JPEG_START)
+                                end = buffer.find(JPEG_END, start)
+                                if start != -1 and end != -1 and end > start:
+                                    now = time.time()
+                                    if now - last_frame_time >= frame_interval:
+                                        jpeg = buffer[start:end+2]
+                                        try:
+                                            await asyncio.wait_for(ws.send(jpeg), timeout=1.0)
+                                            last_frame_time = now
+                                        except (websockets.exceptions.ConnectionClosed, 
+                                               websockets.exceptions.ConnectionClosedError,
+                                               asyncio.TimeoutError) as send_error:
+                                            print(f"[send_frames] WebSocket send failed: {type(send_error).__name__}")
+                                            raise send_error
+                                        except Exception as send_error:
+                                            error_type = type(send_error).__name__
+                                            error_msg = str(send_error)
+                                            print(f"[send_frames] WebSocket send failed: {error_type} - {error_msg}")
+                                            raise send_error
+                                    buffer = buffer[end+2:]
+                                else:
+                                    break
+                        except Exception as read_error:
+                            if 'broken pipe' in str(read_error).lower():
+                                print(f"[send_frames] Camera process broken pipe, restarting...")
+                                break
+                            else:
+                                raise read_error
+                        
                         if not is_liveview_enabled():
                             break
-                    proc.terminate()
-                    proc.wait()
-                except Exception as e:
-                    print(f"[send_frames] Inner exception: {e}")
+                    
+                    # Clean up camera process after inner loop
                     if proc:
-                        proc.terminate()
-                        proc.wait()
-    except Exception as e:
-        print(f"[send_frames] Exception: {e}")
-    finally:
-        if proc:
-            proc.terminate()
-            proc.wait()
+                        try:
+                            proc.terminate()
+                            proc.wait(timeout=2)
+                        except:
+                            pass
+                        proc = None
+                        
+                except Exception as e:
+                    print(f"[send_frames] Inner exception: {type(e).__name__} - {str(e)}")
+                    # Clean up camera process on exception
+                    if proc:
+                        try:
+                            proc.terminate()
+                            proc.wait(timeout=2)
+                        except:
+                            pass
+                        proc = None
+                    raise  # Re-raise to trigger reconnection
+        
+        except Exception as e:
+            error_type = type(e).__name__
+            error_msg = str(e)
+            connection_duration = time.time() - connection_start_time
+            
+            # Provide more specific error information but suppress the asyncio callback errors
+            if 'ConnectionClosed' in error_type or 'ConnectionClosedError' in error_type:
+                print(f"[send_frames] WebSocket connection closed at {datetime.now()}")
+            elif 'timeout' in error_msg.lower():
+                print(f"[send_frames] Connection timeout at {datetime.now()}")
+            elif 'network' in error_msg.lower() or 'unreachable' in error_msg.lower():
+                print(f"[send_frames] Network error at {datetime.now()}")
+            elif 'ConnectionRefused' in error_type:
+                print(f"[send_frames] Server refused connection at {datetime.now()}")
+            else:
+                print(f"[send_frames] Connection lost at {datetime.now()}: {error_type}")
+            
+            print(f"[send_frames] Connection lasted {connection_duration:.1f} seconds")
+            print(f"[send_frames] Reconnecting in 5 seconds...")
+            
+        finally:
+            # Ensure proper cleanup
+            if proc:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=2)
+                except:
+                    try:
+                        proc.kill()
+                    except:
+                        pass
+                proc = None
+            
+            if ws and ws.close_code is None:
+                try:
+                    await asyncio.wait_for(ws.close(), timeout=2.0)
+                except:
+                    pass
+        
+        # Wait before reconnecting
+        await asyncio.sleep(5)
 
 def cleanup_camera():
     """Clean up camera processes"""
@@ -235,24 +378,17 @@ async def main():
     signal.signal(signal.SIGINT, handle_exit)
     
     try:
-        while True:
-            try:
-                task1 = asyncio.create_task(run_client())
-                task2 = asyncio.create_task(send_frames())
-                done, pending = await asyncio.wait([task1, task2], return_when=asyncio.FIRST_EXCEPTION)
-                for task in pending:
-                    task.cancel()
-                for task in done:
-                    if task.exception():
-                        print(f"[main] Task exception: {task.exception()}")
-                print("[main] Restarting both tasks in 5 seconds...")
-                await asyncio.sleep(5)
-            except KeyboardInterrupt:
-                print("[main] KeyboardInterrupt received, exiting and releasing camera...")
-                break
-            except Exception as e:
-                print(f"[main] Outer exception: {e}")
-                await asyncio.sleep(5)
+        # Both tasks now handle their own reconnection logic
+        task1 = asyncio.create_task(run_client())
+        task2 = asyncio.create_task(send_frames())
+        
+        # Wait for both tasks to complete (which should be never, unless interrupted)
+        await asyncio.gather(task1, task2)
+        
+    except KeyboardInterrupt:
+        print("[main] KeyboardInterrupt received, exiting and releasing camera...")
+    except Exception as e:
+        print(f"[main] Unexpected exception: {e}")
     finally:
         cleanup_camera()
 
