@@ -108,6 +108,37 @@ function takePhoto() {
 
 // Live View Toggle Logic
 let liveViewActive = false;
+let liveViewImage = null;
+let refreshInterval = null;
+const REFRESH_RATE = 1000; // Refresh every 1 second
+
+// Function to start refreshing the live view image
+function startImageRefresh() {
+    if (!liveViewImage) {
+        liveViewImage = document.querySelector('img[alt="Live Feed"]');
+    }
+    
+    if (liveViewImage && !refreshInterval) {
+        const baseUrl = liveViewImage.src.split('?')[0]; // Remove any existing query params
+        
+        refreshInterval = setInterval(() => {
+            // Add a timestamp to prevent caching
+            liveViewImage.src = baseUrl + '?t=' + new Date().getTime();
+        }, REFRESH_RATE);
+        
+        console.log("Image refresh started");
+    }
+}
+
+// Function to stop refreshing the live view image
+function stopImageRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+        console.log("Image refresh stopped");
+    }
+}
+
 function toggleLiveView() {
     console.log("Live view toggled");
     
@@ -140,6 +171,7 @@ function toggleLiveView() {
                 btn.textContent = "Start";
                 btn.classList.remove("btn-outline-danger");
                 btn.classList.add("btn-outline-primary");
+                stopImageRefresh(); // Stop refreshing the image
                 console.log("Live view stopped successfully");
             } else {
                 console.error("Failed to stop live view:", data.message);
@@ -169,6 +201,7 @@ function toggleLiveView() {
                 btn.textContent = "Stop";
                 btn.classList.remove("btn-outline-primary");
                 btn.classList.add("btn-outline-danger");
+                startImageRefresh(); // Start refreshing the image
                 console.log("Live view started successfully");
             } else {
                 console.error("Failed to start live view:", data.message);
