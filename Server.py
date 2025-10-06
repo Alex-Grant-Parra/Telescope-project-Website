@@ -19,14 +19,14 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 # Startup caddy
 caddyPath = os.path.join(BASE_DIR, "caddy_windows_amd64.exe") 
-caddyProc = subprocess.Popen([caddyPath, "run"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+# caddyProc = subprocess.Popen([caddyPath, "run"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 print("Caddy started in the background")
 
 # Startup Cloudflare Tunnel
 cloudflaredPath = os.path.join(BASE_DIR, "cloudflared.exe")
 configPath = os.path.join(BASE_DIR, "config.yml")
-cloudflaredProc = subprocess.Popen([cloudflaredPath, "tunnel", "--config", configPath, "run", "telescope-websockets"], 
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+# cloudflaredProc = subprocess.Popen([cloudflaredPath, "tunnel", "--config", configPath, "run", "telescope-websockets"],
+                                #    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 print("Cloudflare Tunnel started in the background")
 
 # Cleanup function for shutting down processes
@@ -124,10 +124,22 @@ print("")
 
 # User Loader for Flask-Login
 from models.user import User
+from models.trusted_device import TrustedDevice  # Import to register the model
 
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
+
+# Initialize database tables
+with app.app_context():
+    db.create_all()
+    print("Database tables created/verified")
+    
+    # Cleanup expired trusted devices
+    from models.trusted_device import TrustedDevice
+    expired_count = TrustedDevice.cleanup_expired_devices()
+    if expired_count > 0:
+        print(f"Cleaned up {expired_count} expired trusted devices")
 
 # Homepage Redirection
 @app.route("/")

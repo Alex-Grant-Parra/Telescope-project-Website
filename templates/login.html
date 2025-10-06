@@ -26,6 +26,16 @@
             <input type="password" name="password" class="form-control" required>
         </div>
 
+        <div class="mb-3 form-check">
+            <input type="checkbox" name="trust_device" class="form-check-input" id="trust_device">
+            <label class="form-check-label" for="trust_device">
+                Trust this device for 30 days (skip 2FA)
+            </label>
+            <small class="form-text text-muted">
+                Only check this on your personal devices. This will remember this device and skip 2FA for 30 days.
+            </small>
+        </div>
+
         <button type="submit" class="btn btn-primary w-100">Login</button>
     </form>
 

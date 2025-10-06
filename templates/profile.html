@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Profile - Telescope Control{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <h1 class="text-center mb-4">
+                <i class="fas fa-user-circle"></i> Profile
+            </h1>
+            
+            <!-- Flash messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                  <div class="alert alert-{{ category }} mt-3">{{ message }}</div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+
+            <!-- Profile Overview Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-user"></i> Account Overview</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Username:</strong> {{ current_user.username }}</p>
+                            <p><strong>Email:</strong> {{ current_user.get_email() }}</p>
+                            <p><strong>Account Type:</strong> 
+                                <span class="badge {% if current_user.is_admin %}bg-danger{% elif current_user.is_standard %}bg-success{% else %}bg-secondary{% endif %}">
+                                    {{ current_user.AccountType }}
+                                </span>
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Night Mode:</strong> 
+                                <span class="badge {% if current_user.get_night_mode() %}bg-dark{% else %}bg-light text-dark{% endif %}">
+                                    {% if current_user.get_night_mode() %}Enabled{% else %}Disabled{% endif %}
+                                </span>
+                            </p>
+                            <p><strong>Member Since:</strong> 
+                                <span class="text-muted">Account created</span>
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <a href="{{ url_for('profile.edit_profile') }}" class="btn btn-primary">
+                            <i class="fas fa-edit"></i> Edit Profile
+                        </a>
+                        <a href="{{ url_for('profile.account_info') }}" class="btn btn-info">
+                            <i class="fas fa-info-circle"></i> Account Details
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trusted Devices Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-shield-alt"></i> Trusted Devices</h5>
+                </div>
+                <div class="card-body">
+                    {% set trusted_devices = current_user.trusted_devices %}
+                    
+                    <p class="card-text">
+                        You have <strong>{{ trusted_devices|length }}</strong> trusted device(s).
+                    </p>
+                    
+                    {% if trusted_devices %}
+                        <div class="row">
+                            {% for device in trusted_devices[:3] %}
+                            <div class="col-md-4 mb-2">
+                                <div class="card bg-light">
+                                    <div class="card-body p-2">
+                                        <small>
+                                            <i class="fas fa-desktop"></i> {{ device.device_name }}<br>
+                                            <span class="text-muted">Last used: {{ device.last_used.strftime('%m/%d') }}</span>
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        {% if trusted_devices|length > 3 %}
+                        <p class="text-muted">And {{ trusted_devices|length - 3 }} more device(s)...</p>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-center text-muted py-3">
+                            <i class="fas fa-shield-alt fa-2x mb-2"></i>
+                            <p>No trusted devices yet. Check "Trust this device" when logging in to skip 2FA.</p>
+                        </div>
+                    {% endif %}
+                    
+                    <div class="mt-3">
+                        <a href="{{ url_for('profile.profile_trusted_devices') }}" class="btn btn-success">
+                            <i class="fas fa-cog"></i> Manage Trusted Devices
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Security Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-lock"></i> Security Settings</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-key"></i> Two-Factor Authentication</h6>
+                            <p class="small text-muted">Email-based 2FA is enabled for your account.</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-history"></i> Login History</h6>
+                            <p class="small text-muted">Monitor your account access and trusted devices.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Security Tip:</strong> Regularly review your trusted devices and revoke access for devices you no longer use.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="text-center">
+                <a href="{{ url_for('home.home') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Home
+                </a>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

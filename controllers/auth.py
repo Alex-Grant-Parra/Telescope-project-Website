@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_user, logout_user, current_user, login_required
 from utility.hash import hash_password, check_password
 from models.user import User
+from models.trusted_device import TrustedDevice
 from db import db
 from flask_mail import Message
 
@@ -13,18 +14,39 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+        trust_device = request.form.get('trust_device') == 'on'
         
         user = User.query.filter_by(username=username).first()
         if user and check_password(password, user.password):
-            session['user_id'] = user.id  # Store user ID in session
-            # Generate and send the 2FA code
-            totp_code = user.generate_totp_code()
-            # print(f"TOTP code sent: {totp_code}")  # Debug statement
-            msg = Message("Your 2FA Code", recipients=[user.get_email()])
-            msg.body = f"Your 2FA code is {totp_code}. Please enter this code to complete your login."
-            current_app.extensions['mail'].send(msg)
-            flash('Check your email for the 2FA code to complete the login.', 'info')
-            return redirect(url_for('auth.login_2fa'))
+            # Check if the request is coming from localhost:8080 to bypass 2FA
+            is_localhost = (request.host.startswith('localhost:8080'))
+            
+            # Check if this device is already trusted
+            is_trusted, device_name = TrustedDevice.is_device_trusted(user.id)
+            
+            if is_localhost:
+                # Skip 2FA for localhost:8080 connections
+                login_user(user)
+                flash('Login successful! (2FA bypassed for localhost)', 'success')
+                return redirect(url_for('home.home'))
+            elif is_trusted:
+                # Skip 2FA for trusted devices
+                login_user(user)
+                flash(f'Login successful! (Trusted device: {device_name})', 'success')
+                return redirect(url_for('home.home'))
+            else:
+                # Regular 2FA flow for other connections
+                session['user_id'] = user.id  # Store user ID in session
+                session['trust_device'] = trust_device  # Store trust device preference
+                
+                # Generate and send the 2FA code
+                totp_code = user.generate_totp_code()
+                # print(f"TOTP code sent: {totp_code}")  # Debug statement
+                msg = Message("Your 2FA Code", recipients=[user.get_email()])
+                msg.body = f"Your 2FA code is {totp_code}. Please enter this code to complete your login."
+                current_app.extensions['mail'].send(msg)
+                flash('Check your email for the 2FA code to complete the login.', 'info')
+                return redirect(url_for('auth.login_2fa'))
         else:
             flash('Invalid credentials, please try again.', 'danger')
 
@@ -141,6 +163,8 @@ def reset_password(token):
 def login_2fa():
     if request.method == 'POST':
         user_id = session.get('user_id')
+        trust_device = session.get('trust_device', False)
+        
         if not user_id:
             flash('Session expired. Please log in again.', 'danger')
             return redirect(url_for('auth.login'))
@@ -149,11 +173,54 @@ def login_2fa():
         totp_code = request.form['totp']
 
         if user.verify_2fa_code(totp_code):
+            # If user chose to trust this device, add it to trusted devices
+            if trust_device:
+                device_name = TrustedDevice.trust_device(user.id, trust_for_days=30)
+                flash(f'Login successful! Device "{device_name}" is now trusted for 30 days.', 'success')
+            else:
+                flash('Login successful!', 'success')
+            
             login_user(user)
-            flash('Login successful!', 'success')
             session.pop('user_id', None)  # Remove user_id from session
+            session.pop('trust_device', None)  # Remove trust_device from session
             return redirect(url_for('home.home'))
         else:
             flash('Invalid 2FA code. Please try again.', 'danger')
 
     return render_template('login_2fa.html')
+
+
+@auth_bp.route("/trusted_devices")
+@login_required
+def trusted_devices():
+    """Legacy route - redirect to profile-based trusted devices"""
+    return redirect(url_for('profile.profile_trusted_devices'))
+
+
+@auth_bp.route("/revoke_device/<int:device_id>", methods=['POST'])
+@login_required
+def revoke_device(device_id):
+    """Revoke trust for a specific device"""
+    if TrustedDevice.revoke_device(current_user.id, device_id):
+        flash('Device trust revoked successfully.', 'success')
+    else:
+        flash('Device not found or could not be revoked.', 'danger')
+    return redirect(url_for('auth.trusted_devices'))
+
+
+@auth_bp.route("/device_info")
+@login_required
+def device_info():
+    """Debug route to show device fingerprint information"""
+    fingerprint = TrustedDevice.generate_device_fingerprint()
+    device_name = TrustedDevice.get_device_name()
+    
+    return f"""
+    <h2>Device Information</h2>
+    <p><strong>Device Name:</strong> {device_name}</p>
+    <p><strong>Device Fingerprint:</strong> {fingerprint}</p>
+    <p><strong>User Agent:</strong> {request.headers.get('User-Agent', 'Unknown')}</p>
+    <p><strong>IP Address:</strong> {request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', 'Unknown'))}</p>
+    <p><strong>Host:</strong> {request.host}</p>
+    <a href="{url_for('auth.trusted_devices')}">Back to Trusted Devices</a>
+    """

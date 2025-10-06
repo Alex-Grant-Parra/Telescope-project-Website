@@ -10,3 +10,4 @@ python-dotenv
 websockets
 ujson
 requests
+waitress
