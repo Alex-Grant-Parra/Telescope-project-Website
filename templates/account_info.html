@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Account Information - Profile{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <h1 class="text-center mb-4">
+                <i class="fas fa-info-circle"></i> Account Information
+            </h1>
+
+            <!-- Breadcrumb -->
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('profile.profile') }}">Profile</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Account Information</li>
+                </ol>
+            </nav>
+
+            <!-- Basic Account Info -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-user"></i> Basic Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-borderless">
+                                <tr>
+                                    <th>Username:</th>
+                                    <td>{{ current_user.username }}</td>
+                                </tr>
+                                <tr>
+                                    <th>User ID:</th>
+                                    <td>{{ current_user.id }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Email:</th>
+                                    <td>{{ current_user.get_email() }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Account Type:</th>
+                                    <td>
+                                        <span class="badge {% if current_user.is_admin %}bg-danger{% elif current_user.is_standard %}bg-success{% else %}bg-secondary{% endif %}">
+                                            {{ current_user.AccountType }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Account Permissions:</h6>
+                            <ul class="list-unstyled">
+                                {% if current_user.is_admin %}
+                                    <li><i class="fas fa-check text-success"></i> Administrator Access</li>
+                                    <li><i class="fas fa-check text-success"></i> Full Telescope Control</li>
+                                    <li><i class="fas fa-check text-success"></i> User Management</li>
+                                    <li><i class="fas fa-check text-success"></i> System Configuration</li>
+                                {% elif current_user.is_standard %}
+                                    <li><i class="fas fa-check text-success"></i> Standard User Access</li>
+                                    <li><i class="fas fa-check text-success"></i> Telescope Control</li>
+                                    <li><i class="fas fa-check text-success"></i> Image Gallery</li>
+                                    <li><i class="fas fa-times text-muted"></i> User Management</li>
+                                {% elif current_user.is_limited %}
+                                    <li><i class="fas fa-check text-warning"></i> Limited Access</li>
+                                    <li><i class="fas fa-check text-warning"></i> View Only</li>
+                                    <li><i class="fas fa-times text-muted"></i> Telescope Control</li>
+                                    <li><i class="fas fa-times text-muted"></i> User Management</li>
+                                {% else %}
+                                    <li><i class="fas fa-times text-danger"></i> No Access</li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Security Settings -->
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-shield-alt"></i> Security Settings</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Authentication:</h6>
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-check text-success"></i> Password Protection</li>
+                                <li><i class="fas fa-check text-success"></i> Two-Factor Authentication (Email)</li>
+                                <li><i class="fas fa-check text-success"></i> Trusted Device Support</li>
+                                <li><i class="fas fa-check text-success"></i> Session Management</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Current Status:</h6>
+                            <ul class="list-unstyled">
+                                <li><strong>2FA Status:</strong> <span class="badge bg-success">Active</span></li>
+                                <li><strong>Night Mode:</strong> 
+                                    <span class="badge {% if current_user.get_night_mode() %}bg-dark{% else %}bg-light text-dark{% endif %}">
+                                        {% if current_user.get_night_mode() %}Enabled{% else %}Disabled{% endif %}
+                                    </span>
+                                </li>
+                                <li><strong>Trusted Devices:</strong> {{ current_user.trusted_devices|length }}</li>
+                                <li><strong>TOTP Secret:</strong> 
+                                    {% if current_user.totp_secret %}
+                                        <span class="badge bg-success">Configured</span>
+                                    {% else %}
+                                        <span class="badge bg-warning">Not Set</span>
+                                    {% endif %}
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Account Statistics -->
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Account Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <div class="border rounded p-3">
+                                <h4 class="text-primary">{{ current_user.trusted_devices|length }}</h4>
+                                <small class="text-muted">Trusted Devices</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3">
+                                <h4 class="text-success">Active</h4>
+                                <small class="text-muted">Account Status</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3">
+                                <h4 class="text-info">{{ current_user.AccountType }}</h4>
+                                <small class="text-muted">Access Level</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3">
+                                <h4 class="text-warning">Email</h4>
+                                <small class="text-muted">2FA Method</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Technical Information -->
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="fas fa-cogs"></i> Technical Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Account Settings:</h6>
+                            <ul class="small text-muted">
+                                <li><strong>Database ID:</strong> {{ current_user.id }}</li>
+                                <li><strong>Username:</strong> {{ current_user.username }}</li>
+                                <li><strong>Email Encrypted:</strong> Yes</li>
+                                <li><strong>Password Hashed:</strong> Yes</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Security Features:</h6>
+                            <ul class="small text-muted">
+                                <li><strong>Session-based Auth:</strong> Flask-Login</li>
+                                <li><strong>Password Hashing:</strong> Secure</li>
+                                <li><strong>Email Encryption:</strong> Fernet</li>
+                                <li><strong>Device Fingerprinting:</strong> SHA256</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <div class="text-center">
+                <a href="{{ url_for('profile.profile') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Profile
+                </a>
+                <a href="{{ url_for('profile.edit_profile') }}" class="btn btn-primary">
+                    <i class="fas fa-edit"></i> Edit Profile
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
