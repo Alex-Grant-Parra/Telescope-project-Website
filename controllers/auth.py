@@ -212,15 +212,31 @@ def revoke_device(device_id):
 @login_required
 def device_info():
     """Debug route to show device fingerprint information"""
+    # Get device info from TrustedDevice
     fingerprint = TrustedDevice.generate_device_fingerprint()
     device_name = TrustedDevice.get_device_name()
-    
-    return f"""
-    <h2>Device Information</h2>
-    <p><strong>Device Name:</strong> {device_name}</p>
-    <p><strong>Device Fingerprint:</strong> {fingerprint}</p>
-    <p><strong>User Agent:</strong> {request.headers.get('User-Agent', 'Unknown')}</p>
-    <p><strong>IP Address:</strong> {request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', 'Unknown'))}</p>
-    <p><strong>Host:</strong> {request.host}</p>
-    <a href="{url_for('auth.trusted_devices')}">Back to Trusted Devices</a>
-    """
+
+    # Sanitize and normalize IP address header: prefer X-Forwarded-For but validate it
+    xff = request.headers.get('X-Forwarded-For') or request.environ.get('HTTP_X_FORWARDED_FOR')
+    if xff:
+        # X-Forwarded-For can contain a comma-separated list; take the first valid-looking entry
+        ip = xff.split(',')[0].strip()
+    else:
+        ip = request.remote_addr or request.environ.get('REMOTE_ADDR', 'Unknown')
+
+    # Mask fingerprint to avoid leaking full device identifiers in debug view
+    masked_fingerprint = None
+    if fingerprint:
+        # Show only first and last 4 chars (e.g. abcd...wxyz) to reduce info leakage
+        fp = str(fingerprint)
+        if len(fp) > 8:
+            masked_fingerprint = f"{fp[:4]}...{fp[-4:]}"
+        else:
+            masked_fingerprint = fp
+
+    # Render a template which uses Jinja2 auto-escaping to avoid XSS
+    return render_template('device_info.html',
+                           device_name=device_name,
+                           fingerprint=masked_fingerprint,
+                           user_agent=request.headers.get('User-Agent', 'Unknown'),
+                           host=request.host)
