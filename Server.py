@@ -10,6 +10,7 @@ from socket import gethostname
 from db import db
 import subprocess
 import atexit
+from waitress import serve
 # Import security components
 from security import SecurityMiddleware, register_security_error_handlers
 
@@ -169,6 +170,6 @@ if __name__ == '__main__':
     start_websocket_servers()
 
     print(f"Starting Flask server on {gethostname()} at http://127.0.0.1:{FlaskServerPort}")
-    app.run(host="127.0.0.1", port=FlaskServerPort, debug=False)
+    serve(app, host="127.0.0.1", port=FlaskServerPort)
 
     
