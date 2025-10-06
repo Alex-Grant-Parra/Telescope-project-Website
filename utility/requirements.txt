@@ -1,0 +1,13 @@
+Flask
+flask_sqlalchemy
+flask_login
+flask_mail
+flask_wtf
+bcrypt
+cryptography
+pyjwt
+python-dotenv
+websockets
+ujson
+requests
+waitress

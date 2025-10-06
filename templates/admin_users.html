@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}User Management - Admin{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-lg-12">
+            <h1 class="text-center mb-4">
+                <i class="fas fa-users-cog text-danger"></i> User Management
+                <small class="text-muted">(Admin Only)</small>
+            </h1>
+            
+            <!-- Flash messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                  <div class="alert alert-{{ category }} mt-3">{{ message }}</div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+
+            <!-- Breadcrumb -->
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('profile.profile') }}">Profile</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">User Management</li>
+                </ol>
+            </nav>
+
+            <!-- Summary Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <h3>{{ user_stats|length }}</h3>
+                            <small>Total Users</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h3>{{ user_stats | selectattr('user.is_admin') | list | length }}</h3>
+                            <small>Administrators</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h3>{{ user_stats | selectattr('user.is_standard') | list | length }}</h3>
+                            <small>Standard Users</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-warning text-dark">
+                        <div class="card-body text-center">
+                            <h3>{{ user_stats | sum(attribute='trusted_devices_count') }}</h3>
+                            <small>Total Trusted Devices</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Users Table -->
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">All Users</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Username</th>
+                                    <th>Email</th>
+                                    <th>Account Type</th>
+                                    <th>Trusted Devices</th>
+                                    <th>Security</th>
+                                    <th>Settings</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stats in user_stats %}
+                                {% set user = stats.user %}
+                                <tr {% if user.id == current_user.id %}class="table-primary"{% endif %}>
+                                    <td>{{ user.id }}</td>
+                                    <td>
+                                        <strong>{{ user.username }}</strong>
+                                        {% if user.id == current_user.id %}
+                                            <span class="badge bg-info">You</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="text-muted">{{ user.get_email() }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if user.is_admin %}bg-danger{% elif user.is_standard %}bg-success{% elif user.is_limited %}bg-warning{% else %}bg-secondary{% endif %}">
+                                            {{ user.AccountType }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ stats.trusted_devices_count }}</span>
+                                        {% if stats.trusted_devices_count > 0 %}
+                                            <button class="btn btn-sm btn-outline-info ms-1" 
+                                                    type="button" 
+                                                    data-bs-toggle="collapse" 
+                                                    data-bs-target="#devices{{ user.id }}" 
+                                                    aria-expanded="false">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small>
+                                            <i class="fas fa-shield-alt text-success" title="2FA Enabled"></i>
+                                            {% if user.totp_secret %}
+                                                <i class="fas fa-key text-info" title="TOTP Configured"></i>
+                                            {% endif %}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <small>
+                                            {% if user.get_night_mode() %}
+                                                <i class="fas fa-moon text-dark" title="Night Mode"></i>
+                                            {% else %}
+                                                <i class="fas fa-sun text-warning" title="Day Mode"></i>
+                                            {% endif %}
+                                        </small>
+                                    </td>
+                                </tr>
+                                {% if stats.trusted_devices_count > 0 %}
+                                <tr>
+                                    <td colspan="7" class="p-0">
+                                        <div class="collapse" id="devices{{ user.id }}">
+                                            <div class="card card-body bg-light">
+                                                <h6>Trusted Devices for {{ user.username }}:</h6>
+                                                <div class="row">
+                                                    {% for device in stats.trusted_devices %}
+                                                    <div class="col-md-4 mb-2">
+                                                        <div class="card border-info">
+                                                            <div class="card-body p-2">
+                                                                <small>
+                                                                    <i class="fas fa-desktop"></i> <strong>{{ device.device_name }}</strong><br>
+                                                                    <span class="text-muted">Added: {{ device.created_at.strftime('%m/%d/%Y') }}</span><br>
+                                                                    <span class="text-muted">Expires: {{ device.expires_at.strftime('%m/%d/%Y') }}</span>
+                                                                </small>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <div class="text-center mt-4">
+                <a href="{{ url_for('profile.profile') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Profile
+                </a>
+                <a href="{{ url_for('admin.admin') }}" class="btn btn-danger">
+                    <i class="fas fa-cogs"></i> Admin Panel
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

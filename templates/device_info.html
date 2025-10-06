@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+
+{% block title %}Device Information{% endblock %}
+
+{% block content %}
+<h2>Device Information</h2>
+<ul>
+  <li><strong>Device Name:</strong> {{ device_name|e if device_name is not none else 'Unknown' }}</li>
+  <li><strong>Device Fingerprint:</strong> {{ fingerprint|e if fingerprint is not none else 'Unavailable' }}</li>
+  <li><strong>User Agent:</strong> {{ user_agent|e }}</li>
+  <li><strong>Host:</strong> {{ host|e }}</li>
+</ul>
+<p><a href="{{ url_for('auth.trusted_devices') }}">Back to Trusted Devices</a></p>
+{% endblock %}

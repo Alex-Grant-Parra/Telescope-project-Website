@@ -29,6 +29,209 @@ html, body {
     flex: 1; /* Pushes footer down when content is short */
 }
 
+/* Profile dropdown styling */
+.dropdown-menu {
+    border: none;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    border-radius: 0.5rem;
+    min-width: 200px;
+    background-color: white;
+    position: absolute;
+    z-index: 1000;
+    top: 100%;
+    left: auto;
+    right: 0;
+    margin-top: 0.25rem;
+}
+
+.dropdown-item {
+    transition: all 0.2s ease;
+    border-radius: 0.25rem;
+    margin: 0.1rem 0.5rem;
+    padding: 0.5rem 0.75rem;
+    color: #212529;
+    text-decoration: none;
+    display: block;
+    clear: both;
+    font-weight: 400;
+    line-height: 1.5;
+    white-space: nowrap;
+    background-color: transparent;
+    border: 0;
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+    background-color: #f8f9fa;
+    transform: translateX(2px);
+    color: #1e2125;
+}
+
+.dropdown-item.text-danger:hover {
+    background-color: #f8d7da;
+    color: #721c24 !important;
+}
+
+.dropdown-item.text-warning:hover {
+    background-color: #fff3cd;
+    color: #856404 !important;
+}
+
+/* Badge styling in dropdown */
+.dropdown-item .badge {
+    font-size: 0.7em;
+}
+
+/* Ensure dropdown toggle works */
+.navbar-nav .dropdown-toggle {
+    cursor: pointer !important;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+.navbar-nav .dropdown-toggle::after {
+    margin-left: 0.5em;
+    display: inline-block;
+    width: 0;
+    height: 0;
+    vertical-align: middle;
+    content: "";
+    border-top: 0.3em solid;
+    border-right: 0.3em solid transparent;
+    border-bottom: 0;
+    border-left: 0.3em solid transparent;
+}
+
+/* Dropdown show/hide functionality */
+.dropdown-menu {
+    display: none !important;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.dropdown-menu.show {
+    display: block !important;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Force positioning */
+.dropdown {
+    position: relative;
+}
+
+/* Dropdown divider */
+.dropdown-divider {
+    height: 0;
+    margin: 0.5rem 0;
+    overflow: hidden;
+    border-top: 1px solid #dee2e6;
+}
+
+/* Ensure navbar dropdown works */
+.navbar-nav .dropdown {
+    position: relative;
+}
+
+.navbar-nav .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: auto;
+}
+
+/* Mobile responsive dropdown */
+@media (max-width: 768px) {
+    .dropdown-menu {
+        position: static !important;
+        transform: none !important;
+        width: 100%;
+        box-shadow: none;
+        border: 1px solid #dee2e6;
+        margin-top: 0.5rem;
+        right: auto;
+        left: auto;
+    }
+    
+    .navbar-nav .dropdown-menu {
+        position: static !important;
+    }
+}
+
+/* Night mode dropdown styling */
+.night-mode .dropdown-menu {
+    background-color: #2d3748 !important;
+    border: 1px solid #4a5568 !important;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.3) !important;
+}
+
+.night-mode .dropdown-item {
+    color: #e2e8f0 !important;
+    background-color: transparent !important;
+}
+
+.night-mode .dropdown-item:hover,
+.night-mode .dropdown-item:focus {
+    background-color: #4a5568 !important;
+    color: #f7fafc !important;
+}
+
+.night-mode .dropdown-item.text-danger {
+    color: #fc8181 !important;
+}
+
+.night-mode .dropdown-item.text-danger:hover {
+    background-color: #742a2a !important;
+    color: #fed7d7 !important;
+}
+
+.night-mode .dropdown-item.text-warning {
+    color: #f6e05e !important;
+}
+
+.night-mode .dropdown-item.text-warning:hover {
+    background-color: #744210 !important;
+    color: #fefcbf !important;
+}
+
+.night-mode .dropdown-divider {
+    border-top-color: #4a5568 !important;
+}
+
+/* Night mode badge colors in dropdown */
+.night-mode .dropdown-item .badge.bg-success {
+    background-color: #38a169 !important;
+    color: #f0fff4 !important;
+}
+
+/* Ensure icons are visible in night mode */
+.night-mode .dropdown-item i {
+    color: inherit !important;
+}
+
+/* Night mode mobile dropdown */
+@media (max-width: 768px) {
+    .night-mode .dropdown-menu {
+        border-color: #4a5568 !important;
+        background-color: #2d3748 !important;
+    }
+}
+
+/* Profile cards */
+.card {
+    transition: all 0.3s ease;
+    border: none;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
 .footer {
     width: 100%;
     background: #343a40; /* Dark Bootstrap background */
