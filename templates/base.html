@@ -1,15 +1,49 @@
 <!DOCTYPE html>
-<html lang="en">
+{# Put server-pref on the <html> element so the head script can read it before body exists #}
+<html lang="en" data-night-mode="{% if current_user.is_authenticated %}{{ current_user.get_night_mode()|tojson }}{% else %}false{% endif %}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}My Flask App{% endblock %}</title>
+    <!-- Instant night-mode: check localStorage or server-rendered flag before CSS loads to avoid FOUC -->
+    <script>
+        (function(){
+            try {
+                // Read server-rendered attr on <html> (string 'true'/'false')
+                var serverAttr = document.documentElement.getAttribute('data-night-mode');
+                var ls = null;
+                try { ls = localStorage.getItem('night_mode'); } catch(e) { ls = null; }
+                var shouldNight = (serverAttr === 'true') || (ls === 'true');
+                if (shouldNight) {
+                    // Apply to <html> immediately (available in head)
+                    document.documentElement.classList.add('night-mode');
+
+                    // Also mirror to <body> as soon as it's available so existing CSS that
+                    // targets `body.night-mode` still applies instantly. If body isn't
+                    // parsed yet, add a DOMContentLoaded listener to mirror it.
+                    if (document.body) {
+                        document.body.classList.add('night-mode');
+                    } else {
+                        document.addEventListener('DOMContentLoaded', function(){
+                            document.body.classList.add('night-mode');
+                        });
+                    }
+                }
+            } catch(e) {
+                // fail silently
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     {% block extra_css %}{% endblock %}
 </head>
-<body data-authenticated="{{ current_user.is_authenticated|tojson|lower }}">
+{# Server-render the user's night mode preference so the page can apply it instantly #}
+<body 
+    data-authenticated="{{ current_user.is_authenticated|tojson|lower }}" 
+    data-night-mode="{% if current_user.is_authenticated %}{{ current_user.get_night_mode()|tojson }}{% else %}false{% endif %}"
+    class="{% if current_user.is_authenticated and current_user.get_night_mode() %}night-mode{% endif %}">
 
     <div class="content">
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -133,40 +167,66 @@
         let lastClickTime = 0;
         let grinTrigger = Math.floor(Math.random() * 11) + 10; // 10-20
         
-        // Load saved night mode preference for logged-in users
+        // Load saved night mode preference for logged-in users.
+        // We first read the server-rendered data attribute so the UI is updated immediately
+        // and avoid waiting for an async fetch which causes visual flicker.
         function loadNightModePreference() {
-            if (isAuthenticated) {
-                fetch('/user/night_mode', {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        const isNightMode = data.night_mode;
-                        if (isNightMode) {
-                            document.body.classList.add('night-mode');
-                            label.textContent = 'Day Mode';
-                            sun.style.display = 'none';
-                            moon.style.display = 'flex';
-                        } else {
-                            document.body.classList.remove('night-mode');
-                            label.textContent = 'Night Mode';
-                            sun.style.display = 'flex';
-                            moon.style.display = 'none';
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.log('Not logged in or error loading night mode preference:', error);
-                });
+            if (!isAuthenticated) return;
+
+            const serverPref = document.body.getAttribute('data-night-mode');
+            if (serverPref !== null) {
+                const isNightMode = serverPref === 'true' || serverPref === 'True';
+                if (isNightMode) {
+                    document.body.classList.add('night-mode');
+                    label.textContent = 'Day Mode';
+                    sun.style.display = 'none';
+                    moon.style.display = 'flex';
+                } else {
+                    document.body.classList.remove('night-mode');
+                    label.textContent = 'Night Mode';
+                    sun.style.display = 'flex';
+                    moon.style.display = 'none';
+                }
+                // We already have the authoritative value from the server, skip fetching.
+                return;
             }
+
+            // Fallback: if no server-rendered preference is available, fetch it.
+            fetch('/user/night_mode', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    const isNightMode = data.night_mode;
+                    if (isNightMode) {
+                        document.body.classList.add('night-mode');
+                        label.textContent = 'Day Mode';
+                        sun.style.display = 'none';
+                        moon.style.display = 'flex';
+                    } else {
+                        document.body.classList.remove('night-mode');
+                        label.textContent = 'Night Mode';
+                        sun.style.display = 'flex';
+                        moon.style.display = 'none';
+                    }
+                }
+            })
+            .catch(error => {
+                console.log('Not logged in or error loading night mode preference:', error);
+            });
         }
         
         // Save night mode preference for logged-in users
         function saveNightModePreference(isNightMode) {
+            // Persist immediately in localStorage so subsequent page loads can apply
+            // the theme instantly (works for anonymous users too).
+            try { localStorage.setItem('night_mode', isNightMode ? 'true' : 'false'); } catch (e) {}
+
+            // Also persist to server when authenticated
             if (isAuthenticated) {
                 fetch('/user/night_mode', {
                     method: 'POST',

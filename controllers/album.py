@@ -5,6 +5,7 @@ import zipfile
 import io
 from datetime import datetime
 from flask_login import login_required, current_user
+import logging
 
 album_bp = Blueprint("album", __name__, template_folder="../templates")
 
@@ -38,6 +39,70 @@ def get_jpeg_files():
                 "url": f"/album/photo/{fname}"
             })
     return files
+
+
+@album_bp.route("/album/photo/delete", methods=["POST"])
+@login_required
+def album_photo_delete():
+    data = request.get_json() or {}
+    # support either a single filename or a list of files under keys 'filename' or 'files'/'filenames'
+    files = []
+    if isinstance(data.get('files'), list):
+        files = data.get('files')
+    elif isinstance(data.get('filenames'), list):
+        files = data.get('filenames')
+    elif data.get('filename'):
+        files = [data.get('filename')]
+
+    if not files:
+        return jsonify({"status": "error", "message": "No filename(s) provided"}), 400
+
+    user_dir = get_user_photos_dir()
+    if not user_dir:
+        return jsonify({"status": "error", "message": "Not authenticated"}), 403
+
+    results = {"deleted": [], "failed": []}
+
+    for filename in files:
+        if not filename:
+            continue
+        safe_name = secure_filename(filename)
+        if safe_name != filename:
+            logging.warning("Attempted unsafe filename delete: %s -> %s", filename, safe_name)
+            results["failed"].append({"file": filename, "reason": "invalid filename"})
+            continue
+
+        target_jpeg = os.path.join(user_dir, safe_name)
+        # Protect against path traversal (ensure target is inside user_dir)
+        try:
+            if not os.path.commonpath([os.path.abspath(user_dir)]) == os.path.commonpath([os.path.abspath(user_dir), os.path.abspath(target_jpeg)]) or not os.path.isfile(target_jpeg):
+                results["failed"].append({"file": filename, "reason": "not found"})
+                continue
+        except Exception:
+            results["failed"].append({"file": filename, "reason": "invalid path"})
+            continue
+
+        try:
+            os.remove(target_jpeg)
+            results["deleted"].append(os.path.basename(target_jpeg))
+        except Exception as e:
+            logging.exception("Failed to delete jpeg %s: %s", target_jpeg, e)
+            results["failed"].append({"file": filename, "reason": "delete_failed"})
+            continue
+
+        # also try to delete raw .cr2 if exists
+        cr2_path = os.path.splitext(target_jpeg)[0] + ".cr2"
+        if os.path.isfile(cr2_path):
+            try:
+                os.remove(cr2_path)
+                results["deleted"].append(os.path.basename(cr2_path))
+            except Exception:
+                logging.exception("Failed to delete raw file %s", cr2_path)
+                # non-fatal; record but continue
+                results["failed"].append({"file": os.path.basename(cr2_path), "reason": "raw_delete_failed"})
+
+    status_code = 200 if len(results.get("failed", [])) == 0 else 207
+    return jsonify({"status": "partial_success" if status_code == 207 else "success", **results}), status_code
 
 
 @album_bp.route("/album")
