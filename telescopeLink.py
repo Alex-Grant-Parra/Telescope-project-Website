@@ -7,8 +7,6 @@ from WebsocketServer import clients
 from time import sleep
 from PIL import Image
 import io
-import os
-import yaml
 
 url = f"https://telescopes.dev/sendCommand" # Url for sending flask server commands
 
