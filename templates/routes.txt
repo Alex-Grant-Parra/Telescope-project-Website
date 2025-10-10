@@ -1,5 +1,5 @@
 # Accessible Routes - Generated automatically
-# Generated on: 2025-10-10 13:51:29
+# Generated on: 2025-10-10 16:46:22
 
 /StarMap -> star_map.star_map
 /about -> about.about
