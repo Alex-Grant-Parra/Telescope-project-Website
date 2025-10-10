@@ -1,9 +1,12 @@
 FlaskServerPort = 8080
 
-from flask import Flask, request, jsonify, redirect, url_for, Response
-from flask_login import LoginManager
+from flask import Flask, request, jsonify, redirect, url_for, Response, session, flash
+import json
+from flask_login import LoginManager, logout_user, current_user
+import logging
 from flask_mail import Mail 
 from dotenv import load_dotenv
+from flask_wtf import CSRFProtect
 import os
 import importlib
 from socket import gethostname
@@ -78,6 +81,10 @@ login_manager.init_app(app)
 
 mail = Mail(app)
 
+# Initialize CSRF protection
+csrf = CSRFProtect()
+csrf.init_app(app)
+
 # Initialize Security Middleware
 security_middleware = SecurityMiddleware()
 security_middleware.init_app(app)
@@ -129,6 +136,46 @@ from models.trusted_device import TrustedDevice  # Import to register the model
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
+
+
+# Enforce that disabled accounts are logged out immediately
+@app.before_request
+def enforce_enabled_account():
+    try:
+        # Skip for static files and auth endpoints to avoid redirect loop
+        endpoint = (request.endpoint or '')
+        allowed_prefixes = (
+            'static', 'auth.login', 'auth.logout', 'auth.register', 'auth.forgot_password', 'auth.reset_password', 'auth.login_2fa'
+        )
+        for p in allowed_prefixes:
+            if endpoint.startswith(p):
+                return None
+
+        if current_user and getattr(current_user, 'is_authenticated', False):
+            try:
+                if not getattr(current_user, 'is_active', True):
+                    sec_logger = logging.getLogger('security')
+                    try:
+                        sec_logger.info(json.dumps({'event': 'force_logout_disabled_account', 'user_id': current_user.get_id()}))
+                    except Exception:
+                        sec_logger.info('force_logout_disabled_account')
+
+                    # Log the user out and clear session
+                    try:
+                        logout_user()
+                    except Exception:
+                        pass
+                    try:
+                        session.clear()
+                    except Exception:
+                        pass
+                    flash('Your account has been disabled. You have been logged out.', 'warning')
+                    return redirect(url_for('auth.login'))
+            except Exception:
+                # If check fails, be permissive
+                return None
+    except Exception:
+        return None
 
 # Initialize database tables
 with app.app_context():

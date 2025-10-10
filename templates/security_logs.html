@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Security Logs{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Security Logs</h2>
+    <div class="card">
+        <div class="card-body">
+            {% if logs %}
+            <div class="list-group">
+                {% for l in logs %}
+                <div class="list-group-item">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1">User ID {{ l.user_id }} — {{ 'Enabled' if l.enabled else 'Disabled' }}</h6>
+                        <small>{{ l.changed_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+                    </div>
+                    <p class="mb-1">Changed by: {{ l.changed_by or 'system' }}{% if l.reason %} — {{ l.reason }}{% endif %}</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+                <p class="text-muted">No logs available.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

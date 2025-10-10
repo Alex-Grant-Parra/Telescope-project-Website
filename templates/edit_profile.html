@@ -134,6 +134,16 @@
                     <i class="fas fa-home"></i> Home
                 </a>
             </div>
+
+            <!-- Danger: Disable Account -->
+            <div class="mt-4">
+                <form method="POST" action="{{ url_for('profile.disable_account') }}" onsubmit="return confirm('Are you sure you want to disable your account? You will be logged out immediately.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <button type="submit" class="btn btn-danger w-100">
+                        <i class="fas fa-user-slash"></i> Disable Account (Self)
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 </div>
