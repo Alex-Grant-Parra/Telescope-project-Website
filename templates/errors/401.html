@@ -1,12 +1,31 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>401 Unauthorized</title>
-</head>
-<body>
-    <h1>401 Unauthorized</h1>
-    <p>Authentication is required to access this page.</p>
-    <a href="/">Go to Homepage</a>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}401 Unauthorized - Telescope Control{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="card shadow">
+                <div class="card-body">
+                    <h1 class="display-1 text-warning">401</h1>
+                    <h2 class="card-title">Authentication Required</h2>
+                    <p class="card-text lead">You need to log in to access this page.</p>
+                    <p class="card-text text-muted">
+                        Please authenticate with your credentials to continue.
+                    </p>
+                    
+                    <div class="mt-4">
+                        <a href="{{ url_for('auth.login') }}" class="btn btn-primary me-2">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </a>
+                        <a href="{{ url_for('home.home') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-home"></i> Go to Homepage
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

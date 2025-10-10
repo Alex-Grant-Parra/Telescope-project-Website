@@ -12,6 +12,14 @@ sec_logger = logging.getLogger('security')
 # Define the blueprint for admin routes
 admin_bp = Blueprint('admin', __name__)
 
+# Import csrf for exemption
+try:
+    from flask_wtf.csrf import exempt
+except ImportError:
+    # Fallback if import fails
+    def exempt(f):
+        return f
+
 
 @admin_bp.route("/admin")
 @login_required
@@ -130,6 +138,7 @@ def delete_user(user_id):
 
 @admin_bp.route('/admin/user/<int:user_id>/set_role', methods=['POST'])
 @login_required
+@exempt
 def set_role(user_id):
     guard = _admin_guard()
     if guard:
@@ -149,7 +158,17 @@ def set_role(user_id):
         return redirect(request.referrer or url_for('admin.admin'))
 
     role = request.form.get('role')
+    print(f"[DEBUG] Received role: '{role}', form data: {dict(request.form)}")
+    print(f"[DEBUG] Role type: {type(role)}, repr: {repr(role)}")
+    
+    # Check if form data is empty (CSRF validation failure)
+    if not request.form:
+        print("[DEBUG] Empty form data - likely CSRF validation failure")
+        flash('Security validation failed. Please try again.', 'danger')
+        return redirect(request.referrer or url_for('admin.admin'))
+    
     if role not in ['Administrator', 'Standard', 'Limited']:
+        print(f"[DEBUG] Invalid role: '{role}' not in ['Administrator', 'Standard', 'Limited']")
         if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'status': 'error', 'message': 'Invalid role specified.'}), 400
         flash('Invalid role specified.', 'danger')
@@ -157,6 +176,8 @@ def set_role(user_id):
 
     user.AccountType = role
     db.session.commit()
+    print(f"[DEBUG] Successfully set user.AccountType to: '{user.AccountType}'")
+    
     if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'status': 'success', 'message': f'{user.username} role set to {role}.'})
     flash(f'{user.username} role set to {role}.', 'success')
@@ -319,3 +340,121 @@ def admin_users():
         })
 
     return render_template('admin_users.html', user_stats=user_stats)
+
+
+@admin_bp.route('/admin/security/logs')
+@login_required
+def admin_security_logs():
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    import os
+    logs_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'security', 'logs'))
+    print(f"[DEBUG] logs_dir resolved to: {logs_dir}")
+    files = []
+    try:
+        if os.path.exists(logs_dir):
+            print(f"[DEBUG] logs_dir exists. Contents: {os.listdir(logs_dir)}")
+            for fn in sorted(os.listdir(logs_dir)):
+                file_path = os.path.join(logs_dir, fn)
+                print(f"[DEBUG] Checking file: {file_path} isfile={os.path.isfile(file_path)}")
+                if os.path.isfile(file_path):
+                    files.append(fn)
+        else:
+            print(f"[DEBUG] logs_dir does not exist.")
+    except Exception as e:
+        print(f"[DEBUG] Exception while listing logs: {e}")
+        files = []
+    return {'logs': files}
+
+
+# Token management routes (moved from security controller)
+@admin_bp.route('/admin/security/tokens')
+@login_required
+def admin_security_tokens():
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    import security.manage_tokens as token_utils
+    tokens = token_utils.load_tokens()
+    # Build mapping of identifier -> (token, info)
+    view_tokens = []
+    for token, info in tokens.items():
+        view_tokens.append({
+            'id': token,  # Full token for identification
+            'truncated': token[:12] + '...',  # Truncated for display
+            'name': info.get('name'),
+            'client_type': info.get('client_type'),
+            'created': info.get('created')
+        })
+
+    return render_template('security_tokens.html', tokens=view_tokens)
+
+
+@admin_bp.route('/admin/security/tokens/generate', methods=['POST'])
+@login_required
+def admin_generate_token():
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    import security.manage_tokens as token_utils
+    name = request.form.get('name') or 'unnamed'
+    client_type = request.form.get('client_type') or 'observer'
+    
+    # Check for duplicate names
+    tokens = token_utils.load_tokens()
+    for token, info in tokens.items():
+        if info.get('name') == name:
+            flash(f'Token with name "{name}" already exists. Please choose a different name.', 'danger')
+            return redirect(url_for('admin.admin_security_tokens'))
+    
+    token = token_utils.add_token(name, client_type)
+    sec_logger.info(f"token_generated: token={token[:12]}..., name={name}, by={current_user.id}")
+    flash(f'Generated token for {name}: {token} (store securely)', 'success')
+    return redirect(url_for('admin.admin_security_tokens'))
+
+
+@admin_bp.route('/admin/security/tokens/revoke', methods=['POST'])
+@login_required
+def admin_revoke_token():
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    import security.manage_tokens as token_utils
+    identifier = request.form.get('token')
+    if not identifier:
+        flash('No token specified.', 'danger')
+        return redirect(url_for('admin.admin_security_tokens'))
+
+    tokens = token_utils.load_tokens()
+    if identifier in tokens:
+        token_utils.revoke_token(identifier)
+        sec_logger.info(f"token_revoked: token={identifier[:12]}..., by={current_user.id}")
+        flash('Token revoked.', 'success')
+    else:
+        flash('Token not found.', 'danger')
+
+    return redirect(url_for('admin.admin_security_tokens'))
+
+
+@admin_bp.route('/admin/security/tokens/show', methods=['POST'])
+@login_required
+def admin_show_token():
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    import security.manage_tokens as token_utils
+    token_id = request.json.get('token_id') if request.is_json else request.form.get('token_id')
+    if not token_id:
+        return jsonify({'error': 'Token ID required'}), 400
+
+    tokens = token_utils.load_tokens()
+    if token_id in tokens:
+        return jsonify({'token': token_id})
+    else:
+        return jsonify({'error': 'Token not found'}), 404

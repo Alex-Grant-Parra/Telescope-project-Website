@@ -88,6 +88,30 @@ def profile_trusted_devices():
     devices = TrustedDevice.get_user_trusted_devices(current_user.id)
     return render_template('profile_trusted_devices.html', devices=devices)
 
+
+@profile_bp.route('/profile/trust_debug')
+@login_required
+def trust_debug():
+    """Debug endpoint: return computed fingerprint and the user's trusted devices (JSON)"""
+    try:
+        fingerprint = TrustedDevice.generate_device_fingerprint()
+        devices = TrustedDevice.get_user_trusted_devices(current_user.id)
+        devs = []
+        for d in devices:
+            devs.append({
+                'id': d.id,
+                'device_name': d.device_name,
+                'expires_at': d.expires_at.isoformat(),
+                'fingerprint_prefix': d.device_fingerprint[:16]
+            })
+        return {
+            'fingerprint': fingerprint,
+            'fingerprint_prefix': fingerprint[:16],
+            'trusted_devices': devs
+        }
+    except Exception as e:
+        return {'error': str(e)}, 500
+
 @profile_bp.route("/profile/revoke_device/<int:device_id>", methods=['POST'])
 @login_required
 def profile_revoke_device(device_id):

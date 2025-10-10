@@ -1,12 +1,35 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>503 Service Unavailable</title>
-</head>
-<body>
-    <h1>503 Service Unavailable</h1>
-    <p>The server is currently unavailable. Please try again later.</p>
-    <a href="/">Go to Homepage</a>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}503 Service Unavailable - Telescope Control{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="card shadow">
+                <div class="card-body">
+                    <h1 class="display-1 text-warning">503</h1>
+                    <h2 class="card-title">Service Unavailable</h2>
+                    <p class="card-text lead">The server is currently unavailable.</p>
+                    <p class="card-text text-muted">
+                        We're performing maintenance or experiencing high traffic.
+                    </p>
+                    <div class="alert alert-warning mt-3">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Please try again in a few minutes. We'll be back up and running soon!
+                    </div>
+                    
+                    <div class="mt-4">
+                        <a href="{{ url_for('home.home') }}" class="btn btn-primary me-2">
+                            <i class="fas fa-home"></i> Go to Homepage
+                        </a>
+                        <button class="btn btn-outline-secondary" onclick="location.reload()">
+                            <i class="fas fa-redo"></i> Try Again
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

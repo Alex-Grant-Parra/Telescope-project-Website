@@ -1,12 +1,35 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>504 Gateway Timeout</title>
-</head>
-<body>
-    <h1>504 Gateway Timeout</h1>
-    <p>The server took too long to respond. Please try again later.</p>
-    <a href="/">Go to Homepage</a>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}504 Gateway Timeout - Telescope Control{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="card shadow">
+                <div class="card-body">
+                    <h1 class="display-1 text-danger">504</h1>
+                    <h2 class="card-title">Gateway Timeout</h2>
+                    <p class="card-text lead">The server took too long to respond.</p>
+                    <p class="card-text text-muted">
+                        The request timed out while waiting for a response from the upstream server.
+                    </p>
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-clock"></i>
+                        This usually happens during high traffic or when the server is processing heavy requests.
+                    </div>
+                    
+                    <div class="mt-4">
+                        <a href="{{ url_for('home.home') }}" class="btn btn-primary me-2">
+                            <i class="fas fa-home"></i> Go to Homepage
+                        </a>
+                        <button class="btn btn-outline-secondary" onclick="location.reload()">
+                            <i class="fas fa-redo"></i> Try Again
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

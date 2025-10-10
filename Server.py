@@ -1,4 +1,5 @@
 FlaskServerPort = 8080
+ifOnline = True
 
 from flask import Flask, request, jsonify, redirect, url_for, Response, session, flash
 import json
@@ -14,23 +15,34 @@ from db import db
 import subprocess
 import atexit
 from waitress import serve
+from datetime import datetime
 # Import security components
 from security import SecurityMiddleware, register_security_error_handlers
 
 # Get the base dir
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+app = Flask(__name__)
+load_dotenv()
 
-# Startup caddy
-caddyPath = os.path.join(BASE_DIR, "caddy_windows_amd64.exe") 
-caddyProc = subprocess.Popen([caddyPath, "run"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-print("Caddy started in the background")
+# Check for correct account
+if os.getlogin() == os.getenv("EXECUTER"):
+    ifOnline = False
 
-# Startup Cloudflare Tunnel
-cloudflaredPath = os.path.join(BASE_DIR, "cloudflared.exe")
-configPath = os.path.join(BASE_DIR, "config.yml")
-cloudflaredProc = subprocess.Popen([cloudflaredPath, "tunnel", "--config", configPath, "run", "telescope-websockets"],
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-print("Cloudflare Tunnel started in the background")
+if ifOnline:
+    print("Running server for online developement")
+    # Startup caddy
+    caddyPath = os.path.join(BASE_DIR, "caddy_windows_amd64.exe") 
+    caddyProc = subprocess.Popen([caddyPath, "run"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    print("Caddy started in the background")
+
+    # Startup Cloudflare Tunnel
+    cloudflaredPath = os.path.join(BASE_DIR, "cloudflared.exe")
+    configPath = os.path.join(BASE_DIR, "config.yml")
+    cloudflaredProc = subprocess.Popen([cloudflaredPath, "tunnel", "--config", configPath, "run", "telescope-websockets"],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    print("Cloudflare Tunnel started in the background")
+else:
+    print("Running server for local development")
 
 # Cleanup function for shutting down processes
 def cleanup_processes():
@@ -53,8 +65,7 @@ def cleanup_processes():
 atexit.register(cleanup_processes)
 
 # Flask App Initialization
-app = Flask(__name__)
-load_dotenv()
+
 
 # Flask Configuration
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY")
@@ -128,6 +139,52 @@ print("\nRegistered Routes:")
 for rule in app.url_map.iter_rules():
     print(f"{rule} -> {rule.endpoint}")
 print("")
+
+# Generate routes.txt file with accessible pages
+def generate_routes_file():
+    """Generate a routes.txt file with all accessible GET routes"""
+    routes_file_path = os.path.join(BASE_DIR, "templates", "routes.txt")
+    
+    accessible_routes = []
+    for rule in app.url_map.iter_rules():
+        # Only include GET routes that are likely to be pages (not API endpoints)
+        if 'GET' in rule.methods:
+            route_str = str(rule.rule)
+            # Exclude certain patterns that are typically backend-only
+            if not any(pattern in route_str.lower() for pattern in [
+                '/api/', '/ajax/', '/sendcommand', '/liveview', '/client/register',
+                '/admin/user/', '/admin/blacklist/', '/security/tokens/show',
+                '/security/tokens/generate', '/security/tokens/revoke'
+            ]):
+                # Replace dynamic parts with example values for display
+                display_route = route_str
+                if '<int:' in display_route:
+                    display_route = display_route.replace('<int:user_id>', '1')
+                    display_route = display_route.replace('<int:id>', '1')
+                if '<' in display_route and '>' in display_route:
+                    # Replace other dynamic parts with examples
+                    display_route = display_route.replace('<client_id>', 'example-client')
+                    display_route = display_route.replace('<filename>', 'example.log')
+                    display_route = display_route.replace('<path:filename>', 'example.log')
+                
+                accessible_routes.append(f"{display_route} -> {rule.endpoint}")
+    
+    # Sort routes alphabetically
+    accessible_routes.sort()
+    
+    # Write to routes.txt
+    try:
+        with open(routes_file_path, 'w', encoding='utf-8') as f:
+            f.write("# Accessible Routes - Generated automatically\n")
+            f.write(f"# Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            for route in accessible_routes:
+                f.write(f"{route}\n")
+        print(f"Generated routes.txt with {len(accessible_routes)} accessible routes")
+    except Exception as e:
+        print(f"Error generating routes.txt: {e}")
+
+# Generate the routes file
+generate_routes_file()
 
 # User Loader for Flask-Login
 from models.user import User

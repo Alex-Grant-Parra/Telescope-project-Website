@@ -478,79 +478,107 @@
         console.log('🎯 You can run debugDropdown() in the console to test manually');
     </script>
     
-        <!-- Auto CSRF helper: inject csrf token into forms and ensure fetch includes header -->
+        <!-- Global CSRF protection script - works for all templates -->
         <script>
-        (function(){
-            try {
-                // Render the token into a JS variable via template substitution (server-side)
-                const CSRF_TOKEN = "{{ csrf_token() }}";
+            // Global CSRF protection that works even for templates that don't extend base.html
+            window.setupCSRFProtection = function() {
+                try {
+                    // Get CSRF token - try multiple sources
+                    let CSRF_TOKEN = '';
+                    
+                    // Try to get from meta tag first (if already set)
+                    const existingMeta = document.querySelector('meta[name="csrf-token"]');
+                    if (existingMeta) {
+                        CSRF_TOKEN = existingMeta.content;
+                    } else {
+                        // Render the token via template substitution (server-side)
+                        CSRF_TOKEN = "{{ csrf_token() }}";
+                        
+                        // Add meta tag for easy access
+                        const meta = document.createElement('meta');
+                        meta.name = 'csrf-token';
+                        meta.content = CSRF_TOKEN;
+                        document.head.appendChild(meta);
+                    }
+                    
+                    // Make CSRF token globally available
+                    window.CSRF_TOKEN = CSRF_TOKEN;
 
-                // Add a meta tag with the token for easier access
-                const meta = document.createElement('meta');
-                meta.name = 'csrf-token';
-                meta.content = CSRF_TOKEN;
-                document.head.appendChild(meta);
+                    function injectTokenIntoForm(form){
+                        if(!form) return;
+                        // Only inject into forms that are POSTing
+                        const method = (form.getAttribute('method') || '').toLowerCase();
+                        if(method !== 'post') return;
 
-                function injectTokenIntoForm(form){
-                    if(!form) return;
-                    // Only inject into forms that are POSTing
-                    const method = (form.getAttribute('method') || '').toLowerCase();
-                    if(method !== 'post') return;
+                        // Check if input already exists
+                        if(form.querySelector('input[name="csrf_token"]')) return;
 
-                    // Check if input already exists
-                    if(form.querySelector('input[name="csrf_token"]')) return;
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'csrf_token';
+                        input.value = CSRF_TOKEN;
+                        form.prepend(input);
+                    }
 
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = 'csrf_token';
-                    input.value = CSRF_TOKEN;
-                    form.prepend(input);
+                    // Inject into existing forms
+                    document.querySelectorAll('form').forEach(injectTokenIntoForm);
+
+                    // Observe for dynamically added forms
+                    const obs = new MutationObserver(function(mutations){
+                        for(const m of mutations){
+                            for(const node of m.addedNodes){
+                                if(node.tagName === 'FORM') injectTokenIntoForm(node);
+                                if(node.querySelectorAll) {
+                                    node.querySelectorAll('form').forEach(injectTokenIntoForm);
+                                }
+                            }
+                        }
+                    });
+                    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+
+                    // Wrap fetch to include CSRF header for same-origin POST/PUT/DELETE/PATCH
+                    if (!window._originalFetch) {
+                        window._originalFetch = window.fetch;
+                        window.fetch = function(resource, init){
+                            try {
+                                init = init || {};
+                                init.headers = init.headers || {};
+
+                                // If a JSON body or explicit method that mutates state, include token
+                                const method = ((init.method || 'GET') + '').toUpperCase();
+                                const safeMethods = ['GET','HEAD','OPTIONS'];
+                                const url = (typeof resource === 'string') ? resource : (resource && resource.url) || '';
+                                const isSameOrigin = url === '' || url.startsWith(window.location.origin) || url.startsWith('/') || url.startsWith('./') || url.startsWith('../');
+
+                                if(isSameOrigin && !safeMethods.includes(method)){
+                                    // If header not already set, set X-CSRFToken
+                                    if(!init.headers['X-CSRFToken'] && !init.headers['x-csrftoken']){
+                                        init.headers['X-CSRFToken'] = CSRF_TOKEN;
+                                    }
+                                }
+                            } catch(e){
+                                // ignore
+                            }
+                            return window._originalFetch.apply(this, arguments);
+                        };
+                    }
+                } catch(e){
+                    console.error('CSRF protection setup failed', e);
                 }
-
-                // Inject into existing forms
-                document.querySelectorAll('form').forEach(injectTokenIntoForm);
-
-                // Observe for dynamically added forms
-                const obs = new MutationObserver(function(mutations){
-                    for(const m of mutations){
-                        for(const node of m.addedNodes){
-                            if(node.tagName === 'FORM') injectTokenIntoForm(node);
-                            if(node.querySelectorAll) {
-                                node.querySelectorAll('form').forEach(injectTokenIntoForm);
-                            }
-                        }
-                    }
-                });
-                obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
-
-                // Wrap fetch to include CSRF header for same-origin POST/PUT/DELETE/PATCH
-                const _fetch = window.fetch;
-                window.fetch = function(resource, init){
-                    try {
-                        init = init || {};
-                        init.headers = init.headers || {};
-
-                        // If a JSON body or explicit method that mutates state, include token
-                        const method = ((init.method || 'GET') + '').toUpperCase();
-                        const safeMethods = ['GET','HEAD','OPTIONS'];
-                        const url = (typeof resource === 'string') ? resource : (resource && resource.url) || '';
-                        const isSameOrigin = url === '' || url.startsWith(window.location.origin) || url.startsWith('/') || url.startsWith('./') || url.startsWith('../');
-
-                        if(isSameOrigin && !safeMethods.includes(method)){
-                            // If header not already set, set X-CSRFToken
-                            if(!init.headers['X-CSRFToken'] && !init.headers['x-csrftoken']){
-                                init.headers['X-CSRFToken'] = CSRF_TOKEN;
-                            }
-                        }
-                    } catch(e){
-                        // ignore
-                    }
-                    return _fetch.apply(this, arguments);
-                };
-            } catch(e){
-                console.error('CSRF auto-inject failed', e);
-            }
-        })();
+            };
+            
+            // Run CSRF protection setup immediately
+            window.setupCSRFProtection();
+        </script>
+        
+        <!-- Global script to ensure CSRF protection is available on all pages -->
+        <script>
+            // Ensure CSRF protection is set up on every page load
+            document.addEventListener('DOMContentLoaded', function() {
+                if (typeof window.setupCSRFProtection === 'function') {
+                    window.setupCSRFProtection();
+                }
+            });
         </script>
     
     {% block extra_js %}{% endblock %}

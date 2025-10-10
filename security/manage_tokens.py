@@ -9,7 +9,7 @@ import json
 import os
 from datetime import datetime
 
-TOKENS_FILE = "api_tokens.json"
+TOKENS_FILE = "security/api_tokens.json"
 
 def load_tokens():
     """Load existing tokens from file"""

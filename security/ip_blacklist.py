@@ -130,14 +130,7 @@ class IPBlacklist:
         for source_name, source_config in self.sources.items():
             source_ips = self._fetch_from_source(source_name, source_config)
             new_ips.update(source_ips)
-            time.sleep(1)  # Be nice to the servers
-        
-        # Add some known bad IPs manually (like the one you encountered)
-        manual_bad_ips = {
-            '38.211.193.130',  # The IP that attacked you
-            '38.211.193.0/24'  # Block the entire subnet
-        }
-        new_ips.update(manual_bad_ips)
+            time.sleep(1)
         
         with self._lock:
             self.blacklisted_ips = new_ips
