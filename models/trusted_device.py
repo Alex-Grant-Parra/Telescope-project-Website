@@ -3,6 +3,9 @@ import os
 from datetime import datetime, timedelta
 from db import db
 from flask import request
+import logging
+
+sec_logger = logging.getLogger('security')
 
 
 class TrustedDevice(db.Model):
@@ -72,52 +75,80 @@ class TrustedDevice(db.Model):
     @staticmethod
     def is_device_trusted(user_id):
         """Check if the current device is trusted for the given user"""
+        # Prefer token stored in a cookie; this is more stable across proxies/NATs
+        try:
+            token = request.cookies.get('trusted_device_token')
+        except Exception:
+            token = None
+
+        if token:
+            try:
+                trusted_device = TrustedDevice.query.filter_by(
+                    user_id=user_id,
+                    device_fingerprint=token
+                ).filter(
+                    TrustedDevice.expires_at > datetime.utcnow()
+                ).first()
+                if trusted_device:
+                    trusted_device.last_used = datetime.utcnow()
+                    db.session.commit()
+                    try:
+                        sec_logger.info(f"trusted_device_token_match: user_id={user_id}, device_id={trusted_device.id}")
+                    except Exception:
+                        pass
+                    return True, trusted_device.device_name
+            except Exception:
+                # Any DB/cookie read errors fall back to header-based fingerprinting
+                pass
+
+        # Fallback: header-based fingerprint (legacy)
         fingerprint = TrustedDevice.generate_device_fingerprint()
-        
+        try:
+            sec_logger.info(f"trusted_device_check: user_id={user_id}, fingerprint={fingerprint[:16]}...")
+        except Exception:
+            pass
+
         trusted_device = TrustedDevice.query.filter_by(
             user_id=user_id,
             device_fingerprint=fingerprint
         ).filter(
             TrustedDevice.expires_at > datetime.utcnow()
         ).first()
-        
+
         if trusted_device:
             # Update last used timestamp
             trusted_device.last_used = datetime.utcnow()
             db.session.commit()
+            try:
+                sec_logger.info(f"trusted_device_found: user_id={user_id}, device_id={trusted_device.id}, expires={trusted_device.expires_at}")
+            except Exception:
+                pass
             return True, trusted_device.device_name
-        
+
         return False, None
     
     @staticmethod
     def trust_device(user_id, trust_for_days=30):
         """Mark the current device as trusted for the specified number of days"""
-        fingerprint = TrustedDevice.generate_device_fingerprint()
+        # Create a stable random token to represent this trusted device. Store that
+        # token in the DB and return it so the caller can set a persistent cookie.
+        token = os.urandom(24).hex()
         device_name = TrustedDevice.get_device_name()
-        
-        # Check if device is already trusted
-        existing = TrustedDevice.query.filter_by(
+        try:
+            sec_logger.info(f"trusted_device_trust: user_id={user_id}, token_prefix={token[:16]}..., device_name={device_name}")
+        except Exception:
+            pass
+
+        # Create new trusted device entry with the token
+        trusted_device = TrustedDevice(
             user_id=user_id,
-            device_fingerprint=fingerprint
-        ).first()
-        
-        if existing:
-            # Update existing trusted device
-            existing.expires_at = datetime.utcnow() + timedelta(days=trust_for_days)
-            existing.last_used = datetime.utcnow()
-            existing.device_name = device_name  # Update device name in case it changed
-        else:
-            # Create new trusted device
-            trusted_device = TrustedDevice(
-                user_id=user_id,
-                device_fingerprint=fingerprint,
-                device_name=device_name,
-                expires_at=datetime.utcnow() + timedelta(days=trust_for_days)
-            )
-            db.session.add(trusted_device)
-        
+            device_fingerprint=token,
+            device_name=device_name,
+            expires_at=datetime.utcnow() + timedelta(days=trust_for_days)
+        )
+        db.session.add(trusted_device)
         db.session.commit()
-        return device_name
+        return device_name, token
     
     @staticmethod
     def cleanup_expired_devices():

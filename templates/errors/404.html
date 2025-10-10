@@ -1,64 +1,39 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Page Not Found</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 50px;
-            background-color: #f4f4f4;
-        }
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        h1 {
-            font-size: 72px;
-            color: #e74c3c;
-        }
-        p {
-            font-size: 20px;
-            color: #555;
-        }
-        a {
-            font-size: 18px;
-            color: #3498db;
-            text-decoration: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            background-color: #3498db;
-            color: white;
-        }
-        a:hover {
-            text-decoration: underline;
-            background-color: #2980b9;
-        }
-        .image-container {
-            margin-top: 50px;
-        }
-        img {
-            width: 80%; /* Make the image 80% of the page width */
-            max-width: 600px;
-            height: auto;
-        }
-    </style>
-</head>
-<body>
+{% extends "base.html" %}
 
-<div class="container">
-    <h1>404</h1>
-    <p>Oops! The page you're looking for could not be found.</p>
-    <p>Here's a photo of Bob the cat to make you feel better...</p>
-    <p><a href="{{ url_for('home.home') }}">Go back to the homepage</a></p>
+{% block title %}404 Page Not Found - Telescope Control{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="card shadow">
+                <div class="card-body">
+                    <h1 class="display-1 text-warning">404</h1>
+                    <h2 class="card-title">Page Not Found</h2>
+                    <p class="card-text lead">Oops! The page you're looking for could not be found.</p>
+                    <p class="card-text text-muted">
+                        Here's a photo of Bob the cat to make you feel better...
+                    </p>
+                    
+                    <!-- Image displayed in the card -->
+                    <div class="my-4">
+                        <img src="{{ url_for('static', filename='404cat.webp') }}" 
+                             alt="Bob the cat" 
+                             class="img-fluid rounded" 
+                             style="max-width: 400px; width: 80%;">
+                    </div>
+                    
+                    <div class="mt-4">
+                        <a href="{{ url_for('home.home') }}" class="btn btn-primary me-2">
+                            <i class="fas fa-home"></i> Go to Homepage
+                        </a>
+                        <button class="btn btn-outline-secondary" onclick="history.back()">
+                            <i class="fas fa-arrow-left"></i> Go Back
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
-
-<!-- Image displayed below the error message -->
-<div class="image-container">
-    <img src="http://localhost:8002/static/404cat.webp" alt="Bob the cat">
-</div>
-
-</body>
-</html>
+{% endblock %}

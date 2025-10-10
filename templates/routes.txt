@@ -1,0 +1,45 @@
+# Accessible Routes - Generated automatically
+# Generated on: 2025-10-10 13:51:29
+
+/StarMap -> star_map.star_map
+/about -> about.about
+/about/privacy -> about.privacy
+/about/tos -> about.tos
+/admin -> admin.admin
+/admin/security -> admin.admin_security_page
+/admin/security/logfile/example.log -> admin.admin_security_logfile
+/admin/security/logs -> admin.admin_security_logs
+/admin/security/logs -> admin.security_logs
+/admin/security/logs -> get_security_logs
+/admin/security/status -> security_status
+/admin/security/tokens -> admin.admin_security_tokens
+/admin/users -> admin.admin_users
+/album -> album.album
+/album/photo/example.log -> album.album_photo
+/album/photos -> album.album_photos
+/device_info -> auth.device_info
+/errors -> error.error_list
+/errors/<int:code> -> error.test_error
+/forgot_password -> auth.forgot_password
+/home -> home.home
+/interface/ -> interface.interface
+/interface/get_camera_choices -> interface.get_camera_choices
+/interface/get_selected_telescope -> interface.get_selected_telescope
+/interface/get_telescopes -> interface.get_telescopes
+/login -> auth.login
+/login/2FA -> auth.login_2fa
+/logout -> auth.logout
+/profile -> profile.profile
+/profile/account_info -> profile.account_info
+/profile/admin/users -> profile.admin_users
+/profile/edit -> profile.edit_profile
+/profile/trust_debug -> profile.trust_debug
+/profile/trusted_devices -> profile.profile_trusted_devices
+/register -> auth.register
+/reset_password/<token> -> auth.reset_password
+/security/tokens -> security.tokens
+/star_info/<star_name> -> star_map.star_info
+/static/example.log -> static
+/trusted_devices -> auth.trusted_devices
+/user/account_type -> user.get_account_type_route
+/user/night_mode -> user.get_night_mode

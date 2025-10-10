@@ -70,14 +70,17 @@ def login():
 
 @auth_bp.route("/logout")
 def logout():
-    logout_user()
-    flash('Logged out successfully', 'info')
+    resp = redirect(url_for('home.home'))
     try:
         sec_logger.info(json.dumps({'event': 'logout', 'user_id': current_user.get_id() if current_user else None}))
     except Exception:
         pass
+    logout_user()
+    # Clear trusted device cookie on logout to avoid stale tokens
+    resp.set_cookie('trusted_device_token', '', expires=0, httponly=True, samesite='Lax')
     session.clear()  # Clear the session
-    return redirect(url_for('home.home'))
+    flash('Logged out successfully', 'info')
+    return resp
 
 @auth_bp.route("/register", methods=['GET', 'POST'])
 def register():
@@ -206,8 +209,15 @@ def login_2fa():
         if user.verify_2fa_code(totp_code):
             # If user chose to trust this device, add it to trusted devices
             if trust_device:
-                device_name = TrustedDevice.trust_device(user.id, trust_for_days=30)
+                device_name, token = TrustedDevice.trust_device(user.id, trust_for_days=30)
+                # Set a cookie that will persist for the trust period; httponly to reduce XSS risk
+                resp = redirect(url_for('home.home'))
+                resp.set_cookie('trusted_device_token', token, max_age=30*24*60*60, httponly=True, samesite='Lax')
                 flash(f'Login successful! Device "{device_name}" is now trusted for 30 days.', 'success')
+                login_user(user)
+                session.pop('user_id', None)  # Remove user_id from session
+                session.pop('trust_device', None)  # Remove trust_device from session
+                return resp
             else:
                 flash('Login successful!', 'success')
             
