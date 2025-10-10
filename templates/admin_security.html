@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Security - Telescope{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Security Management</h2>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-3">
+                <div class="card-header bg-dark text-white">IP Blacklist</div>
+                <div class="card-body">
+                    <p><strong>Total entries:</strong> {{ blacklist_stats.total_entries }}</p>
+                    <p><strong>Last update:</strong> {{ blacklist_stats.last_update }}</p>
+
+                    <form id="blacklist-add-form" class="row g-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        <div class="col-8">
+                            <input name="ip" id="blacklist-ip" class="form-control" placeholder="IP or CIDR" />
+                        </div>
+                        <div class="col-4">
+                            <button id="blacklist-add" class="btn btn-danger">Add to blacklist</button>
+                        </div>
+                    </form>
+
+                    <hr />
+                    <h6>Current manual entries (partial)</h6>
+                    <div style="max-height:240px; overflow:auto;" id="blacklist-entries">
+                        {% for ip in blacklisted[:200] %}
+                        <div class="d-flex justify-content-between align-items-center py-1">
+                            <div><code>{{ ip }}</code></div>
+                            <div>
+                                <button class="btn btn-sm btn-outline-secondary btn-unban" data-ip="{{ ip }}">Unban</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-3">
+                <div class="card-header bg-dark text-white">Security Logs</div>
+                <div class="card-body">
+                    <p>Available log files:</p>
+                    <ul id="log-files" class="list-group mb-2">
+                        {% for f in log_files %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>{{ f }}</span>
+                            <button class="btn btn-sm btn-outline-primary btn-view-log" data-file="{{ f }}">View</button>
+                        </li>
+                        {% endfor %}
+                    </ul>
+
+                    <div id="log-output" style="white-space:pre-wrap; max-height:400px; overflow:auto; background:#111; color:#eee; padding:10px; border-radius:4px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+    const csrfToken = "{{ csrf_token() }}";
+    const urls = {
+        addBlacklist: "{{ url_for('admin.admin_blacklist_add') }}",
+        removeBlacklist: "{{ url_for('admin.admin_blacklist_remove') }}",
+        logfileBase: "{{ url_for('admin.admin_security_logfile', filename='') }}"
+    };
+
+    document.getElementById('blacklist-add-form').addEventListener('submit', async function(e){
+        e.preventDefault();
+        const ip = document.getElementById('blacklist-ip').value.trim();
+        if(!ip) return;
+        const resp = await fetch(urls.addBlacklist, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ip})
+        });
+        const data = await resp.json();
+        alert(data.message || data.error || 'Done');
+        location.reload();
+    });
+
+    document.querySelectorAll('.btn-unban').forEach(btn => {
+        btn.addEventListener('click', async function(){
+            const ip = btn.dataset.ip;
+            if(!confirm('Remove ' + ip + ' from blacklist?')) return;
+            const resp = await fetch(urls.removeBlacklist, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ip})
+            });
+            const data = await resp.json();
+            alert(data.message || data.error || 'Done');
+            location.reload();
+        });
+    });
+
+    document.querySelectorAll('.btn-view-log').forEach(btn => {
+        btn.addEventListener('click', async function(){
+            const f = btn.dataset.file;
+            const resp = await fetch(urls.logfileBase + encodeURIComponent(f), {headers: {'X-Requested-With': 'XMLHttpRequest'}});
+            const data = await resp.json();
+            if(data.lines){
+                document.getElementById('log-output').textContent = data.lines.join('');
+            } else {
+                document.getElementById('log-output').textContent = data.error || 'No content';
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

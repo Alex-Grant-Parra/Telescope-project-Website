@@ -105,23 +105,28 @@ def account_info():
     return render_template('account_info.html')
 
 
+@profile_bp.route('/profile/disable_account', methods=['POST'])
+@login_required
+def disable_account():
+    """Allow a user to disable their own account (soft-disable)"""
+    try:
+        current_user.set_enabled(False, changed_by_id=current_user.id, reason='User self-disabled')
+        flash('Your account has been disabled. You will be logged out.', 'info')
+        # Log out the user
+        from flask_login import logout_user
+        logout_user()
+        return redirect(url_for('home.home'))
+    except Exception as e:
+        flash(f'Failed to disable account: {e}', 'danger')
+        return redirect(url_for('profile.edit_profile'))
+
+
 @profile_bp.route("/profile/admin/users")
 @login_required
 def admin_users():
-    """Admin-only route to view all users"""
+    """Redirect to the admin blueprint users page"""
     if not current_user.is_admin:
         flash('Access denied. Admin privileges required.', 'danger')
         return redirect(url_for('profile.profile'))
-    
-    users = User.query.all()
-    user_stats = []
-    
-    for user in users:
-        trusted_devices = TrustedDevice.get_user_trusted_devices(user.id)
-        user_stats.append({
-            'user': user,
-            'trusted_devices_count': len(trusted_devices),
-            'trusted_devices': trusted_devices
-        })
-    
-    return render_template('admin_users.html', user_stats=user_stats)
+
+    return redirect(url_for('admin.admin_users'))

@@ -1,5 +1,8 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
 from flask_login import login_user, logout_user, current_user, login_required
+import logging
+sec_logger = logging.getLogger('security')
+import json
 from utility.hash import hash_password, check_password
 from models.user import User
 from models.trusted_device import TrustedDevice
@@ -18,6 +21,15 @@ def login():
         
         user = User.query.filter_by(username=username).first()
         if user and check_password(password, user.password):
+            # Prevent disabled accounts from logging in
+            try:
+                if not user.is_enabled():
+                    flash('This account has been disabled. Contact an administrator.', 'danger')
+                    sec_logger.info(json.dumps({'event': 'login_disabled_attempt', 'user_id': user.id, 'username': username}))
+                    return render_template('login.html')
+            except Exception:
+                # If is_enabled check fails for some reason, proceed cautiously
+                pass
             # Check if the request is coming from localhost:8080 to bypass 2FA
             is_localhost = (request.host.startswith('localhost:8080'))
             
@@ -28,11 +40,13 @@ def login():
                 # Skip 2FA for localhost:8080 connections
                 login_user(user)
                 flash('Login successful! (2FA bypassed for localhost)', 'success')
+                sec_logger.info(json.dumps({'event': 'login_success', 'user_id': user.id, 'method': 'localhost_bypass'}))
                 return redirect(url_for('home.home'))
             elif is_trusted:
                 # Skip 2FA for trusted devices
                 login_user(user)
                 flash(f'Login successful! (Trusted device: {device_name})', 'success')
+                sec_logger.info(json.dumps({'event': 'login_success', 'user_id': user.id, 'method': 'trusted_device', 'device': device_name}))
                 return redirect(url_for('home.home'))
             else:
                 # Regular 2FA flow for other connections
@@ -46,9 +60,11 @@ def login():
                 msg.body = f"Your 2FA code is {totp_code}. Please enter this code to complete your login."
                 current_app.extensions['mail'].send(msg)
                 flash('Check your email for the 2FA code to complete the login.', 'info')
+                sec_logger.info(json.dumps({'event': 'login_2fa_required', 'user_id': user.id}))
                 return redirect(url_for('auth.login_2fa'))
         else:
             flash('Invalid credentials, please try again.', 'danger')
+            sec_logger.info(json.dumps({'event': 'login_failed', 'username': username}))
 
     return render_template('login.html')
 
@@ -56,6 +72,10 @@ def login():
 def logout():
     logout_user()
     flash('Logged out successfully', 'info')
+    try:
+        sec_logger.info(json.dumps({'event': 'logout', 'user_id': current_user.get_id() if current_user else None}))
+    except Exception:
+        pass
     session.clear()  # Clear the session
     return redirect(url_for('home.home'))
 
@@ -170,6 +190,17 @@ def login_2fa():
             return redirect(url_for('auth.login'))
 
         user = User.query.get(user_id)
+        # Ensure account is still enabled before completing 2FA
+        if user:
+            try:
+                if not user.is_enabled():
+                    flash('This account has been disabled. Contact an administrator.', 'danger')
+                    sec_logger.info(json.dumps({'event': 'login_2fa_disabled_attempt', 'user_id': user.id}))
+                    session.pop('user_id', None)
+                    session.pop('trust_device', None)
+                    return redirect(url_for('auth.login'))
+            except Exception:
+                pass
         totp_code = request.form['totp']
 
         if user.verify_2fa_code(totp_code):

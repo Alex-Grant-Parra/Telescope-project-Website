@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}API Tokens - Security{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>API Tokens</h2>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} mt-2">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="post" action="{{ url_for('security.generate_token') }}" class="row g-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <div class="col-sm-5">
+                    <input name="name" class="form-control" placeholder="Client name" />
+                </div>
+                <div class="col-sm-3">
+                    <select name="client_type" class="form-select">
+                        <option value="observer">Observer</option>
+                        <option value="telescope">Telescope</option>
+                    </select>
+                </div>
+                <div class="col-sm-2">
+                    <button class="btn btn-primary">Generate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-dark text-white">Existing Tokens</div>
+        <div class="card-body">
+            {% if tokens %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr><th>Token (truncated)</th><th>Name</th><th>Type</th><th>Created</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for token, info in tokens.items() %}
+                            <tr>
+                                <td><code>{{ t.id }}</code></td>
+                                <td>{{ t.name }}</td>
+                                <td>{{ t.client_type }}</td>
+                                <td>{{ t.created }}</td>
+                                <td>
+                                    <form method="post" action="{{ url_for('security.revoke_token') }}" style="display:inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                        <input type="hidden" name="token" value="{{ t.id }}" />
+                                        <button class="btn btn-sm btn-outline-danger">Revoke</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <p class="text-muted">No tokens found.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

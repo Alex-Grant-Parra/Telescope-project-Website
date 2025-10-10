@@ -28,6 +28,10 @@ class User(UserMixin, db.Model):
     totp_secret = db.Column(db.String(16))
     current_2fa_code = db.Column(db.String(6))
     night_mode = db.Column(db.Boolean, default=False, nullable=False)  # Night mode preference
+    # Persistent enabled flag for quick checks (new column)
+    is_enabled_flag = db.Column('is_enabled', db.Boolean, default=True, nullable=False)
+    # Note: we don't add a persistent is_enabled column here to avoid altering existing DB schema
+    # Instead we rely on AccountStatusHistory model to determine current enabled/disabled state.
 
     @property
     def is_admin(self):
@@ -74,7 +78,11 @@ class User(UserMixin, db.Model):
     # Flask-Login properties
     @property
     def is_active(self):
-        return True
+        # User is active only if their account is enabled
+        try:
+            return bool(self.is_enabled())
+        except Exception:
+            return True
 
     @property
     def is_authenticated(self):
@@ -119,8 +127,48 @@ class User(UserMixin, db.Model):
         """Get the user's night mode preference"""
         return bool(self.night_mode) if self.night_mode is not None else False
 
+    # Account enabled/disabled helpers that consult AccountStatusHistory
+    def is_enabled(self):
+        # Prefer the persistent flag when available
+        try:
+            if hasattr(self, 'is_enabled_flag') and self.is_enabled_flag is not None:
+                return bool(self.is_enabled_flag)
+        except Exception:
+            pass
+
+        # Fallback to history lookup
+        try:
+            from models.user import AccountStatusHistory
+            status = AccountStatusHistory.query.filter_by(user_id=self.id).order_by(AccountStatusHistory.changed_at.desc()).first()
+            if status is None:
+                return True
+            return bool(status.enabled)
+        except Exception:
+            return True
+
+    def set_enabled(self, enabled, changed_by_id=None, reason=None):
+        from models.user import AccountStatusHistory
+        # Update persistent flag and history
+        self.is_enabled_flag = bool(enabled)
+        new_status = AccountStatusHistory(user_id=self.id, enabled=bool(enabled), changed_by=changed_by_id, reason=reason)
+        db.session.add(new_status)
+        db.session.commit()
+        return new_status
+
 
 user_bp = Blueprint("user", __name__)
+
+
+class AccountStatusHistory(db.Model):
+    __tablename__ = 'account_status_history'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+    changed_by = db.Column(db.Integer, nullable=True)  # user id of admin who changed status
+    reason = db.Column(db.String(255), nullable=True)
+    changed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='status_history')
 
 @user_bp.route("/user/account_type")
 @login_required

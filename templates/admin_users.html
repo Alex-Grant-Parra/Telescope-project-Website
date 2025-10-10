@@ -123,13 +123,38 @@
                                         </small>
                                     </td>
                                     <td>
-                                        <small>
-                                            {% if user.get_night_mode() %}
-                                                <i class="fas fa-moon text-dark" title="Night Mode"></i>
-                                            {% else %}
-                                                <i class="fas fa-sun text-warning" title="Day Mode"></i>
-                                            {% endif %}
-                                        </small>
+                                        <div class="d-flex gap-2 align-items-center">
+                                            <form method="post" action="{{ url_for('admin.set_role', user_id=user.id) }}" class="admin-action-form">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                                <div class="input-group input-group-sm">
+                                                    <select name="role" class="form-select">
+                                                        <option value="Administrator" {% if user.is_admin %}selected{% endif %}>Administrator</option>
+                                                        <option value="Standard" {% if user.is_standard %}selected{% endif %}>Standard</option>
+                                                        <option value="Limited" {% if user.is_limited %}selected{% endif %}>Limited</option>
+                                                    </select>
+                                                    <button class="btn btn-sm btn-outline-primary" type="submit">Set</button>
+                                                </div>
+                                            </form>
+
+                                            <form method="post" action="{{ url_for('admin.toggle_enabled', user_id=user.id) }}" class="admin-action-form">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                                {% set enabled = stats.is_enabled %}
+                                                <button type="submit" class="btn btn-sm {% if enabled %}btn-outline-secondary{% else %}btn-outline-success{% endif %}" title="Toggle Enabled">
+                                                    {% if enabled %}
+                                                        <i class="fas fa-user-slash"></i> Disable
+                                                    {% else %}
+                                                        <i class="fas fa-user-check"></i> Enable
+                                                    {% endif %}
+                                                </button>
+                                            </form>
+
+                                            <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}" style="display:inline" class="delete-user-form admin-action-form">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger ms-1" title="Delete User">
+                                                    <i class="fas fa-trash"></i> Delete
+                                                </button>
+                                            </form>
+                                        </div>
                                     </td>
                                 </tr>
                                 {% if stats.trusted_devices_count > 0 %}
@@ -177,4 +202,126 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.delete-user-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            var username = form.closest('tr').querySelector('td:nth-child(2) strong').textContent;
+            if (!confirm('Are you sure you want to delete user "' + username + '"? This action cannot be undone.')) {
+                e.preventDefault();
+            }
+        });
+    });
+    
+    // AJAX handling for admin actions
+    const adminForms = document.querySelectorAll('.admin-action-form');
+    adminForms.forEach(form => {
+        form.addEventListener('submit', async function(e) {
+            // Allow normal submit for non-AJAX (e.g., if JS disabled)
+            e.preventDefault();
+
+            const url = form.action;
+            const formData = new FormData(form);
+            const jsonBody = {};
+            formData.forEach((v, k) => { jsonBody[k] = v; });
+
+            // Obtain CSRF token from form or from cookie
+            const csrfToken = formData.get('csrf_token') || (document.cookie.match(/csrf_token=([^;]+)/) || [])[1];
+
+            // Disable submit buttons to prevent duplicate requests
+            const submitButtons = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+            submitButtons.forEach(b => b.disabled = true);
+
+            try {
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify(jsonBody)
+                });
+                let data = null;
+                try {
+                    data = await resp.json();
+                } catch (parseErr) {
+                    // If the response isn't JSON (e.g., redirect HTML), surface status
+                    const text = await resp.text();
+                    data = { status: resp.ok ? 'success' : 'error', message: text || resp.statusText };
+                }
+                // show feedback
+                const container = document.querySelector('.container');
+                const alert = document.createElement('div');
+                alert.className = 'alert mt-2';
+                if (resp.ok && data.status === 'success') {
+                    alert.classList.add('alert-success');
+                    alert.textContent = data.message || 'Success';
+
+                    // Update UI inline based on action
+                    const tr = form.closest('tr');
+
+                    // Toggle enabled response contains `enabled` boolean
+                    if (typeof data.enabled !== 'undefined' && tr) {
+                        const enabled = !!data.enabled;
+                        // Find toggle button in the form
+                        const toggleBtn = form.querySelector('button[type="submit"]');
+                        if (toggleBtn) {
+                            if (enabled) {
+                                toggleBtn.classList.remove('btn-outline-success');
+                                toggleBtn.classList.add('btn-outline-secondary');
+                                toggleBtn.innerHTML = '<i class="fas fa-user-slash"></i> Disable';
+                            } else {
+                                toggleBtn.classList.remove('btn-outline-secondary');
+                                toggleBtn.classList.add('btn-outline-success');
+                                toggleBtn.innerHTML = '<i class="fas fa-user-check"></i> Enable';
+                            }
+                        }
+                        // update row highlight if desired
+                        if (enabled) {
+                            tr.classList.remove('table-danger');
+                        } else {
+                            tr.classList.add('table-danger');
+                        }
+                    }
+
+                    // If role was changed, update the Account Type badge
+                    if (jsonBody.role && tr) {
+                        const badge = tr.querySelector('td:nth-child(4) .badge');
+                        if (badge) {
+                            const role = jsonBody.role;
+                            badge.textContent = role;
+                            badge.classList.remove('bg-danger','bg-success','bg-warning','bg-secondary');
+                            if (role === 'Administrator') badge.classList.add('bg-danger');
+                            else if (role === 'Standard') badge.classList.add('bg-success');
+                            else if (role === 'Limited') badge.classList.add('bg-warning');
+                            else badge.classList.add('bg-secondary');
+                        }
+                    }
+
+                } else {
+                    alert.classList.add('alert-danger');
+                    alert.textContent = (data && data.message) ? data.message : 'Error';
+                }
+                container.prepend(alert);
+                setTimeout(()=> alert.remove(), 5000);
+
+            } catch (err) {
+                const container = document.querySelector('.container');
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-danger mt-2';
+                alert.textContent = (err && err.message) ? ('Network error: ' + err.message) : 'Network error';
+                container.prepend(alert);
+                setTimeout(()=> alert.remove(), 5000);
+            } finally {
+                // Re-enable submit buttons
+                submitButtons.forEach(b => b.disabled = false);
+            }
+        });
+    });
+});
+</script>
 {% endblock %}
