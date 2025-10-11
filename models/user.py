@@ -4,7 +4,7 @@ import random
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 from flask_login import UserMixin, login_required, current_user
-from db import db
+from app.db import db
 from dotenv import load_dotenv  # Import load_dotenv
 from flask import Blueprint, jsonify
 

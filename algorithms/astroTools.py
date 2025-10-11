@@ -1,7 +1,7 @@
 from math import sin as math_sin, cos as math_cos, tan as math_tan, \
     asin as math_asin, acos as math_acos, atan as math_atan, atan2 as math_atan2, radians, degrees, sqrt, pi, log10
 from Server import app
-from db import db
+from app.db import db
 from models.tables import PlanetsTable  
 from algorithms.timeUtils import SpaceTime
 from algorithms.convert import convert

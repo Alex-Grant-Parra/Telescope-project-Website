@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_required, current_user
 from models.user import User
-from db import db
+from app.db import db
 from models.user import AccountStatusHistory
 from datetime import datetime
 from security.ip_blacklist import get_blacklist

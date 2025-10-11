@@ -6,7 +6,7 @@ import json
 from utility.hash import hash_password, check_password
 from models.user import User
 from models.trusted_device import TrustedDevice
-from db import db
+from app.db import db
 from flask_mail import Message
 
 

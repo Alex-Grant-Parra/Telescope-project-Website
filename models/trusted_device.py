@@ -1,7 +1,7 @@
 import hashlib
 import os
 from datetime import datetime, timedelta
-from db import db
+from app.db import db
 from flask import request
 import logging
 

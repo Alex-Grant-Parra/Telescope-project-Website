@@ -3,7 +3,7 @@ from datetime import datetime
 from models.tables import HDSTARtable, IndexTable, NGCtable
 
 from algorithms.convert import convert
-from algorithms2 import getAllCelestialData
+from algorithms.astroTools import getAllCelestialData
 
 star_map_bp = Blueprint("star_map", __name__)
 
