@@ -324,43 +324,37 @@ function draw() {
         if (effectiveMag > magLimit) continue;
         if (obj.type === "star" && !showStarsVal) continue;
         if (obj.type === "planet" && !showPlanetsVal) continue;
-        let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
+        // Use cached Cartesian coordinates to avoid repeated trig calls
+        let [x, y, z] = obj.xyz || radecToXYZ(obj.ra, obj.dec);
         [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
         // Only render objects in the front hemisphere (camera inside sphere looking out)
         if (z <= -0.1) continue; // Show objects in front of camera
         const [cx, cy] = project([x, y, z]);
-        
-        // Allow stars to fill entire screen - remove bounds checking
-        
-        let size;
-        ctx.save();
+
+        // Draw without ctx.save()/restore() per object (avoid expensive state push/pop)
         if (obj.type === "planet") {
-            size = fixedPlanetSize; // Use fixed size for all planets
+            const size = fixedPlanetSize; // Use fixed size for all planets
+            ctx.globalAlpha = 1;
             if (obj.icon && planetImages[obj.icon]) {
                 // Draw the preloaded sprite image
                 const img = planetImages[obj.icon];
                 ctx.drawImage(img, cx - size/2, cy - size/2, size, size);
-                // Debug log for first few renders
-                if (Math.random() < 0.01) console.log(`Rendered ${obj.name} sprite at (${cx}, ${cy})`);
             } else {
                 // Fallback to colored circle if image isn't loaded
                 ctx.fillStyle = "#ffa500"; // Orange color for better visibility
                 ctx.beginPath();
                 ctx.arc(cx, cy, size/2, 0, 2*Math.PI);
                 ctx.fill();
-                // Debug log for fallback renders
-                if (Math.random() < 0.01) console.log(`Rendered ${obj.name} fallback circle - icon: ${obj.icon}, in cache: ${!!planetImages[obj.icon]}`);
             }
         } else {
-            // Star rendering remains the same
-            size = Math.max(1, 6 - effectiveMag);
+            const size = Math.max(1, 6 - effectiveMag);
             ctx.fillStyle = "#fff";
             ctx.globalAlpha = Math.max(0.5, 1 - effectiveMag/8);
             ctx.beginPath();
             ctx.arc(cx, cy, size, 0, 2*Math.PI);
             ctx.fill();
+            ctx.globalAlpha = 1; // reset alpha for subsequent draws
         }
-        ctx.restore();
     }
 
     // Draw orange highlight ring for searched object
@@ -368,23 +362,22 @@ function draw() {
         const magLimit = parseFloat(magFilter.value);
         const effectiveMag = searchedObject.mag == null ? 50 : searchedObject.mag;
         if (effectiveMag <= magLimit) {
-            let [x, y, z] = radecToXYZ(searchedObject.ra, searchedObject.dec);
+            let [x, y, z] = searchedObject.xyz || radecToXYZ(searchedObject.ra, searchedObject.dec);
             [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
             if (z > -0.1) { // Object is visible
                 const [cx, cy] = project([x, y, z]);
-                
+
                 // Animate the ring
                 highlightAnimation += 0.1;
                 const ringSize = 20 + Math.sin(highlightAnimation) * 5;
                 const opacity = 0.7 + Math.sin(highlightAnimation * 2) * 0.3;
-                
-                ctx.save();
+
                 ctx.strokeStyle = `rgba(255, 165, 0, ${opacity})`;
                 ctx.lineWidth = 3;
                 ctx.beginPath();
                 ctx.arc(cx, cy, ringSize, 0, 2*Math.PI);
                 ctx.stroke();
-                ctx.restore();
+                ctx.lineWidth = 1; // reset
             }
         }
     }
@@ -418,8 +411,8 @@ canvas.addEventListener('click', function(e) {
         if (effectiveMag > magLimit) continue;
         if (obj.type === "star" && !showStars.checked) continue;
         if (obj.type === "planet" && !showPlanets.checked) continue;
-        let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
-        [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+    let [x, y, z] = obj.xyz || radecToXYZ(obj.ra, obj.dec);
+    [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
         if (z <= -0.1) continue;
         const [cx, cy] = project([x, y, z]);
         
@@ -658,6 +651,8 @@ function searchObject() {
                     mag: objData['V-Mag'] || 30,
                     type: objData.type || 'star'
                 };
+                // Precompute xyz for transient search result
+                foundObject.xyz = radecToXYZ(foundObject.ra, foundObject.dec);
             }
             
             // Set as searched object and move camera to it
@@ -696,7 +691,7 @@ function moveToObject(obj) {
     
     // Let's use a different approach: find the rotation that puts the object at screen center
     function testRotation(testRotX, testRotY) {
-        let [x, y, z] = radecToXYZ(obj.ra, obj.dec);
+        let [x, y, z] = obj.xyz || radecToXYZ(obj.ra, obj.dec);
         [x, y, z] = rotate([x, y, z], testRotX, testRotY, lat, lon);
         if (z <= -0.1) return null; // Behind camera
         const [screenX, screenY] = project([x, y, z]);
@@ -803,6 +798,18 @@ function clearSearch() {
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded. Star data:', stars.filter(s => s.type === 'planet'));
+    // Precompute Cartesian coordinates (x,y,z) for all objects to reduce per-frame trig work
+    function precomputeStars() {
+        for (const obj of stars) {
+            try {
+                obj.xyz = radecToXYZ(obj.ra, obj.dec);
+            } catch (e) {
+                // Fallback in case of bad data
+                obj.xyz = radecToXYZ(0, 0);
+            }
+        }
+    }
+    precomputeStars();
     // Preload planet images first, then draw
     preloadPlanetImages().then(() => {
         console.log('Images preloaded, starting first draw...');
