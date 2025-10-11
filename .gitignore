@@ -15,3 +15,5 @@ models/__pycache__
 plateSolver/__pycache__
 security/__pycache__
 utility/__pycache__
+
+templates/routes.txt

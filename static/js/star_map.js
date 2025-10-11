@@ -506,10 +506,11 @@ resetBtn.addEventListener('click', () => {
     clearSearch(); // Clear search when resetting view
     draw();
 });
-
-// Search event listeners
-searchBtn.addEventListener('click', searchObject);
-clearSearchBtn.addEventListener('click', clearSearch);
+// Search event listeners (guarded)
+if (searchBtn) searchBtn.addEventListener('click', searchObject);
+else console.warn('searchBtn not found');
+if (clearSearchBtn) clearSearchBtn.addEventListener('click', clearSearch);
+else console.warn('clearSearchBtn not found');
 searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         searchObject();
@@ -526,6 +527,11 @@ closeHelp.addEventListener('click', () => {
 helpModal.addEventListener('click', (e) => {
     if (e.target === helpModal) helpModal.style.display = "none";
 });
+
+// Expose functions to global scope so inline onclick handlers work robustly
+window.trackObject = trackObject;
+window.searchObject = searchObject;
+window.clearSearch = clearSearch;
 
 // Magnitude slider context menu
 magFilter.addEventListener('contextmenu', (e) => {
