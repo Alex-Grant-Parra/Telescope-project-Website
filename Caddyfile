@@ -1,12 +1,13 @@
-# Redirect HTTP to HTTPS
+# Redirect HTTP for the domain to HTTPS
 http://telescopes.dev {
 	redir https://telescopes.dev{uri} permanent
 }
 
-# HTTPS only - Main website (direct connection)
+# HTTPS site, bound to Wi-Fi IP
 telescopes.dev {
+	bind 192.168.0.60
 	reverse_proxy 127.0.0.1:8080
-	# Add security headers
+	# Security headders
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
