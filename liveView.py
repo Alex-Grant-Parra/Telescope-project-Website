@@ -1,4 +1,4 @@
-from flask import Flask, Response
+from flask import Flask, Response # type: ignore
 
 app = Flask(__name__)
 
@@ -18,5 +18,4 @@ def liveview(client_id):
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
-    print("This file is now a placeholder. All server and WebSocket code has been removed.")
     print("No server is run from this file.")

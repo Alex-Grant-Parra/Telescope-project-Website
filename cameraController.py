@@ -51,6 +51,33 @@ class Camera:
         return True
 
     @staticmethod
+    def releaseViewfinder():
+        """Release the camera viewfinder to free up the camera"""
+        try:
+            # First, kill all existing gphoto2 processes
+            print("[camera] Stopping all gphoto2 processes...")
+            kill_result = run(["pkill", "-9", "gphoto2"], capture_output=True, text=True)
+            # pkill returns 1 if no processes found, which is okay
+            if kill_result.returncode not in [0, 1]:
+                print(f"[camera] Warning: pkill returned {kill_result.returncode}: {kill_result.stderr}")
+            
+            # Wait a moment for processes to fully terminate
+            sleep(1)
+            
+            # Now release the viewfinder
+            result = run(["gphoto2", "--set-config", "viewfinder=0"], 
+                        capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                print("[camera] Viewfinder released.")
+                return True
+            else:
+                print(f"[camera] Warning: Failed to release viewfinder: {result.stderr}")
+                return False
+        except Exception as e:
+            print(f"[camera] Error releasing viewfinder: {e}")
+            return False
+
+    @staticmethod
     def get_latest_file_number():
         result = run(["gphoto2", "--list-files"], capture_output=True, text=True)
         if result.returncode != 0:
