@@ -2,12 +2,12 @@
 venv
 camera_photos
 security/logs/
+infrastructure/logs/
 security/blacklist.txt
 api_tokens.json
 config.yml
 .vscode
 
-__pycache__
 algorithms/__pycache__
 
 controllers/__pycache__
@@ -17,3 +17,6 @@ security/__pycache__
 utility/__pycache__
 
 templates/routes.txt
+
+__pycache__/
+__pycache__/Server.cpython-312.pyc
