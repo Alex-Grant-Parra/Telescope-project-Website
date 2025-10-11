@@ -3,7 +3,7 @@ import ujson
 import asyncio
 import websockets
 import subprocess
-from WebsocketServer import clients
+from app.WebsocketServer import clients
 from time import sleep
 from PIL import Image
 import io

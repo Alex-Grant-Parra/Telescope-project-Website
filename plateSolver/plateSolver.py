@@ -1,4 +1,4 @@
-from db import db
+from app.db import db
 from models.tables import HDSTARtable
 from Server import app
 import cv2

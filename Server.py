@@ -11,7 +11,7 @@ from flask_wtf import CSRFProtect
 import os
 import importlib
 from socket import gethostname
-from db import db
+from app.db import db
 import subprocess
 import atexit
 from waitress import serve
@@ -22,8 +22,15 @@ from security import SecurityMiddleware, register_security_error_handlers
 # Get the base dir
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 app = Flask(__name__)
-load_dotenv()
+# Use os.path.join (BASE_DIR is a string) to build env path
+env_path = os.path.join(BASE_DIR, 'instance', '.env')
 
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+else:
+    # fallback: try system env or log that .env is missing
+    print(f".env not found at {env_path}")
+    
 # Check for correct account
 if os.getlogin() == os.getenv("EXECUTER"):
     ifOnline = False
@@ -70,7 +77,7 @@ atexit.register(cleanup_processes)
 # Flask Configuration
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY")
 
-DATABASE_PATH = f"sqlite:///{os.path.join(BASE_DIR, 'Data.db')}"
+DATABASE_PATH = f"sqlite:///{os.path.join(BASE_DIR, 'instance', 'Data.db')}"
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_PATH 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = os.getenv("SQLALCHEMY_TRACK_MODIFICATIONS") == "True"
 app.config["ENCRYPTION_KEY"] = os.getenv("ENCRYPTION_KEY")
@@ -251,7 +258,7 @@ def index():
     return redirect(url_for("home.home"))
 
 # Import websocket server functionality
-from WebsocketServer import (
+from app.WebsocketServer import (
     start_websocket_servers,
     send_command_handler,
     liveview_handler,

@@ -9,7 +9,7 @@ from algorithms.convert import convert
 from datetime import datetime
 import time
 
-from telescopeLink import Cameralink
+from app.telescopeLink import Cameralink
 
 interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
@@ -52,7 +52,7 @@ def update_camera():
 
 @interface_bp.route("/search_object", methods=["POST"])
 def search_object():
-    from algorithms2 import getAllCelestialData
+    from algorithms.astroTools import getAllCelestialData
     from models.tables import HDSTARtable, IndexTable, NGCtable
     data = request.json
     search_value = data.get("searchValue", "").strip()
