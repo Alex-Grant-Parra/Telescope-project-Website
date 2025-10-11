@@ -651,8 +651,9 @@ function searchObject() {
                     mag: objData['V-Mag'] || 30,
                     type: objData.type || 'star'
                 };
-                // Precompute xyz for transient search result
-                foundObject.xyz = radecToXYZ(foundObject.ra, foundObject.dec);
+                // Precompute xyz for transient search result and invert Y to match orientation
+                const _tmp = radecToXYZ(foundObject.ra, foundObject.dec);
+                foundObject.xyz = [_tmp[0], -_tmp[1], _tmp[2]];
             }
             
             // Set as searched object and move camera to it
@@ -802,10 +803,13 @@ window.addEventListener('DOMContentLoaded', () => {
     function precomputeStars() {
         for (const obj of stars) {
             try {
-                obj.xyz = radecToXYZ(obj.ra, obj.dec);
+                const _v = radecToXYZ(obj.ra, obj.dec);
+                // Invert Y so visual orientation matches previous behavior
+                obj.xyz = [_v[0], -_v[1], _v[2]];
             } catch (e) {
                 // Fallback in case of bad data
-                obj.xyz = radecToXYZ(0, 0);
+                const _v = radecToXYZ(0, 0);
+                obj.xyz = [_v[0], -_v[1], _v[2]];
             }
         }
     }
