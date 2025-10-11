@@ -37,14 +37,14 @@ if os.getlogin() == os.getenv("EXECUTER"):
 
 if ifOnline:
     print("Running server for online developement")
-    # Startup caddy
-    caddyPath = os.path.join(BASE_DIR, "caddy_windows_amd64.exe") 
+    # Startup caddy (now located in infrastructure/)
+    caddyPath = os.path.join(BASE_DIR, "infrastructure", "Caddy.exe") 
     caddyProc = subprocess.Popen([caddyPath, "run"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     print("Caddy started in the background")
 
     # Startup Cloudflare Tunnel
-    cloudflaredPath = os.path.join(BASE_DIR, "cloudflared.exe")
-    configPath = os.path.join(BASE_DIR, "config.yml")
+    cloudflaredPath = os.path.join(BASE_DIR, "infrastructure", "cloudflared.exe")
+    configPath = os.path.join(BASE_DIR, "infrastructure", "config.yml")
     cloudflaredProc = subprocess.Popen([cloudflaredPath, "tunnel", "--config", configPath, "run", "telescope-websockets"],
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     print("Cloudflare Tunnel started in the background")
