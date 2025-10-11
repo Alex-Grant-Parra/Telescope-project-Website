@@ -263,6 +263,13 @@ from WebsocketServer import (
 def send_command():
     return send_command_handler()
 
+# Exempt API endpoint from CSRF checks (it's an internal JSON API used by clients)
+try:
+    csrf.exempt(send_command)
+except Exception:
+    # If CSRFProtect isn't available for some reason, ignore so server still runs
+    pass
+
 @app.route('/liveview/<client_id>')
 def liveview(client_id):
     return liveview_handler(client_id)
@@ -270,6 +277,12 @@ def liveview(client_id):
 @app.route('/client/register', methods=['POST'])
 def register_client():
     return register_client_handler()
+
+# Exempt client registration endpoint from CSRF checks (used by non-browser clients)
+try:
+    csrf.exempt(register_client)
+except Exception:
+    pass
 
 # Run Flask and WebSocket Server
 if __name__ == '__main__':
