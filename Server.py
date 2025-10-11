@@ -38,16 +38,29 @@ if os.getlogin() == os.getenv("EXECUTER"):
 if ifOnline:
     print("Running server for online developement")
     # Startup caddy (now located in infrastructure/)
-    caddyPath = os.path.join(BASE_DIR, "infrastructure", "Caddy.exe") 
-    caddyProc = subprocess.Popen([caddyPath, "run"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    print("Caddy started in the background")
+    caddyPath = os.path.join(BASE_DIR, "infrastructure", "Caddy.exe")
+    caddyConfigPath = os.path.join(BASE_DIR, "infrastructure", "Caddyfile")
+    # Redirect Caddy stdout/stderr to log files instead of piping (prevents blocking if not read)
+    try:
+        caddy_out = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cadd_stdout.log"), "a", encoding="utf-8")
+        caddy_err = open(os.path.join(BASE_DIR, "infrastructure", "logs", "caddy_stderr.log"), "a", encoding="utf-8")
+        caddyProc = subprocess.Popen([caddyPath, "run", "--config", caddyConfigPath], stdout=caddy_out, stderr=caddy_err, cwd=os.path.join(BASE_DIR, "infrastructure"))
+        print("Caddy started in the background (using config:", caddyConfigPath, ")")
+    except Exception as e:
+        print(f"Failed to start Caddy: {e}")
 
     # Startup Cloudflare Tunnel
     cloudflaredPath = os.path.join(BASE_DIR, "infrastructure", "cloudflared.exe")
     configPath = os.path.join(BASE_DIR, "infrastructure", "config.yml")
-    cloudflaredProc = subprocess.Popen([cloudflaredPath, "tunnel", "--config", configPath, "run", "telescope-websockets"],
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    print("Cloudflare Tunnel started in the background")
+    # Redirect cloudflared output to logs as well
+    try:
+        cf_out = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cloudflared_stdout.log"), "a", encoding="utf-8")
+        cf_err = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cloudflared_stderr.log"), "a", encoding="utf-8")
+        cloudflaredProc = subprocess.Popen([cloudflaredPath, "tunnel", "--config", configPath, "run", "telescope-websockets"],
+                                        stdout=cf_out, stderr=cf_err, cwd=os.path.join(BASE_DIR, "infrastructure"))
+        print("Cloudflare Tunnel started in the background (using config:", configPath, ")")
+    except Exception as e:
+        print(f"Failed to start cloudflared: {e}")
 else:
     print("Running server for local development")
 
@@ -163,7 +176,7 @@ def generate_routes_file():
                 '/admin/user/', '/admin/blacklist/', '/security/tokens/show',
                 '/security/tokens/generate', '/security/tokens/revoke'
             ]):
-                # Replace dynamic parts with example values for display
+                # Replace dynamic parts with example values fo`r display
                 display_route = route_str
                 if '<int:' in display_route:
                     display_route = display_route.replace('<int:user_id>', '1')
@@ -307,6 +320,6 @@ if __name__ == '__main__':
 
     print(f"Starting Flask server on {gethostname()} at http://127.0.0.1:{FlaskServerPort}")
     # serve(app, host="127.0.0.1", port=FlaskServerPort)
-    app.run(host="127.0.0.1", port=FlaskServerPort, debug=False)
+    app.run(host="0.0.0.0", port=FlaskServerPort, debug=False)
 
     
