@@ -72,6 +72,9 @@
         <input type="checkbox" id="show-horizon-grid"> Horizon Grid
         <input type="checkbox" id="show-equatorial-grid"> Equatorial Grid
     </label>
+    <label>
+        <input type="checkbox" id="flip-vertical" checked> Flip vertical (debug)
+    </label>
     <div style="margin-top: 8px;">
         <label>Search Object:</label>
         <input type="text" id="search-object" placeholder="HD, NGC, IC, M, or planet name" style="width: 100%; padding: 4px; margin: 4px 0; border: 1px solid #555; background: #222; color: #fff; border-radius: 3px;">
@@ -113,6 +116,7 @@
     {{ stars|tojson }}
 </script>
 <script src="{{ url_for('static', filename='js/csrf-protection.js') }}"></script>
-<script src="{{ url_for('static', filename='js/star_map.js') }}"></script>
+<!-- Cache-busting query param to ensure latest JS is fetched -->
+<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-12-2"></script>
 </body>
 </html>

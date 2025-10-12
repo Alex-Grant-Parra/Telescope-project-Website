@@ -33,6 +33,8 @@ const helpBtn = document.getElementById('help-btn');
 const helpModal = document.getElementById('help-modal');
 const closeHelp = document.getElementById('close-help');
 const loading = document.getElementById('loading');
+// Debug orientation toggle
+const flipVerticalCheckbox = document.getElementById('flip-vertical');
 
 // Context menu elements
 const magContextMenu = document.getElementById('mag-context-menu');
@@ -109,9 +111,11 @@ function project([x, y, z]) {
     // Use full screen dimensions instead of sphere radius
     const fov = 1.2; // field of view
     const scale = Math.max(width, height) * 0.8 * zoom / (fov + z); // Apply zoom factor
+    const yProjected = (flipVerticalCheckbox && flipVerticalCheckbox.checked) ? (height / 2 + y * scale)
+                                                                             : (height / 2 - y * scale);
     return [
         width / 2 + x * scale,
-        height / 2 - y * scale
+        yProjected
     ];
 }
 
@@ -494,6 +498,12 @@ showStars.addEventListener('change', draw);
 showPlanets.addEventListener('change', draw);
 showHorizonGrid.addEventListener('change', draw);
 showEquatorialGrid.addEventListener('change', draw);
+if (flipVerticalCheckbox) {
+    flipVerticalCheckbox.addEventListener('change', () => {
+        try { localStorage.setItem('starMap.flipVertical', flipVerticalCheckbox.checked ? '1' : '0'); } catch {}
+        draw();
+    });
+}
 resetBtn.addEventListener('click', () => {
     rotX = 0; rotY = 0;
     zoom = 1.0; // Reset zoom level
@@ -657,9 +667,10 @@ function searchObject() {
                     mag: objData['V-Mag'] || 30,
                     type: objData.type || 'star'
                 };
-                // Precompute xyz for transient search result and invert Y to match orientation
+                // Precompute xyz for transient search result
+                // Note: Do NOT invert Y here; projection already handles canvas Y direction
                 const _tmp = radecToXYZ(foundObject.ra, foundObject.dec);
-                foundObject.xyz = [_tmp[0], -_tmp[1], _tmp[2]];
+                foundObject.xyz = _tmp;
             }
             
             // Set as searched object and move camera to it
@@ -804,18 +815,26 @@ function clearSearch() {
 
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
+    console.log('%cStar Map JS loaded v2025-10-12-2', 'color:#0bf');
+    // Initialize flip vertical from localStorage, if present
+    try {
+        const saved = localStorage.getItem('starMap.flipVertical');
+        if (flipVerticalCheckbox && (saved === '0' || saved === '1')) {
+            flipVerticalCheckbox.checked = (saved === '1');
+        }
+    } catch {}
     console.log('DOM loaded. Star data:', stars.filter(s => s.type === 'planet'));
     // Precompute Cartesian coordinates (x,y,z) for all objects to reduce per-frame trig work
     function precomputeStars() {
         for (const obj of stars) {
             try {
                 const _v = radecToXYZ(obj.ra, obj.dec);
-                // Invert Y so visual orientation matches previous behavior
-                obj.xyz = [_v[0], -_v[1], _v[2]];
+                // Keep native coordinate orientation: +Dec (north) maps upward in project()
+                obj.xyz = _v;
             } catch (e) {
                 // Fallback in case of bad data
                 const _v = radecToXYZ(0, 0);
-                obj.xyz = [_v[0], -_v[1], _v[2]];
+                obj.xyz = _v;
             }
         }
     }
