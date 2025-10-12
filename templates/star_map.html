@@ -65,6 +65,14 @@
         <input type="number" id="longitude" min="-180" max="180" step="0.1" value="0">
     </label>
     <div>
+        <label for="time-control" style="display:block; margin-top: 4px;">Time (local):</label>
+        <div style="display:flex; gap: 6px; align-items:center;">
+            <input type="datetime-local" id="time-control" style="flex:1; padding: 4px; background:#222; color:#fff; border:1px solid #555; border-radius:3px;">
+            <button id="time-now" title="Set to current time" style="padding:4px 8px;">Now</button>
+        </div>
+        <div style="font-size: 0.85em; color:#bbb; margin-top:4px;">Grid shows Hour Angle (HA) using your longitude and the selected time.</div>
+    </div>
+    <div>
         <label for="show-stars" style="margin-right: 8px;">
             <input type="checkbox" id="show-stars" checked> Stars
         </label>
@@ -102,8 +110,9 @@
             <li>Set your latitude/longitude for local sky orientation</li>
             <li>Toggle stars/planets visibility</li>
             <li>Toggle horizon grid (altitude/azimuth with N/E/S/W)</li>
-            <li>Toggle equatorial grid (RA/DEC coordinates)</li>
+            <li>Toggle equatorial grid (HA/DEC: Hour Angle and Declination)</li>
             <li>Reset view to default orientation and zoom</li>
+            <li>Use the Time control to preview the sky at any date/time; the grid labels show Hour Angle (HA).</li>
         </ul>
         <button id="close-help">Close</button>
     </div>
@@ -121,6 +130,6 @@
 </script>
 <script src="{{ url_for('static', filename='js/csrf-protection.js') }}"></script>
 <!-- Cache-busting query param to ensure latest JS is fetched -->
-<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-12-3"></script>
+<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-12-4"></script>
 </body>
 </html>

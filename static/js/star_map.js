@@ -28,6 +28,9 @@ const showStars = document.getElementById('show-stars');
 const showPlanets = document.getElementById('show-planets');
 const showHorizonGrid = document.getElementById('show-horizon-grid');
 const showEquatorialGrid = document.getElementById('show-equatorial-grid');
+const timeControl = document.getElementById('time-control');
+const timeNowBtn = document.getElementById('time-now');
+let currentLSTDeg = 0; // updated per draw based on time and longitude
 const resetBtn = document.getElementById('reset-view');
 const helpBtn = document.getElementById('help-btn');
 const helpModal = document.getElementById('help-modal');
@@ -90,6 +93,49 @@ function radecToXYZ(ra, dec) {
     const y = Math.sin(decRad);
     const z = Math.cos(decRad) * Math.sin(raRad);
     return [x, y, z];
+}
+
+// Time and sidereal time utilities
+// Convert a Date to Julian Date (UTC)
+function toJulianDate(date) {
+    // Algorithm from NOAA; date should be a JS Date in UTC
+    const year = date.getUTCFullYear();
+    let month = date.getUTCMonth() + 1; // 1-12
+    const day = date.getUTCDate() + (date.getUTCHours() + (date.getUTCMinutes() + date.getUTCSeconds() / 60) / 60) / 24;
+    let Y = year;
+    let M = month;
+    if (M <= 2) { Y -= 1; M += 12; }
+    const A = Math.floor(Y / 100);
+    const B = 2 - A + Math.floor(A / 4);
+    const JD = Math.floor(365.25 * (Y + 4716)) + Math.floor(30.6001 * (M + 1)) + day + B - 1524.5;
+    return JD;
+}
+
+// Greenwich Mean Sidereal Time in degrees (0-360)
+function gmstDegrees(date) {
+    // Use the IAU 1982/1994 expression based on full Julian Date
+    const JD = toJulianDate(date);
+    const T = (JD - 2451545.0) / 36525.0;
+    let gmst = 280.46061837 + 360.98564736629 * (JD - 2451545.0) + 0.000387933 * T * T - (T * T * T) / 38710000.0;
+    gmst = ((gmst % 360) + 360) % 360; // normalize
+    return gmst;
+}
+
+// Local Sidereal Time in degrees given longitude in degrees (east positive)
+function lstDegrees(date, longitudeDeg) {
+    const gmst = gmstDegrees(date);
+    let lst = gmst + longitudeDeg; // East positive
+    lst = ((lst % 360) + 360) % 360; // normalize 0-360
+    return lst;
+}
+
+// Compute Hour Angle (degrees, range -180..+180) for a given RA (deg) and LST (deg)
+function hourAngleDegrees(raDeg, lstDeg) {
+    // HA = LST - RA
+    let ha = lstDeg - raDeg;
+    // normalize to -180..+180 for labeling aesthetics
+    ha = ((ha + 180) % 360 + 360) % 360 - 180;
+    return ha;
 }
 
 // 3D rotation (including local latitude/longitude)
@@ -269,9 +315,13 @@ function drawEquatorialGrid(lat, lon) {
         }
     }
 
-    // Draw right ascension lines
+    // Draw hour angle (HA) lines by converting HA -> RA (RA = LST - HA)
+    // This way, the grid lines represent constant HA and move with time
     ctx.strokeStyle = "rgba(255, 150, 100, 0.3)";
-    for (let ra = 0; ra < 360; ra += 10) {
+    for (let ha = -180; ha < 180; ha += 10) {
+        // Convert HA to corresponding RA for current time
+        let ra = currentLSTDeg - ha; // degrees
+        ra = ((ra % 360) + 360) % 360;
         ctx.beginPath();
         let firstPoint = true;
         for (let dec = -90; dec <= 90; dec += 2) {
@@ -289,14 +339,20 @@ function drawEquatorialGrid(lat, lon) {
         }
         ctx.stroke();
         
-        // Label RA lines at celestial equator more frequently
-        if (ra % 30 === 0) {
+        // Label HA at celestial equator for multiples of 30° (2 hours)
+        const norm30 = ((ha % 30) + 30) % 30;
+        if (Math.abs(norm30) < 1e-6) {
             let [x, y, z] = radecToXYZ(ra, 0);
             [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
             if (z > cullThreshold) {
                 const [cx, cy] = project([x, y, z]);
-                const hours = Math.round(ra / 15);
-                ctx.fillText(`${hours}h`, cx - 8, cy + 15);
+                // Convert HA degrees to hours in range -12..+12
+                let haHours = ha / 15;
+                // Round to nearest integer hour for labels
+                let label;
+                if (Math.abs(haHours) < 0.5) label = 'HA 0h';
+                else label = `HA ${(haHours > 0 ? '+' : '')}${Math.round(haHours)}h`;
+                ctx.fillText(label, cx - 18, cy + 15);
             }
         }
     }
@@ -312,7 +368,12 @@ function draw() {
     // Get filter values
     const magLimit = parseFloat(magFilter.value);
     const lat = parseFloat(latInput.value) * Math.PI / 180;
-    const lon = parseFloat(lonInput.value) * Math.PI / 180;
+    const geoLonDeg = parseFloat(lonInput.value) || 0;
+    const lon = geoLonDeg * Math.PI / 180; // use original behavior for geometry
+    // Compute LST for labeling (HA), but do not alter geometry with time to avoid disorientation
+    let selectedDate = new Date();
+    try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
+    currentLSTDeg = lstDegrees(new Date(selectedDate.toISOString()), geoLonDeg);
     const showStarsVal = showStars.checked;
     const showPlanetsVal = showPlanets.checked;
 
@@ -331,8 +392,8 @@ function draw() {
         if (obj.type === "star" && !showStarsVal) continue;
         if (obj.type === "planet" && !showPlanetsVal) continue;
         // Use cached Cartesian coordinates to avoid repeated trig calls
-        let [x, y, z] = obj.xyz || radecToXYZ(obj.ra, obj.dec);
-        [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+    let [x, y, z] = obj.xyz || radecToXYZ(obj.ra, obj.dec);
+    [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
         // Only render objects in the front hemisphere (camera inside sphere looking out)
         if (z <= -0.1) continue; // Show objects in front of camera
         const [cx, cy] = project([x, y, z]);
@@ -413,14 +474,18 @@ canvas.addEventListener('click', function(e) {
     const mx = e.clientX, my = e.clientY;
     const magLimit = parseFloat(magFilter.value);
     const lat = parseFloat(latInput.value) * Math.PI / 180;
-    const lon = parseFloat(lonInput.value) * Math.PI / 180;
+    const geoLonDeg = parseFloat(lonInput.value) || 0;
+    let selectedDate = new Date();
+    try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
+    const lstDeg = lstDegrees(new Date(selectedDate.toISOString()), geoLonDeg);
+    const siderealRot = -lstDeg * Math.PI / 180;
     for (const obj of stars) {
         const effectiveMag = obj.mag == null ? 50 : obj.mag; // Treat null magnitudes as 50
         if (effectiveMag > magLimit) continue;
         if (obj.type === "star" && !showStars.checked) continue;
         if (obj.type === "planet" && !showPlanets.checked) continue;
     let [x, y, z] = obj.xyz || radecToXYZ(obj.ra, obj.dec);
-    [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+    [x, y, z] = rotate([x, y, z], rotX, rotY, lat, siderealRot);
         if (z <= -0.1) continue;
         const [cx, cy] = project([x, y, z]);
         
@@ -430,8 +495,11 @@ canvas.addEventListener('click', function(e) {
         let hitRadius = obj.type === "planet" ? fixedPlanetSize/2 : size;
         if ((mx-cx)**2 + (my-cy)**2 < hitRadius*hitRadius*1.5) {
             const displayMag = obj.mag == null ? "null" : obj.mag;
+            // Show HA for the selected time
+            const lstDeg = lstDegrees(new Date((timeControl && timeControl.value) ? new Date(timeControl.value).toISOString() : new Date().toISOString()), parseFloat(lonInput.value));
+            const ha = hourAngleDegrees(obj.ra, lstDeg);
             document.getElementById('info').innerHTML =
-                `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}°<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}<br>
+                `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}° | HA: ${(ha/15).toFixed(2)}h<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}<br>
                  <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
             return;
         }
@@ -696,8 +764,10 @@ function searchObject() {
             moveToObject(foundObject);
             
             // Show info
+            const lstDeg2 = lstDegrees(new Date((timeControl && timeControl.value) ? new Date(timeControl.value).toISOString() : new Date().toISOString()), parseFloat(lonInput.value));
+            const ha2 = hourAngleDegrees(foundObject.ra, lstDeg2);
             document.getElementById('info').innerHTML = 
-                `<b>🔍 ${foundObject.name}</b><br>RA: ${foundObject.ra.toFixed(2)}°<br>DEC: ${foundObject.dec.toFixed(2)}°<br>Mag: ${foundObject.mag}<br>
+                `<b>🔍 ${foundObject.name}</b><br>RA: ${foundObject.ra.toFixed(2)}° | HA: ${(ha2/15).toFixed(2)}h<br>DEC: ${foundObject.dec.toFixed(2)}°<br>Mag: ${foundObject.mag}<br>
                  <button onclick="trackObject('${foundObject.name}', ${foundObject.ra}, ${foundObject.dec}, ${foundObject.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
         } else {
             alert(data.message || 'Object not found.');
@@ -713,7 +783,7 @@ function searchObject() {
 function moveToObject(obj) {
     // Get observer settings
     const lat = parseFloat(latInput.value) * Math.PI / 180;
-    const lon = parseFloat(lonInput.value) * Math.PI / 180;
+    const lon = (parseFloat(lonInput.value) || 0) * Math.PI / 180;
     
     // Convert RA/DEC to Azimuth/Elevation
     // This is a simplified conversion - for a proper implementation you'd need
@@ -832,7 +902,26 @@ function clearSearch() {
 
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('%cStar Map JS loaded v2025-10-12-3', 'color:#0bf');
+    console.log('%cStar Map JS loaded v2025-10-12-4', 'color:#0bf');
+    // Initialize time control to current local time (rounded to minute)
+    if (timeControl) {
+        const now = new Date();
+        now.setSeconds(0, 0);
+        const pad = (n) => n.toString().padStart(2, '0');
+        const local = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        timeControl.value = local;
+        timeControl.addEventListener('change', draw);
+    }
+    if (timeNowBtn) {
+        timeNowBtn.addEventListener('click', () => {
+            const now = new Date();
+            now.setSeconds(0, 0);
+            const pad = (n) => n.toString().padStart(2, '0');
+            const local = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+            if (timeControl) timeControl.value = local;
+            draw();
+        });
+    }
     // Initialize flip vertical from localStorage, if present
     try {
         const saved = localStorage.getItem('starMap.flipVertical');
@@ -861,7 +950,7 @@ window.addEventListener('DOMContentLoaded', () => {
     precomputeStars();
     // Preload planet images first, then draw
     preloadPlanetImages().then(() => {
-        console.log('Images preloaded, starting first draw...');
+    console.log('Images preloaded, starting first draw...');
         draw();
         setTimeout(hideLoading, 400); // allow a short delay for effect
         
