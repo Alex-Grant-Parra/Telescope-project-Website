@@ -83,6 +83,10 @@
     <label>
         <input type="checkbox" id="show-horizon-grid"> Horizon Grid
         <input type="checkbox" id="show-equatorial-grid"> Equatorial Grid
+        <input type="checkbox" id="show-ecliptic"> Ecliptic
+    </label>
+    <label>
+        <input type="checkbox" id="time-rotate" checked> Rotate with time
     </label>
     <label>
         <input type="checkbox" id="flip-vertical"> Invert controls
@@ -111,6 +115,7 @@
             <li>Toggle stars/planets visibility</li>
             <li>Toggle horizon grid (altitude/azimuth with N/E/S/W)</li>
             <li>Toggle equatorial grid (HA/DEC: Hour Angle and Declination)</li>
+            <li>Toggle the ecliptic line</li>
             <li>Reset view to default orientation and zoom</li>
             <li>Use the Time control to preview the sky at any date/time; the grid labels show Hour Angle (HA).</li>
         </ul>
@@ -130,6 +135,6 @@
 </script>
 <script src="{{ url_for('static', filename='js/csrf-protection.js') }}"></script>
 <!-- Cache-busting query param to ensure latest JS is fetched -->
-<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-12-4"></script>
+<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-12-6"></script>
 </body>
 </html>
