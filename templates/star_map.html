@@ -73,7 +73,7 @@
         <input type="checkbox" id="show-equatorial-grid"> Equatorial Grid
     </label>
     <label>
-        <input type="checkbox" id="flip-vertical" checked> Flip vertical (debug)
+        <input type="checkbox" id="flip-vertical"> Invert controls
     </label>
     <div style="margin-top: 8px;">
         <label>Search Object:</label>
@@ -117,6 +117,6 @@
 </script>
 <script src="{{ url_for('static', filename='js/csrf-protection.js') }}"></script>
 <!-- Cache-busting query param to ensure latest JS is fetched -->
-<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-12-2"></script>
+<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-12-3"></script>
 </body>
 </html>
