@@ -51,6 +51,9 @@ const clearSearchBtn = document.getElementById('clear-search-btn');
 let searchedObject = null;
 let highlightAnimation = 0;
 
+// Controls inversion state (affects drag deltas only)
+let invertControls = false;
+
 // Canvas setup
 const canvas = document.getElementById('planetarium');
 const ctx = canvas.getContext('2d');
@@ -111,11 +114,10 @@ function project([x, y, z]) {
     // Use full screen dimensions instead of sphere radius
     const fov = 1.2; // field of view
     const scale = Math.max(width, height) * 0.8 * zoom / (fov + z); // Apply zoom factor
-    const yProjected = (flipVerticalCheckbox && flipVerticalCheckbox.checked) ? (height / 2 + y * scale)
-                                                                             : (height / 2 - y * scale);
+    // Canvas Y-axis: subtract y so positive y goes up on screen
     return [
         width / 2 + x * scale,
-        yProjected
+        height / 2 - y * scale
     ];
 }
 
@@ -395,8 +397,10 @@ canvas.addEventListener('mousedown', e => {
 });
 window.addEventListener('mousemove', e => {
     if (!dragging) return;
-    rotY += (e.clientX - lastX) * 0.01;
-    rotX -= (e.clientY - lastY) * 0.01;
+    // Optionally invert controls: affects deltas only
+    const controlInvert = invertControls ? -1 : 1;
+    rotY += (e.clientX - lastX) * 0.01 * controlInvert;
+    rotX -= (e.clientY - lastY) * 0.01 * controlInvert;
     rotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotX));
     lastX = e.clientX;
     lastY = e.clientY;
@@ -447,10 +451,10 @@ window.addEventListener('resize', () => {
 // Scroll wheel zoom
 canvas.addEventListener('wheel', (e) => {
     e.preventDefault(); // Prevent page scroll
-    
-    const scrollDirection = e.deltaY > 0 ? -1 : 1; // Inverted for natural zoom feel
+    // Keep zoom behavior consistent (checkbox only inverts drag/pan)
+    const scrollDirection = e.deltaY > 0 ? -1 : 1; // positive deltaY => zoom out
     const zoomChange = scrollDirection * zoomStep;
-    
+
     zoom = Math.max(minZoom, Math.min(maxZoom, zoom + zoomChange));
     
     draw();
@@ -500,8 +504,21 @@ showHorizonGrid.addEventListener('change', draw);
 showEquatorialGrid.addEventListener('change', draw);
 if (flipVerticalCheckbox) {
     flipVerticalCheckbox.addEventListener('change', () => {
-        try { localStorage.setItem('starMap.flipVertical', flipVerticalCheckbox.checked ? '1' : '0'); } catch {}
-        draw();
+        // Capture current orientation so toggling doesn't move the map
+        const prevRotX = rotX;
+        const prevRotY = rotY;
+        const prevZoom = zoom;
+
+        invertControls = !!flipVerticalCheckbox.checked;
+        try { localStorage.setItem('starMap.flipVertical', invertControls ? '1' : '0'); } catch {}
+        console.log('Invert controls set to', invertControls);
+        // Restore orientation and redraw once to ensure no visual jump
+        requestAnimationFrame(() => {
+            rotX = prevRotX;
+            rotY = prevRotY;
+            zoom = prevZoom;
+            draw();
+        });
     });
 }
 resetBtn.addEventListener('click', () => {
@@ -815,14 +832,17 @@ function clearSearch() {
 
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('%cStar Map JS loaded v2025-10-12-2', 'color:#0bf');
+    console.log('%cStar Map JS loaded v2025-10-12-3', 'color:#0bf');
     // Initialize flip vertical from localStorage, if present
     try {
         const saved = localStorage.getItem('starMap.flipVertical');
         if (flipVerticalCheckbox && (saved === '0' || saved === '1')) {
-            flipVerticalCheckbox.checked = (saved === '1');
+            invertControls = (saved === '1');
+            flipVerticalCheckbox.checked = invertControls;
+        } else if (flipVerticalCheckbox) {
+            invertControls = !!flipVerticalCheckbox.checked;
         }
-    } catch {}
+    } catch { invertControls = !!(flipVerticalCheckbox && flipVerticalCheckbox.checked); }
     console.log('DOM loaded. Star data:', stars.filter(s => s.type === 'planet'));
     // Precompute Cartesian coordinates (x,y,z) for all objects to reduce per-frame trig work
     function precomputeStars() {
