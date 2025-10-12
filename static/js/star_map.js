@@ -28,8 +28,10 @@ const showStars = document.getElementById('show-stars');
 const showPlanets = document.getElementById('show-planets');
 const showHorizonGrid = document.getElementById('show-horizon-grid');
 const showEquatorialGrid = document.getElementById('show-equatorial-grid');
+const showEcliptic = document.getElementById('show-ecliptic');
 const timeControl = document.getElementById('time-control');
 const timeNowBtn = document.getElementById('time-now');
+const timeRotate = document.getElementById('time-rotate');
 let currentLSTDeg = 0; // updated per draw based on time and longitude
 const resetBtn = document.getElementById('reset-view');
 const helpBtn = document.getElementById('help-btn');
@@ -175,6 +177,46 @@ function altazToXYZ(alt, az) {
     const y = Math.sin(altRad);
     const z = Math.cos(altRad) * Math.cos(azRad);
     return [x, y, z];
+}
+
+// Convert ecliptic longitude/latitude (lambda, beta) to equatorial RA/Dec (degrees)
+function eclipticToEquatorial(lambdaDeg, betaDeg) {
+    // Mean obliquity of the ecliptic (approx, J2000)
+    const eps = 23.4392911 * Math.PI / 180; // radians
+    const lam = lambdaDeg * Math.PI / 180;
+    const bet = betaDeg * Math.PI / 180;
+    const sinDec = Math.sin(bet) * Math.cos(eps) + Math.cos(bet) * Math.sin(eps) * Math.sin(lam);
+    const dec = Math.asin(sinDec);
+    const y = Math.sin(lam) * Math.cos(eps) - Math.tan(bet) * Math.sin(eps);
+    const x = Math.cos(lam);
+    let ra = Math.atan2(y, x); // radians, range -pi..pi
+    if (ra < 0) ra += 2 * Math.PI;
+    return { raDeg: ra * 180 / Math.PI, decDeg: dec * 180 / Math.PI };
+}
+
+function drawEcliptic(lat, lon) {
+    // Draw the ecliptic as beta=0 for lambda 0..360
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 215, 0, 0.6)"; // golden line
+    ctx.lineWidth = 1.5;
+    const cullThreshold = 0;
+    ctx.beginPath();
+    let started = false;
+    for (let lam = 0; lam <= 360; lam += 2) {
+        const { raDeg, decDeg } = eclipticToEquatorial(lam, 0);
+        let [x, y, z] = radecToXYZ(raDeg, decDeg);
+        [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+        if (z <= cullThreshold) {
+            // restart segment after hidden portion
+            started = false;
+            continue;
+        }
+        const [cx, cy] = project([x, y, z]);
+        if (!started) { ctx.moveTo(cx, cy); started = true; }
+        else ctx.lineTo(cx, cy);
+    }
+    ctx.stroke();
+    ctx.restore();
 }
 
 // Draw horizon coordinate grid
@@ -369,20 +411,25 @@ function draw() {
     const magLimit = parseFloat(magFilter.value);
     const lat = parseFloat(latInput.value) * Math.PI / 180;
     const geoLonDeg = parseFloat(lonInput.value) || 0;
-    const lon = geoLonDeg * Math.PI / 180; // use original behavior for geometry
-    // Compute LST for labeling (HA), but do not alter geometry with time to avoid disorientation
+    const lon = geoLonDeg * Math.PI / 180;
+    // Compute LST for HA and optional time rotation
     let selectedDate = new Date();
     try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
     currentLSTDeg = lstDegrees(new Date(selectedDate.toISOString()), geoLonDeg);
+    const siderealRot = -currentLSTDeg * Math.PI / 180;
+    const baseLon = (timeRotate && timeRotate.checked) ? siderealRot : lon;
     const showStarsVal = showStars.checked;
     const showPlanetsVal = showPlanets.checked;
 
     // Draw coordinate grids (before stars so they appear behind)
     if (showHorizonGrid.checked) {
-        drawHorizonGrid(lat, lon);
+        drawHorizonGrid(lat, baseLon);
     }
     if (showEquatorialGrid.checked) {
-        drawEquatorialGrid(lat, lon);
+        drawEquatorialGrid(lat, baseLon);
+    }
+    if (showEcliptic && showEcliptic.checked) {
+        drawEcliptic(lat, baseLon);
     }
 
     // Draw stars/planets
@@ -393,7 +440,7 @@ function draw() {
         if (obj.type === "planet" && !showPlanetsVal) continue;
         // Use cached Cartesian coordinates to avoid repeated trig calls
     let [x, y, z] = obj.xyz || radecToXYZ(obj.ra, obj.dec);
-    [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+    [x, y, z] = rotate([x, y, z], rotX, rotY, lat, baseLon);
         // Only render objects in the front hemisphere (camera inside sphere looking out)
         if (z <= -0.1) continue; // Show objects in front of camera
         const [cx, cy] = project([x, y, z]);
@@ -430,7 +477,7 @@ function draw() {
         const effectiveMag = searchedObject.mag == null ? 50 : searchedObject.mag;
         if (effectiveMag <= magLimit) {
             let [x, y, z] = searchedObject.xyz || radecToXYZ(searchedObject.ra, searchedObject.dec);
-            [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+            [x, y, z] = rotate([x, y, z], rotX, rotY, lat, baseLon);
             if (z > -0.1) { // Object is visible
                 const [cx, cy] = project([x, y, z]);
 
@@ -479,13 +526,14 @@ canvas.addEventListener('click', function(e) {
     try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
     const lstDeg = lstDegrees(new Date(selectedDate.toISOString()), geoLonDeg);
     const siderealRot = -lstDeg * Math.PI / 180;
+    const baseLon = (timeRotate && timeRotate.checked) ? siderealRot : (geoLonDeg * Math.PI / 180);
     for (const obj of stars) {
         const effectiveMag = obj.mag == null ? 50 : obj.mag; // Treat null magnitudes as 50
         if (effectiveMag > magLimit) continue;
         if (obj.type === "star" && !showStars.checked) continue;
         if (obj.type === "planet" && !showPlanets.checked) continue;
     let [x, y, z] = obj.xyz || radecToXYZ(obj.ra, obj.dec);
-    [x, y, z] = rotate([x, y, z], rotX, rotY, lat, siderealRot);
+    [x, y, z] = rotate([x, y, z], rotX, rotY, lat, baseLon);
         if (z <= -0.1) continue;
         const [cx, cy] = project([x, y, z]);
         
@@ -570,6 +618,8 @@ showStars.addEventListener('change', draw);
 showPlanets.addEventListener('change', draw);
 showHorizonGrid.addEventListener('change', draw);
 showEquatorialGrid.addEventListener('change', draw);
+if (showEcliptic) showEcliptic.addEventListener('change', draw);
+if (timeRotate) timeRotate.addEventListener('change', draw);
 if (flipVerticalCheckbox) {
     flipVerticalCheckbox.addEventListener('change', () => {
         // Capture current orientation so toggling doesn't move the map
@@ -783,7 +833,13 @@ function searchObject() {
 function moveToObject(obj) {
     // Get observer settings
     const lat = parseFloat(latInput.value) * Math.PI / 180;
-    const lon = (parseFloat(lonInput.value) || 0) * Math.PI / 180;
+    const geoLonDeg = parseFloat(lonInput.value) || 0;
+    const lon = geoLonDeg * Math.PI / 180;
+    let selectedDate = new Date();
+    try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
+    const lstDeg = lstDegrees(new Date(selectedDate.toISOString()), geoLonDeg);
+    const siderealRot = -lstDeg * Math.PI / 180;
+    const baseLon = (timeRotate && timeRotate.checked) ? siderealRot : lon;
     
     // Convert RA/DEC to Azimuth/Elevation
     // This is a simplified conversion - for a proper implementation you'd need
@@ -797,7 +853,7 @@ function moveToObject(obj) {
     // Let's use a different approach: find the rotation that puts the object at screen center
     function testRotation(testRotX, testRotY) {
         let [x, y, z] = obj.xyz || radecToXYZ(obj.ra, obj.dec);
-        [x, y, z] = rotate([x, y, z], testRotX, testRotY, lat, lon);
+    [x, y, z] = rotate([x, y, z], testRotX, testRotY, lat, baseLon);
         if (z <= -0.1) return null; // Behind camera
         const [screenX, screenY] = project([x, y, z]);
         return [screenX, screenY, z];
@@ -902,7 +958,7 @@ function clearSearch() {
 
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('%cStar Map JS loaded v2025-10-12-4', 'color:#0bf');
+    console.log('%cStar Map JS loaded v2025-10-12-6', 'color:#0bf');
     // Initialize time control to current local time (rounded to minute)
     if (timeControl) {
         const now = new Date();
