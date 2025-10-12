@@ -64,10 +64,14 @@
         Longitude:
         <input type="number" id="longitude" min="-180" max="180" step="0.1" value="0">
     </label>
-    <label>
-        <input type="checkbox" id="show-stars" checked> Stars
-        <input type="checkbox" id="show-planets" checked> Planets
-    </label>
+    <div>
+        <label for="show-stars" style="margin-right: 8px;">
+            <input type="checkbox" id="show-stars" checked> Stars
+        </label>
+        <label for="show-planets">
+            <input type="checkbox" id="show-planets" checked> Planets
+        </label>
+    </div>
     <label>
         <input type="checkbox" id="show-horizon-grid"> Horizon Grid
         <input type="checkbox" id="show-equatorial-grid"> Equatorial Grid
