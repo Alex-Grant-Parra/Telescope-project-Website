@@ -253,24 +253,23 @@ async function fetchPlanetsForDate(date) {
 
 function replacePlanetsInScene(newPlanets) {
     if (!Array.isArray(newPlanets)) return;
-    // Build a lookup by lowercase name
-    const byName = new Map();
-    for (const p of newPlanets) {
-        if (!p || !p.name) continue;
-        byName.set(p.name.toLowerCase(), p);
+    // Remove existing planet entries in-place (preserve stars array reference)
+    for (let i = stars.length - 1; i >= 0; i--) {
+        if (stars[i] && stars[i].type === 'planet') stars.splice(i, 1);
     }
-    for (const obj of stars) {
-        if (obj.type !== 'planet') continue;
-        const key = (obj.name || '').toLowerCase();
-        const np = byName.get(key);
-        if (!np) continue;
-        // Overwrite RA/Dec and icon/mag if provided
-        obj.ra = np.ra;
-        obj.dec = np.dec;
-        if (np.icon) obj.icon = np.icon;
-        if (np.mag != null) obj.mag = np.mag;
-        // Recompute cached xyz
+    // Insert fresh planets
+    for (const p of newPlanets) {
+        if (!p || typeof p.ra !== 'number' || typeof p.dec !== 'number') continue;
+        const obj = {
+            name: p.name,
+            ra: p.ra,   // degrees
+            dec: p.dec, // degrees
+            mag: p.mag,
+            icon: p.icon,
+            type: 'planet'
+        };
         try { obj.xyz = radecToXYZ(obj.ra, obj.dec); } catch { obj.xyz = radecToXYZ(0,0); }
+        stars.push(obj);
     }
 }
 
