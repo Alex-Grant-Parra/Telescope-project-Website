@@ -140,33 +140,23 @@ function hourAngleDegrees(raDeg, lstDeg) {
     return ha;
 }
 
-// 3D rotation (including local latitude/longitude)
-function rotate([x, y, z], rotX, rotY, lat, lon) {
-    // Apply longitude (azimuthal) rotation
-    let x1 = x * Math.cos(lon) - z * Math.sin(lon);
-    let z1 = x * Math.sin(lon) + z * Math.cos(lon);
-    // Apply latitude (altitude) rotation
-    let y1 = y * Math.cos(lat) - z1 * Math.sin(lat);
-    let z2 = y * Math.sin(lat) + z1 * Math.cos(lat);
-    // User rotation (drag)
-    let x2 = x1 * Math.cos(rotY) - z2 * Math.sin(rotY);
-    let z3 = x1 * Math.sin(rotY) + z2 * Math.cos(rotY);
-    let y2 = y1 * Math.cos(rotX) - z3 * Math.sin(rotX);
-    let z4 = y1 * Math.sin(rotX) + z3 * Math.cos(rotX);
-    return [x2, y2, z4];
-}
+// Convert RA/Dec to Alt/Az for a given date, latitude, and longitude (degrees)
+function radecToAltAz(raDeg, decDeg, date, latDeg, lonDeg) {
+    const lstDegVal = lstDegrees(new Date(date.toISOString()), lonDeg);
+    const H = (lstDegVal - raDeg) * Math.PI / 180; // hour angle in radians
+    const dec = decDeg * Math.PI / 180;
+    const lat = latDeg * Math.PI / 180;
 
-// Project 3D point to 2D canvas (camera at center, looking outward)
-function project([x, y, z]) {
-    // Perspective projection for camera inside sphere looking outward
-    // Use full screen dimensions instead of sphere radius
-    const fov = 1.2; // field of view
-    const scale = Math.max(width, height) * 0.8 * zoom / (fov + z); // Apply zoom factor
-    // Canvas Y-axis: subtract y so positive y goes up on screen
-    return [
-        width / 2 + x * scale,
-        height / 2 - y * scale
-    ];
+    const sinAlt = Math.sin(dec) * Math.sin(lat) + Math.cos(dec) * Math.cos(lat) * Math.cos(H);
+    const alt = Math.asin(sinAlt);
+
+    // Azimuth: 0° = North, 90° = East (matches our horizon grid)
+    const y = -Math.cos(dec) * Math.sin(H);
+    const x = Math.tan(dec) * Math.cos(lat) - Math.cos(H) * Math.sin(lat);
+    let az = Math.atan2(y, x);
+    if (az < 0) az += 2 * Math.PI;
+
+    return { altDeg: alt * 180 / Math.PI, azDeg: az * 180 / Math.PI };
 }
 
 // Convert altitude/azimuth to Cartesian coordinates
@@ -179,6 +169,34 @@ function altazToXYZ(alt, az) {
     return [x, y, z];
 }
 
+// 3D rotation (optional pre-rotation by latitude/longitude, then user rotation)
+function rotate([x, y, z], rotX, rotY, lat, lon) {
+    // Apply longitude (azimuthal) rotation about Y axis
+    let x1 = x * Math.cos(lon) - z * Math.sin(lon);
+    let z1 = x * Math.sin(lon) + z * Math.cos(lon);
+    // Apply latitude rotation about X axis
+    let y1 = y * Math.cos(lat) - z1 * Math.sin(lat);
+    let z2 = y * Math.sin(lat) + z1 * Math.cos(lat);
+    // User rotation: Y then X
+    let x2 = x1 * Math.cos(rotY) - z2 * Math.sin(rotY);
+    let z3 = x1 * Math.sin(rotY) + z2 * Math.cos(rotY);
+    let y2 = y1 * Math.cos(rotX) - z3 * Math.sin(rotX);
+    let z4 = y1 * Math.sin(rotX) + z3 * Math.cos(rotX);
+    return [x2, y2, z4];
+}
+
+// Project 3D point to 2D canvas
+function project([x, y, z]) {
+    // Perspective projection for camera inside sphere looking outward
+    const fov = 1.2;
+    const scale = Math.max(width, height) * 0.8 * zoom / (fov + z);
+    return [
+        width / 2 + x * scale,
+        height / 2 - y * scale
+    ];
+}
+
+// Ecliptic coordinate conversion
 // Convert ecliptic longitude/latitude (lambda, beta) to equatorial RA/Dec (degrees)
 function eclipticToEquatorial(lambdaDeg, betaDeg) {
     // Mean obliquity of the ecliptic (approx, J2000)
@@ -194,23 +212,26 @@ function eclipticToEquatorial(lambdaDeg, betaDeg) {
     return { raDeg: ra * 180 / Math.PI, decDeg: dec * 180 / Math.PI };
 }
 
-function drawEcliptic(lat, lon) {
-    // Draw the ecliptic as beta=0 for lambda 0..360
+function drawEcliptic() {
+    // Draw the ecliptic (beta=0) converted to horizon coordinates
     ctx.save();
     ctx.strokeStyle = "rgba(255, 215, 0, 0.6)"; // golden line
     ctx.lineWidth = 1.5;
     const cullThreshold = 0;
     ctx.beginPath();
     let started = false;
+
+    const latDeg = parseFloat(latInput.value) || 0;
+    const lonDeg = parseFloat(lonInput.value) || 0;
+    let selectedDate = new Date();
+    try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
+
     for (let lam = 0; lam <= 360; lam += 2) {
         const { raDeg, decDeg } = eclipticToEquatorial(lam, 0);
-        let [x, y, z] = radecToXYZ(raDeg, decDeg);
-        [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
-        if (z <= cullThreshold) {
-            // restart segment after hidden portion
-            started = false;
-            continue;
-        }
+        const { altDeg, azDeg } = radecToAltAz(raDeg, decDeg, selectedDate, latDeg, lonDeg);
+        let [x, y, z] = altazToXYZ(altDeg, azDeg);
+        [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+        if (z <= cullThreshold) { started = false; continue; }
         const [cx, cy] = project([x, y, z]);
         if (!started) { ctx.moveTo(cx, cy); started = true; }
         else ctx.lineTo(cx, cy);
@@ -314,7 +335,7 @@ function drawHorizonGrid(lat, lon) {
 }
 
 // Draw equatorial coordinate grid
-function drawEquatorialGrid(lat, lon) {
+function drawEquatorialGrid() {
     ctx.save();
     ctx.strokeStyle = "rgba(255, 150, 100, 0.3)"; // Light orange
     ctx.lineWidth = 1;
@@ -324,32 +345,35 @@ function drawEquatorialGrid(lat, lon) {
     // Simple back-face culling - only draw lines facing the viewer
     const cullThreshold = 0;
 
-    // Draw declination circles
+    // Observer/time
+    const latDeg = parseFloat(latInput.value) || 0;
+    const lonDeg = parseFloat(lonInput.value) || 0;
+    let selectedDate = new Date();
+    try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
+    currentLSTDeg = lstDegrees(new Date(selectedDate.toISOString()), lonDeg);
+
+    // Draw declination circles in equatorial coords, converted to horizon
     for (let dec = -90; dec <= 90; dec += 10) {
-        if (dec === 0) ctx.strokeStyle = "rgba(255, 150, 100, 0.5)"; // Celestial equator more visible
-        else ctx.strokeStyle = "rgba(255, 150, 100, 0.3)";
-        
+        ctx.strokeStyle = (dec === 0) ? "rgba(255, 150, 100, 0.5)" : "rgba(255, 150, 100, 0.3)";
         ctx.beginPath();
         let firstPoint = true;
         for (let ra = 0; ra <= 360; ra += 3) {
-            let [x, y, z] = radecToXYZ(ra, dec);
-            [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
-            if (z <= cullThreshold) continue; // Adaptive culling based on zoom
+            const { altDeg, azDeg } = radecToAltAz(ra, dec, selectedDate, latDeg, lonDeg);
+            let [x, y, z] = altazToXYZ(altDeg, azDeg);
+            // Only apply user rotation; horizon is our base frame
+            [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+            if (z <= cullThreshold) continue;
             const [cx, cy] = project([x, y, z]);
-            
-            if (firstPoint) {
-                ctx.moveTo(cx, cy);
-                firstPoint = false;
-            } else {
-                ctx.lineTo(cx, cy);
-            }
+            if (firstPoint) { ctx.moveTo(cx, cy); firstPoint = false; }
+            else ctx.lineTo(cx, cy);
         }
         ctx.stroke();
-        
-        // Label declination lines more frequently
+
+        // Label declination lines every 30°
         if (dec % 30 === 0) {
-            let [x, y, z] = radecToXYZ(0, dec); // 0h RA
-            [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+            const { altDeg, azDeg } = radecToAltAz(0, dec, selectedDate, latDeg, lonDeg); // RA=0h point
+            let [x, y, z] = altazToXYZ(altDeg, azDeg);
+            [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
             if (z > cullThreshold) {
                 const [cx, cy] = project([x, y, z]);
                 ctx.fillText(`${dec}°`, cx + 5, cy - 5);
@@ -358,39 +382,32 @@ function drawEquatorialGrid(lat, lon) {
     }
 
     // Draw hour angle (HA) lines by converting HA -> RA (RA = LST - HA)
-    // This way, the grid lines represent constant HA and move with time
     ctx.strokeStyle = "rgba(255, 150, 100, 0.3)";
     for (let ha = -180; ha < 180; ha += 10) {
-        // Convert HA to corresponding RA for current time
         let ra = currentLSTDeg - ha; // degrees
         ra = ((ra % 360) + 360) % 360;
         ctx.beginPath();
         let firstPoint = true;
         for (let dec = -90; dec <= 90; dec += 2) {
-            let [x, y, z] = radecToXYZ(ra, dec);
-            [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
-            if (z <= cullThreshold) continue; // Adaptive culling
+            const { altDeg, azDeg } = radecToAltAz(ra, dec, selectedDate, latDeg, lonDeg);
+            let [x, y, z] = altazToXYZ(altDeg, azDeg);
+            [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+            if (z <= cullThreshold) continue;
             const [cx, cy] = project([x, y, z]);
-            
-            if (firstPoint) {
-                ctx.moveTo(cx, cy);
-                firstPoint = false;
-            } else {
-                ctx.lineTo(cx, cy);
-            }
+            if (firstPoint) { ctx.moveTo(cx, cy); firstPoint = false; }
+            else ctx.lineTo(cx, cy);
         }
         ctx.stroke();
-        
+
         // Label HA at celestial equator for multiples of 30° (2 hours)
         const norm30 = ((ha % 30) + 30) % 30;
         if (Math.abs(norm30) < 1e-6) {
-            let [x, y, z] = radecToXYZ(ra, 0);
-            [x, y, z] = rotate([x, y, z], rotX, rotY, lat, lon);
+            const { altDeg, azDeg } = radecToAltAz(ra, 0, selectedDate, latDeg, lonDeg);
+            let [x, y, z] = altazToXYZ(altDeg, azDeg);
+            [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
             if (z > cullThreshold) {
                 const [cx, cy] = project([x, y, z]);
-                // Convert HA degrees to hours in range -12..+12
                 let haHours = ha / 15;
-                // Round to nearest integer hour for labels
                 let label;
                 if (Math.abs(haHours) < 0.5) label = 'HA 0h';
                 else label = `HA ${(haHours > 0 ? '+' : '')}${Math.round(haHours)}h`;
@@ -398,7 +415,7 @@ function drawEquatorialGrid(lat, lon) {
             }
         }
     }
-    
+
     ctx.restore();
 }
 
@@ -409,53 +426,48 @@ function draw() {
 
     // Get filter values
     const magLimit = parseFloat(magFilter.value);
-    const lat = parseFloat(latInput.value) * Math.PI / 180;
-    const geoLonDeg = parseFloat(lonInput.value) || 0;
-    const lon = geoLonDeg * Math.PI / 180;
-    // Compute LST for HA and optional time rotation
+    const latDeg = parseFloat(latInput.value) || 0;
+    const lonDeg = parseFloat(lonInput.value) || 0;
     let selectedDate = new Date();
     try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
-    currentLSTDeg = lstDegrees(new Date(selectedDate.toISOString()), geoLonDeg);
-    const siderealRot = -currentLSTDeg * Math.PI / 180;
-    const baseLon = (timeRotate && timeRotate.checked) ? siderealRot : lon;
+    currentLSTDeg = lstDegrees(new Date(selectedDate.toISOString()), lonDeg);
+
     const showStarsVal = showStars.checked;
     const showPlanetsVal = showPlanets.checked;
 
     // Draw coordinate grids (before stars so they appear behind)
     if (showHorizonGrid.checked) {
-        drawHorizonGrid(lat, baseLon);
+        // Horizon grid is defined directly in Alt/Az, only user rotation applies
+        drawHorizonGrid(0, 0);
     }
     if (showEquatorialGrid.checked) {
-        drawEquatorialGrid(lat, baseLon);
+        drawEquatorialGrid();
     }
     if (showEcliptic && showEcliptic.checked) {
-        drawEcliptic(lat, baseLon);
+        drawEcliptic();
     }
 
-    // Draw stars/planets
+    // Draw stars/planets using true Alt/Az for given time and location
     for (const obj of stars) {
         const effectiveMag = obj.mag == null ? 50 : obj.mag; // Treat null magnitudes as 50
         if (effectiveMag > magLimit) continue;
         if (obj.type === "star" && !showStarsVal) continue;
         if (obj.type === "planet" && !showPlanetsVal) continue;
-        // Use cached Cartesian coordinates to avoid repeated trig calls
-    let [x, y, z] = obj.xyz || radecToXYZ(obj.ra, obj.dec);
-    [x, y, z] = rotate([x, y, z], rotX, rotY, lat, baseLon);
-        // Only render objects in the front hemisphere (camera inside sphere looking out)
-        if (z <= -0.1) continue; // Show objects in front of camera
+
+        const { altDeg, azDeg } = radecToAltAz(obj.ra, obj.dec, selectedDate, latDeg, lonDeg);
+        let [x, y, z] = altazToXYZ(altDeg, azDeg);
+        [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+        if (z <= 0) continue; // Only render objects in the front hemisphere
         const [cx, cy] = project([x, y, z]);
 
-        // Draw without ctx.save()/restore() per object (avoid expensive state push/pop)
         if (obj.type === "planet") {
             const size = fixedPlanetSize; // Use fixed size for all planets
             ctx.globalAlpha = 1;
             if (obj.icon && planetImages[obj.icon]) {
-                // Draw the preloaded sprite image
                 const img = planetImages[obj.icon];
                 ctx.drawImage(img, cx - size/2, cy - size/2, size, size);
             } else {
-                // Fallback to colored circle if image isn't loaded
-                ctx.fillStyle = "#ffa500"; // Orange color for better visibility
+                ctx.fillStyle = "#ffa500";
                 ctx.beginPath();
                 ctx.arc(cx, cy, size/2, 0, 2*Math.PI);
                 ctx.fill();
@@ -467,31 +479,28 @@ function draw() {
             ctx.beginPath();
             ctx.arc(cx, cy, size, 0, 2*Math.PI);
             ctx.fill();
-            ctx.globalAlpha = 1; // reset alpha for subsequent draws
+            ctx.globalAlpha = 1;
         }
     }
 
-    // Draw orange highlight ring for searched object
+    // Draw orange highlight ring for searched object (using Alt/Az)
     if (searchedObject) {
-        const magLimit = parseFloat(magFilter.value);
         const effectiveMag = searchedObject.mag == null ? 50 : searchedObject.mag;
         if (effectiveMag <= magLimit) {
-            let [x, y, z] = searchedObject.xyz || radecToXYZ(searchedObject.ra, searchedObject.dec);
-            [x, y, z] = rotate([x, y, z], rotX, rotY, lat, baseLon);
-            if (z > -0.1) { // Object is visible
+            const { altDeg, azDeg } = radecToAltAz(searchedObject.ra, searchedObject.dec, selectedDate, latDeg, lonDeg);
+            let [x, y, z] = altazToXYZ(altDeg, azDeg);
+            [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+            if (z > 0) {
                 const [cx, cy] = project([x, y, z]);
-
-                // Animate the ring
                 highlightAnimation += 0.1;
                 const ringSize = 20 + Math.sin(highlightAnimation) * 5;
                 const opacity = 0.7 + Math.sin(highlightAnimation * 2) * 0.3;
-
                 ctx.strokeStyle = `rgba(255, 165, 0, ${opacity})`;
                 ctx.lineWidth = 3;
                 ctx.beginPath();
                 ctx.arc(cx, cy, ringSize, 0, 2*Math.PI);
                 ctx.stroke();
-                ctx.lineWidth = 1; // reset
+                ctx.lineWidth = 1;
             }
         }
     }
@@ -520,32 +529,29 @@ window.addEventListener('mouseup', () => dragging = false);
 canvas.addEventListener('click', function(e) {
     const mx = e.clientX, my = e.clientY;
     const magLimit = parseFloat(magFilter.value);
-    const lat = parseFloat(latInput.value) * Math.PI / 180;
-    const geoLonDeg = parseFloat(lonInput.value) || 0;
+    const latDeg = parseFloat(latInput.value) || 0;
+    const lonDeg = parseFloat(lonInput.value) || 0;
     let selectedDate = new Date();
     try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
-    const lstDeg = lstDegrees(new Date(selectedDate.toISOString()), geoLonDeg);
-    const siderealRot = -lstDeg * Math.PI / 180;
-    const baseLon = (timeRotate && timeRotate.checked) ? siderealRot : (geoLonDeg * Math.PI / 180);
+
     for (const obj of stars) {
-        const effectiveMag = obj.mag == null ? 50 : obj.mag; // Treat null magnitudes as 50
+        const effectiveMag = obj.mag == null ? 50 : obj.mag;
         if (effectiveMag > magLimit) continue;
         if (obj.type === "star" && !showStars.checked) continue;
         if (obj.type === "planet" && !showPlanets.checked) continue;
-    let [x, y, z] = obj.xyz || radecToXYZ(obj.ra, obj.dec);
-    [x, y, z] = rotate([x, y, z], rotX, rotY, lat, baseLon);
-        if (z <= -0.1) continue;
+
+        const { altDeg, azDeg } = radecToAltAz(obj.ra, obj.dec, selectedDate, latDeg, lonDeg);
+        let [x, y, z] = altazToXYZ(altDeg, azDeg);
+        [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+        if (z <= 0) continue;
         const [cx, cy] = project([x, y, z]);
-        
-        // Allow clicking stars anywhere on screen - remove bounds checking
-        
+
         let size = obj.type === "planet" ? fixedPlanetSize : Math.max(1, 6 - effectiveMag);
         let hitRadius = obj.type === "planet" ? fixedPlanetSize/2 : size;
         if ((mx-cx)**2 + (my-cy)**2 < hitRadius*hitRadius*1.5) {
             const displayMag = obj.mag == null ? "null" : obj.mag;
-            // Show HA for the selected time
-            const lstDeg = lstDegrees(new Date((timeControl && timeControl.value) ? new Date(timeControl.value).toISOString() : new Date().toISOString()), parseFloat(lonInput.value));
-            const ha = hourAngleDegrees(obj.ra, lstDeg);
+            const lstDegNow = lstDegrees(new Date((timeControl && timeControl.value) ? new Date(timeControl.value).toISOString() : new Date().toISOString()), parseFloat(lonInput.value));
+            const ha = hourAngleDegrees(obj.ra, lstDegNow);
             document.getElementById('info').innerHTML =
                 `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}° | HA: ${(ha/15).toFixed(2)}h<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}<br>
                  <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
@@ -831,58 +837,39 @@ function searchObject() {
 
 // Function to move camera to look at an object
 function moveToObject(obj) {
-    // Get observer settings
-    const lat = parseFloat(latInput.value) * Math.PI / 180;
-    const geoLonDeg = parseFloat(lonInput.value) || 0;
-    const lon = geoLonDeg * Math.PI / 180;
+    // Observer/time
+    const latDeg = parseFloat(latInput.value) || 0;
+    const lonDeg = parseFloat(lonInput.value) || 0;
     let selectedDate = new Date();
     try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
-    const lstDeg = lstDegrees(new Date(selectedDate.toISOString()), geoLonDeg);
-    const siderealRot = -lstDeg * Math.PI / 180;
-    const baseLon = (timeRotate && timeRotate.checked) ? siderealRot : lon;
-    
-    // Convert RA/DEC to Azimuth/Elevation
-    // This is a simplified conversion - for a proper implementation you'd need
-    // to account for the current time and date, but for now we'll use the 
-    // horizon coordinate system mapping that's already in the code
-    
-    // Since the sky is plotted in az/elv, we need to work with altitude/azimuth
-    // The existing rotate() function handles the conversion from RA/DEC to the 
-    // final 3D position. We need to find what user rotations center the object.
-    
-    // Let's use a different approach: find the rotation that puts the object at screen center
+
     function testRotation(testRotX, testRotY) {
-        let [x, y, z] = obj.xyz || radecToXYZ(obj.ra, obj.dec);
-    [x, y, z] = rotate([x, y, z], testRotX, testRotY, lat, baseLon);
-        if (z <= -0.1) return null; // Behind camera
+        const { altDeg, azDeg } = radecToAltAz(obj.ra, obj.dec, selectedDate, latDeg, lonDeg);
+        let [x, y, z] = altazToXYZ(altDeg, azDeg);
+        [x, y, z] = rotate([x, y, z], testRotX, testRotY, 0, 0);
+        if (z <= 0) return null; // Behind camera
         const [screenX, screenY] = project([x, y, z]);
         return [screenX, screenY, z];
     }
-    
-    // Simple search approach - try different rotations to find one that centers the object
+
     const centerX = width / 2;
     const centerY = height / 2;
     let bestRotX = rotX;
     let bestRotY = rotY;
     let bestDistance = Infinity;
-    
-    // Search in a reasonable range around current position
+
     const searchRange = Math.PI; // 180 degrees
     const searchSteps = 20;
-    
+
     for (let i = 0; i < searchSteps; i++) {
         for (let j = 0; j < searchSteps; j++) {
             const testRotY = rotY + (i - searchSteps/2) * searchRange / searchSteps;
             const testRotX = rotX + (j - searchSteps/2) * searchRange / searchSteps;
-            
-            // Constrain rotX
             const constrainedRotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, testRotX));
-            
             const result = testRotation(constrainedRotX, testRotY);
             if (result) {
                 const [screenX, screenY, z] = result;
-                const distance = Math.sqrt((screenX - centerX)**2 + (screenY - centerY)**2);
-                
+                const distance = Math.hypot(screenX - centerX, screenY - centerY);
                 if (distance < bestDistance && z > 0) {
                     bestDistance = distance;
                     bestRotX = constrainedRotX;
@@ -891,21 +878,17 @@ function moveToObject(obj) {
             }
         }
     }
-    
-    // If we didn't find a good position, try a wider search
+
     if (bestDistance > 100) {
         for (let i = 0; i < searchSteps; i++) {
             for (let j = 0; j < searchSteps; j++) {
                 const testRotY = (i / searchSteps) * 2 * Math.PI - Math.PI;
                 const testRotX = (j / searchSteps) * Math.PI - Math.PI/2;
-                
                 const constrainedRotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, testRotX));
-                
                 const result = testRotation(constrainedRotX, testRotY);
                 if (result) {
                     const [screenX, screenY, z] = result;
-                    const distance = Math.sqrt((screenX - centerX)**2 + (screenY - centerY)**2);
-                    
+                    const distance = Math.hypot(screenX - centerX, screenY - centerY);
                     if (distance < bestDistance && z > 0) {
                         bestDistance = distance;
                         bestRotX = constrainedRotX;
@@ -915,36 +898,27 @@ function moveToObject(obj) {
             }
         }
     }
-    
-    // Normalize rotY for smooth animation
+
     while (bestRotY - rotY > Math.PI) bestRotY -= 2*Math.PI;
     while (bestRotY - rotY < -Math.PI) bestRotY += 2*Math.PI;
-    
-    console.log(`Moving to ${obj.name}:`);
-    console.log(`  Found position at distance ${bestDistance.toFixed(1)} pixels from center`);
-    console.log(`  Target: rotY=${(bestRotY*180/Math.PI).toFixed(1)}°, rotX=${(bestRotX*180/Math.PI).toFixed(1)}°`);
-    console.log(`  Current: rotY=${(rotY*180/Math.PI).toFixed(1)}°, rotX=${(rotX*180/Math.PI).toFixed(1)}°`);
-    
-    // Animate to the target position
+
     const startRotX = rotX;
     const startRotY = rotY;
     const steps = 30;
     let step = 0;
-    
+
     function animateMove() {
         if (step <= steps) {
             const progress = step / steps;
-            const eased = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
-            
+            const eased = 1 - Math.pow(1 - progress, 3);
             rotX = startRotX + (bestRotX - startRotX) * eased;
             rotY = startRotY + (bestRotY - startRotY) * eased;
-            
             draw();
             step++;
             requestAnimationFrame(animateMove);
         }
     }
-    
+
     animateMove();
 }
 
@@ -958,7 +932,7 @@ function clearSearch() {
 
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('%cStar Map JS loaded v2025-10-12-6', 'color:#0bf');
+    console.log('%cStar Map JS loaded v2025-10-13-2', 'color:#0bf');
     // Initialize time control to current local time (rounded to minute)
     if (timeControl) {
         const now = new Date();
