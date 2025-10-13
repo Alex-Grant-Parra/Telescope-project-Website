@@ -199,6 +199,7 @@ function handleTimeControlKeydown(e) {
     e.preventDefault();
     // Update input and redraw. Try to preserve caret segment.
     setTimeControlFromDate(newDate, true);
+    schedulePlanetsRefresh();
     draw();
 }
 // Convert a Date to Julian Date (UTC)
@@ -232,6 +233,64 @@ function lstDegrees(date, longitudeDeg) {
     let lst = gmst + longitudeDeg; // East positive
     lst = ((lst % 360) + 360) % 360; // normalize 0-360
     return lst;
+}
+
+// --- Dynamic planet updates (server-driven ephemerides) ---
+let planetsRefreshTimer = null;
+
+async function fetchPlanetsForDate(date) {
+    try {
+        const iso = date.toISOString();
+        const res = await fetch(`/api/planets?datetime=${encodeURIComponent(iso)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        return data; // [{name, ra, dec, mag, icon, type:'planet'}]
+    } catch (err) {
+        console.error('Failed to fetch planets:', err);
+        return null;
+    }
+}
+
+function replacePlanetsInScene(newPlanets) {
+    if (!Array.isArray(newPlanets)) return;
+    // Build a lookup by lowercase name
+    const byName = new Map();
+    for (const p of newPlanets) {
+        if (!p || !p.name) continue;
+        byName.set(p.name.toLowerCase(), p);
+    }
+    for (const obj of stars) {
+        if (obj.type !== 'planet') continue;
+        const key = (obj.name || '').toLowerCase();
+        const np = byName.get(key);
+        if (!np) continue;
+        // Overwrite RA/Dec and icon/mag if provided
+        obj.ra = np.ra;
+        obj.dec = np.dec;
+        if (np.icon) obj.icon = np.icon;
+        if (np.mag != null) obj.mag = np.mag;
+        // Recompute cached xyz
+        try { obj.xyz = radecToXYZ(obj.ra, obj.dec); } catch { obj.xyz = radecToXYZ(0,0); }
+    }
+}
+
+async function refreshPlanetsForCurrentTime() {
+    let selectedDate = new Date();
+    try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
+    selectedDate.setSeconds(0, 0);
+    const updated = await fetchPlanetsForDate(new Date(selectedDate.toISOString()));
+    if (updated) {
+        replacePlanetsInScene(updated);
+        draw();
+    }
+}
+
+function schedulePlanetsRefresh() {
+    if (planetsRefreshTimer) clearTimeout(planetsRefreshTimer);
+    planetsRefreshTimer = setTimeout(() => {
+        planetsRefreshTimer = null;
+        refreshPlanetsForCurrentTime();
+    }, 250); // debounce rapid keypresses
 }
 
 // Compute Hour Angle (degrees, range -180..+180) for a given RA (deg) and LST (deg)
@@ -1099,7 +1158,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const now = new Date();
         now.setSeconds(0, 0);
         timeControl.value = formatLocalDateTime(now);
-        timeControl.addEventListener('change', draw);
+    timeControl.addEventListener('change', () => { refreshPlanetsForCurrentTime(); draw(); });
         // Add keyboard rollover handling for ArrowUp/ArrowDown
         timeControl.addEventListener('keydown', handleTimeControlKeydown);
     }
@@ -1108,6 +1167,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const now = new Date();
             now.setSeconds(0, 0);
             if (timeControl) timeControl.value = formatLocalDateTime(now);
+            refreshPlanetsForCurrentTime();
             draw();
         });
     }

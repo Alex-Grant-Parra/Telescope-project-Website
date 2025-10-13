@@ -100,7 +100,7 @@ def findAxialTilt(julianDate):
     Tilt = 23.439292-ChangeInTilt
     return Tilt
 
-def findPlanet(year, month, day, planetChoice):
+def findPlanet(year, month, day, planetChoice, hour: int = 0, minute: int = 0, second: float = 0.0):
 
     # Constants for J2000
     EarthPeriod = 1.00004
@@ -109,7 +109,7 @@ def findPlanet(year, month, day, planetChoice):
     EarthEccentricity = 0.016713
     EarthSemiMajorAxis = 1
 
-    currentJD = SpaceTime.getJD(year, month, day)
+    currentJD = SpaceTime.getJD(year, month, day, hour, minute, second)
     J1990JD = 2447892.5
     JDdifference = currentJD - J1990JD + 1
 
@@ -155,9 +155,9 @@ def findPlanet(year, month, day, planetChoice):
 
     return result
     
-def findSun(year, month, day, usedForMoon=False):
+def findSun(year, month, day, usedForMoon=False, hour: int = 0, minute: int = 0, second: float = 0.0):
 
-    LR_julianDate = SpaceTime.getJD(year, month, day)
+    LR_julianDate = SpaceTime.getJD(year, month, day, hour, minute, second)
 
     GD_SUNDATA = {
     "Ecliptic longitude (epoch)": 279.403303,
@@ -168,7 +168,7 @@ def findSun(year, month, day, usedForMoon=False):
     }
     
     LR_e = GD_SUNDATA.get("Eccentricity")
-    LR_daysBetween = LR_julianDate - SpaceTime.getJD(1990, 1, 0)
+    LR_daysBetween = LR_julianDate - SpaceTime.getJD(1990, 1, 0, 0, 0, 0.0)
     LR_N = ((360/365.242191)*LR_daysBetween)%360
     LR_M = LR_N + GD_SUNDATA.get("Ecliptic longitude (epoch)") - GD_SUNDATA.get("Ecliptic longitude (perigee)")
     LR_M = radians(LR_M)
@@ -182,7 +182,7 @@ def findSun(year, month, day, usedForMoon=False):
 
 
 
-def findMoon(year, month, day):
+def findMoon(year, month, day, hour: int = 0, minute: int = 0, second: float = 0.0):
 
     GD_MOONDATA = {
     "Ecliptic mean longitude": 318.351648,
@@ -193,10 +193,10 @@ def findMoon(year, month, day):
     "Semi-major axis": 3.84401*10**5,
     }
 
-    currentJD = SpaceTime.getJD(year, month, day)
+    currentJD = SpaceTime.getJD(year, month, day, hour, minute, second)
     D = currentJD - SpaceTime.getJD(1990, 1, 0) 
 
-    sunLocationData = findSun(year, month, day, usedForMoon=True)
+    sunLocationData = findSun(year, month, day, usedForMoon=True, hour=hour, minute=minute, second=second)
     M = sunLocationData[0]
     LongSun = sunLocationData[1]
     
@@ -267,24 +267,24 @@ def get_vmag_for_object(name, phaseDeg=None):
     return None
 
 @timer
-def getAllCelestialData(year, month, day):
+def getAllCelestialData(year, month, day, hour: int = 0, minute: int = 0, second: float = 0.0):
     results = {}
 
     # Exclude sun and moon from planets loop
     for planet_name in planets.keys():
         if planet_name.lower() in ["sun", "moon"]:
             continue
-        ra, dec = findPlanet(year, month, day, planet_name)
+        ra, dec = findPlanet(year, month, day, planet_name, hour=hour, minute=minute, second=second)
         vmag = get_vmag_for_object(planet_name)
         results[planet_name] = {"ra": ra, "dec": dec, "vmag": vmag}
 
     # Calculate Sun separately
-    ra_sun, dec_sun = findSun(year, month, day)
+    ra_sun, dec_sun = findSun(year, month, day, hour=hour, minute=minute, second=second)
     vmag = get_vmag_for_object("sun")
     results["sun"] = {"ra": ra_sun, "dec": dec_sun, "vmag": vmag}
 
     # Calculate Moon separately
-    ra_moon, dec_moon = findMoon(year, month, day)
+    ra_moon, dec_moon = findMoon(year, month, day, hour=hour, minute=minute, second=second)
 
     ra_moon_deg, dec_moon_deg = convert.HrMinSecToDegrees(ra_moon[0], ra_moon[1], ra_moon[2]), convert.HrMinSecToDegrees(dec_moon[0], dec_moon[1], dec_moon[2])
     ra_sun_deg, dec_sun_deg = convert.HrMinSecToDegrees(ra_sun[0], ra_sun[1], ra_sun[2]), convert.HrMinSecToDegrees(dec_sun[0], dec_sun[1], dec_sun[2])
