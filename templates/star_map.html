@@ -84,6 +84,7 @@
         <input type="checkbox" id="show-horizon-grid"> Horizon Grid
         <input type="checkbox" id="show-equatorial-grid"> Equatorial Grid
         <input type="checkbox" id="show-ecliptic"> Ecliptic
+        <input type="checkbox" id="show-below-horizon" checked> Below-horizon tint
     </label>
     <label>
         <input type="checkbox" id="time-rotate" checked> Rotate with time
@@ -136,6 +137,6 @@
 </script>
 <script src="{{ url_for('static', filename='js/csrf-protection.js') }}"></script>
 <!-- Cache-busting query param to ensure latest JS is fetched -->
-<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-13-3"></script>
+<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-13-4"></script>
 </body>
 </html>
