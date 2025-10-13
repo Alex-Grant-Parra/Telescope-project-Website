@@ -118,6 +118,7 @@
             <li>Toggle the ecliptic line</li>
             <li>Reset view to default orientation and zoom</li>
             <li>Use the Time control to preview the sky at any date/time; the grid labels show Hour Angle (HA).</li>
+            <li>Tip: Focus the Time box and press Arrow Up/Down to adjust with rollover. Move the caret over year/month/day/hour/minute to change that unit. If caret isn't available, use Shift (hour), Ctrl (day), Alt (month), or Ctrl+Shift (year).</li>
         </ul>
         <button id="close-help">Close</button>
     </div>
@@ -135,6 +136,6 @@
 </script>
 <script src="{{ url_for('static', filename='js/csrf-protection.js') }}"></script>
 <!-- Cache-busting query param to ensure latest JS is fetched -->
-<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-13-2"></script>
+<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-13-3"></script>
 </body>
 </html>
