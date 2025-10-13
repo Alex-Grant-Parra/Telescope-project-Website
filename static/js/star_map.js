@@ -444,7 +444,7 @@ function drawHorizonGrid(lat, lon) {
 // Draw a translucent green tint for the region below the horizon (alt < 0)
 function drawBelowHorizonTint() {
     ctx.save();
-    ctx.fillStyle = 'rgba(50, 205, 50, 0.30)'; // grass green at ~30%
+    ctx.fillStyle = 'rgba(50, 205, 50, 0.10)'; // grass green at ~10%
     const altStep = 3; // finer near horizon to avoid visible faceting
     const azStep = 4;
     const cullThreshold = 0; // front hemisphere only

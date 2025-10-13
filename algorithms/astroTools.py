@@ -7,6 +7,8 @@ from algorithms.timeUtils import SpaceTime
 from algorithms.convert import convert
 from models.tables import PlanetsTable
 
+from utility.timer_utils import timer
+
 # Overriding trig functions to use degrees
 sin = lambda x: math_sin(radians(x))
 cos = lambda x: math_cos(radians(x))
@@ -66,7 +68,7 @@ def solveKepler(M, e):
             LR_E0 = E1
         return E1
     else:
-        print("Eccentricity of orbit must be between 0 and 0.1")
+        # print("Eccentricity of orbit must be between 0 and 0.1")
         return -1
     
 def getPlanetsData():
@@ -225,7 +227,7 @@ def findMoon(year, month, day):
 
 
 def ra_dec_to_vector(ra, dec):
-    print(ra, dec)
+    # print(ra, dec)
     return (
     cos(dec) * cos(ra),
     cos(dec) * sin(ra),
@@ -264,7 +266,7 @@ def get_vmag_for_object(name, phaseDeg=None):
 
     return None
 
-
+@timer
 def getAllCelestialData(year, month, day):
     results = {}
 
