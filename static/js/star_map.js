@@ -258,6 +258,7 @@ function replacePlanetsInScene(newPlanets) {
         if (stars[i] && stars[i].type === 'planet') stars.splice(i, 1);
     }
     // Insert fresh planets
+    const newList = [];
     for (const p of newPlanets) {
         if (!p || typeof p.ra !== 'number' || typeof p.dec !== 'number') continue;
         const obj = {
@@ -270,7 +271,9 @@ function replacePlanetsInScene(newPlanets) {
         };
         try { obj.xyz = radecToXYZ(obj.ra, obj.dec); } catch { obj.xyz = radecToXYZ(0,0); }
         stars.push(obj);
+        newList.push(obj);
     }
+    planetsList = newList;
 }
 
 async function refreshPlanetsForCurrentTime() {
@@ -301,23 +304,35 @@ function hourAngleDegrees(raDeg, lstDeg) {
     return ha;
 }
 
-// Convert RA/Dec to Alt/Az for a given date, latitude, and longitude (degrees)
-function radecToAltAz(raDeg, decDeg, date, latDeg, lonDeg) {
-    const lstDegVal = lstDegrees(new Date(date.toISOString()), lonDeg);
-    const H = (lstDegVal - raDeg) * Math.PI / 180; // hour angle in radians
+// Fast RA/Dec -> Alt/Az using precomputed LST and observer lat
+function radecToAltAzFast(raDeg, decDeg, lstDeg, sinLat, cosLat) {
+    const H = (lstDeg - raDeg) * Math.PI / 180; // hour angle in radians
     const dec = decDeg * Math.PI / 180;
-    const lat = latDeg * Math.PI / 180;
-
-    const sinAlt = Math.sin(dec) * Math.sin(lat) + Math.cos(dec) * Math.cos(lat) * Math.cos(H);
+    const sinDec = Math.sin(dec), cosDec = Math.cos(dec);
+    const sinAlt = sinDec * sinLat + cosDec * cosLat * Math.cos(H);
     const alt = Math.asin(sinAlt);
-
-    // Azimuth (0° = North, 90° = East), standard atan2(sinAz, cosAz)
-    const sinAz = -Math.cos(dec) * Math.sin(H);
-    const cosAz = Math.sin(dec) * Math.cos(lat) - Math.cos(dec) * Math.cos(H) * Math.sin(lat);
+    const sinAz = -cosDec * Math.sin(H);
+    const cosAz = sinDec * cosLat - cosDec * Math.cos(H) * sinLat;
     let az = Math.atan2(sinAz, cosAz);
     if (az < 0) az += 2 * Math.PI;
-
     return { altDeg: alt * 180 / Math.PI, azDeg: az * 180 / Math.PI };
+}
+
+// Variant that reuses cached sin/cos(dec) for static stars
+function radecToAltAzFastStar(raDeg, sinDec, cosDec, lstDeg, sinLat, cosLat) {
+    const H = (lstDeg - raDeg) * Math.PI / 180;
+    const sinAlt = sinDec * sinLat + cosDec * cosLat * Math.cos(H);
+    const alt = Math.asin(sinAlt);
+    const sinAz = -cosDec * Math.sin(H);
+    const cosAz = sinDec * cosLat - cosDec * Math.cos(H) * sinLat;
+    let az = Math.atan2(sinAz, cosAz);
+    if (az < 0) az += 2 * Math.PI;
+    return { altDeg: alt * 180 / Math.PI, azDeg: az * 180 / Math.PI };
+}
+
+function precomputeObserver(latDeg) {
+    const lat = latDeg * Math.PI / 180;
+    return { sinLat: Math.sin(lat), cosLat: Math.cos(lat) };
 }
 
 // Convert altitude/azimuth to Cartesian coordinates
@@ -361,6 +376,82 @@ function project([x, y, z]) {
     ];
 }
 
+// Visible caches (recomputed only when needed)
+let visibleStars = [];   // filtered by magnitude only
+let planetsList = [];    // updated when planets are replaced
+let lastMagLimit = null;
+
+function updatePlanetsList() {
+    planetsList = [];
+    for (let i = 0; i < stars.length; i++) {
+        if (stars[i] && stars[i].type === 'planet') planetsList.push(stars[i]);
+    }
+}
+
+function rebuildVisibleStars(magLimit) {
+    lastMagLimit = magLimit;
+    visibleStars = [];
+    for (let i = 0; i < stars.length; i++) {
+        const obj = stars[i];
+        if (!obj || obj.type !== 'star') continue;
+        const effectiveMag = obj.mag == null ? 50 : obj.mag;
+        if (effectiveMag <= magLimit) visibleStars.push(obj);
+    }
+}
+
+// Build a 3x3 matrix that maps equatorial unit vectors (x=cosδcosα, y=sinδ, z=cosδsinα)
+// into view space (after converting to horizon frame using LST/latitude, then applying user rotY, rotX)
+function buildEqToViewMatrix(latDeg, lstDeg, rotX, rotY) {
+    const deg2rad = Math.PI / 180;
+    const φ = latDeg * deg2rad;
+    const Θ = lstDeg * deg2rad;
+    const sφ = Math.sin(φ), cφ = Math.cos(φ);
+    const sΘ = Math.sin(Θ), cΘ = Math.cos(Θ);
+
+    // Equatorial -> Horizon (x_east, y_up, z_north) for input vector [x=cosδcosα, y=sinδ, z=cosδsinα]
+    const M = [
+        [-sΘ,            0,   cΘ],
+        [ cφ * cΘ,      sφ,  cφ * sΘ],
+        [-sφ * cΘ,      cφ, -sφ * sΘ]
+    ];
+
+    // User rotations: first around Y (rotY), then around X (rotX) in horizon frame
+    const sy = Math.sin(rotY), cy = Math.cos(rotY);
+    const sx = Math.sin(rotX), cx = Math.cos(rotX);
+    const Ry = [
+        [ cy,  0, -sy],
+        [  0,  1,   0],
+        [ sy,  0,  cy]
+    ];
+    const Rx = [
+        [ 1,  0,   0],
+        [ 0, cx, -sx],
+        [ 0, sx,  cx]
+    ];
+
+    // Multiply A*B helper
+    function mul3x3(A, B) {
+        const R = [ [0,0,0], [0,0,0], [0,0,0] ];
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                R[i][j] = A[i][0]*B[0][j] + A[i][1]*B[1][j] + A[i][2]*B[2][j];
+            }
+        }
+        return R;
+    }
+
+    const Ruser = mul3x3(Rx, Ry);
+    return { Mview: mul3x3(Ruser, M), upRow: M[1] };
+}
+
+function mulMat3Vec3(M, v) {
+    return [
+        M[0][0]*v[0] + M[0][1]*v[1] + M[0][2]*v[2],
+        M[1][0]*v[0] + M[1][1]*v[1] + M[1][2]*v[2],
+        M[2][0]*v[0] + M[2][1]*v[1] + M[2][2]*v[2]
+    ];
+}
+
 // Ecliptic coordinate conversion
 // Convert ecliptic longitude/latitude (lambda, beta) to equatorial RA/Dec (degrees)
 function eclipticToEquatorial(lambdaDeg, betaDeg) {
@@ -390,10 +481,12 @@ function drawEcliptic() {
     const lonDeg = parseFloat(lonInput.value) || 0;
     let selectedDate = new Date();
     try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
+    const lstDegVal = lstDegrees(new Date(selectedDate.toISOString()), lonDeg);
+    const { sinLat, cosLat } = precomputeObserver(latDeg);
 
     for (let lam = 0; lam <= 360; lam += 2) {
-        const { raDeg, decDeg } = eclipticToEquatorial(lam, 0);
-        const { altDeg, azDeg } = radecToAltAz(raDeg, decDeg, selectedDate, latDeg, lonDeg);
+    const { raDeg, decDeg } = eclipticToEquatorial(lam, 0);
+    const { altDeg, azDeg } = radecToAltAzFast(raDeg, decDeg, lstDegVal, sinLat, cosLat);
         let [x, y, z] = altazToXYZ(altDeg, azDeg);
         [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
         if (z <= cullThreshold) { started = false; continue; }
@@ -564,6 +657,7 @@ function drawEquatorialGrid() {
     let selectedDate = new Date();
     try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
     currentLSTDeg = lstDegrees(new Date(selectedDate.toISOString()), lonDeg);
+    const { sinLat, cosLat } = precomputeObserver(latDeg);
 
     // Draw declination circles in equatorial coords, converted to horizon
     for (let dec = -90; dec <= 90; dec += 10) {
@@ -571,7 +665,7 @@ function drawEquatorialGrid() {
         ctx.beginPath();
         let firstPoint = true;
         for (let ra = 0; ra <= 360; ra += 3) {
-            const { altDeg, azDeg } = radecToAltAz(ra, dec, selectedDate, latDeg, lonDeg);
+            const { altDeg, azDeg } = radecToAltAzFast(ra, dec, currentLSTDeg, sinLat, cosLat);
             let [x, y, z] = altazToXYZ(altDeg, azDeg);
             // Only apply user rotation; horizon is our base frame
             [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
@@ -584,7 +678,7 @@ function drawEquatorialGrid() {
 
         // Label declination lines every 30°
         if (dec % 30 === 0) {
-            const { altDeg, azDeg } = radecToAltAz(0, dec, selectedDate, latDeg, lonDeg); // RA=0h point
+            const { altDeg, azDeg } = radecToAltAzFast(0, dec, currentLSTDeg, sinLat, cosLat); // RA=0h point
             let [x, y, z] = altazToXYZ(altDeg, azDeg);
             [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
             if (z > cullThreshold) {
@@ -602,7 +696,7 @@ function drawEquatorialGrid() {
         ctx.beginPath();
         let firstPoint = true;
         for (let dec = -90; dec <= 90; dec += 2) {
-            const { altDeg, azDeg } = radecToAltAz(ra, dec, selectedDate, latDeg, lonDeg);
+            const { altDeg, azDeg } = radecToAltAzFast(ra, dec, currentLSTDeg, sinLat, cosLat);
             let [x, y, z] = altazToXYZ(altDeg, azDeg);
             [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
             if (z <= cullThreshold) { firstPoint = true; continue; }
@@ -615,7 +709,7 @@ function drawEquatorialGrid() {
         // Label HA at celestial equator for multiples of 30° (2 hours)
         const norm30 = ((ha % 30) + 30) % 30;
         if (Math.abs(norm30) < 1e-6) {
-            const { altDeg, azDeg } = radecToAltAz(ra, 0, selectedDate, latDeg, lonDeg);
+            const { altDeg, azDeg } = radecToAltAzFast(ra, 0, currentLSTDeg, sinLat, cosLat);
             let [x, y, z] = altazToXYZ(altDeg, azDeg);
             [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
             if (z > cullThreshold) {
@@ -647,6 +741,7 @@ function draw() {
 
     const showStarsVal = showStars.checked;
     const showPlanetsVal = showPlanets.checked;
+    const { sinLat, cosLat } = precomputeObserver(latDeg);
 
     // Optional below-horizon tint, draw first so grids and stars are above
     if (showBelowHorizon && showBelowHorizon.checked) {
@@ -665,21 +760,66 @@ function draw() {
         drawEcliptic();
     }
 
-    // Draw stars/planets using true Alt/Az for given time and location
-    for (const obj of stars) {
-        const effectiveMag = obj.mag == null ? 50 : obj.mag; // Treat null magnitudes as 50
-        if (effectiveMag > magLimit) continue;
-        if (obj.type === "star" && !showStarsVal) continue;
-        if (obj.type === "planet" && !showPlanetsVal) continue;
+    // Refresh filtered stars if mag limit changed
+    if (lastMagLimit === null || Math.abs(magLimit - lastMagLimit) > 1e-6) {
+        rebuildVisibleStars(magLimit);
+    }
 
-        const { altDeg, azDeg } = radecToAltAz(obj.ra, obj.dec, selectedDate, latDeg, lonDeg);
-        let [x, y, z] = altazToXYZ(altDeg, azDeg);
-        [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
-        if (z <= 0) continue; // Only render objects in the front hemisphere
-        const [cx, cy] = project([x, y, z]);
+    // Ensure planets list is up-to-date (cheap scan if empty)
+    if (planetsList.length === 0) updatePlanetsList();
 
-        if (obj.type === "planet") {
-            const size = fixedPlanetSize; // Use fixed size for all planets
+    // Draw stars/planets using view-matrix transform
+    const { Mview, upRow } = buildEqToViewMatrix(latDeg, currentLSTDeg, rotX, rotY);
+    const cullBelowHorizon = !(showBelowHorizon && showBelowHorizon.checked);
+    // Stars first (filtered)
+    if (showStarsVal) {
+        for (let i = 0; i < visibleStars.length; i++) {
+            const obj = visibleStars[i];
+            const v = obj.xyz || radecToXYZ(obj.ra, obj.dec);
+            if (cullBelowHorizon) {
+                const yUp = upRow[0]*v[0] + upRow[1]*v[1] + upRow[2]*v[2];
+                if (yUp <= 0) continue;
+            }
+            const w0 = Mview[0], w1 = Mview[1], w2 = Mview[2];
+            const x = w0[0]*v[0] + w0[1]*v[1] + w0[2]*v[2];
+            const y = w1[0]*v[0] + w1[1]*v[1] + w1[2]*v[2];
+            const z = w2[0]*v[0] + w2[1]*v[1] + w2[2]*v[2];
+            if (z <= 0) continue;
+            const [cx, cy] = project([x, y, z]);
+            const effectiveMag = obj.mag == null ? 50 : obj.mag;
+            const size = Math.max(1, 6 - effectiveMag);
+            ctx.fillStyle = "#fff";
+            const a = Math.max(0.5, 1 - effectiveMag/8);
+            if (size <= 1.5 && a >= 0.9) {
+                ctx.globalAlpha = 1;
+                ctx.fillRect(cx | 0, cy | 0, 1, 1);
+            } else {
+                ctx.globalAlpha = a;
+                ctx.beginPath();
+                ctx.arc(cx, cy, size, 0, 2*Math.PI);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+    }
+
+    // Planets on top
+    if (showPlanetsVal) {
+        for (let i = 0; i < planetsList.length; i++) {
+            const obj = planetsList[i];
+            const v = obj.xyz || radecToXYZ(obj.ra, obj.dec);
+            if (cullBelowHorizon) {
+                const yUp = upRow[0]*v[0] + upRow[1]*v[1] + upRow[2]*v[2];
+                if (yUp <= 0) continue;
+            }
+            const w0 = Mview[0], w1 = Mview[1], w2 = Mview[2];
+            const x = w0[0]*v[0] + w0[1]*v[1] + w0[2]*v[2];
+            const y = w1[0]*v[0] + w1[1]*v[1] + w1[2]*v[2];
+            const z = w2[0]*v[0] + w2[1]*v[1] + w2[2]*v[2];
+            if (z <= 0) continue;
+            const [cx, cy] = project([x, y, z]);
+
+            const size = fixedPlanetSize; // fixed size for all planets
             ctx.globalAlpha = 1;
             if (obj.icon && planetImages[obj.icon]) {
                 const img = planetImages[obj.icon];
@@ -690,14 +830,6 @@ function draw() {
                 ctx.arc(cx, cy, size/2, 0, 2*Math.PI);
                 ctx.fill();
             }
-        } else {
-            const size = Math.max(1, 6 - effectiveMag);
-            ctx.fillStyle = "#fff";
-            ctx.globalAlpha = Math.max(0.5, 1 - effectiveMag/8);
-            ctx.beginPath();
-            ctx.arc(cx, cy, size, 0, 2*Math.PI);
-            ctx.fill();
-            ctx.globalAlpha = 1;
         }
     }
 
@@ -1188,6 +1320,11 @@ window.addEventListener('DOMContentLoaded', () => {
                 const _v = radecToXYZ(obj.ra, obj.dec);
                 // Keep native coordinate orientation: +Dec (north) maps upward in project()
                 obj.xyz = _v;
+                if (obj.type === 'star') {
+                    const decRad = (obj.dec || 0) * Math.PI / 180;
+                    obj._sinDec = Math.sin(decRad);
+                    obj._cosDec = Math.cos(decRad);
+                }
             } catch (e) {
                 // Fallback in case of bad data
                 const _v = radecToXYZ(0, 0);
