@@ -1,6 +1,9 @@
 FlaskServerPort = 8080
 ifOnline = True
 
+from utility.setupLibs import ensure_requirements
+ensure_requirements()
+
 from flask import Flask, request, jsonify, redirect, url_for, Response, session, flash
 import json
 from flask_login import LoginManager, logout_user, current_user
@@ -14,7 +17,7 @@ from socket import gethostname
 from app.db import db
 import subprocess
 import atexit
-from waitress import serve
+from waitress import serve  
 from datetime import datetime
 # Import security components
 from security import SecurityMiddleware, register_security_error_handlers
