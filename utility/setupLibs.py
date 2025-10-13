@@ -51,7 +51,7 @@ def ensure_requirements():
             PR_Requirement = None
             parse_version = None
 
-    # Get installed packages via pip list --format=json (reliable)
+    # Get installed packages via pip list --format=json (
     installed = {}
     try:
         out = subprocess.check_output([sys.executable, "-m", "pip", "list", "--format=json"], text=True)
@@ -67,7 +67,7 @@ def ensure_requirements():
         except Exception:
             pass
 
-    # Determine which req lines are missing or don't satisfy specifiers
+    # Determine which req lines are missing
     to_install = []
     for line in lines:
         parsed_name = None
@@ -85,7 +85,7 @@ def ensure_requirements():
                     except Exception:
                         spec_ok = False
             else:
-                # fallback parsing (handles simple forms like pkg==1.2.3, pkg>=1.0)
+                # fallback parsing
                 if PR_Requirement:
                     r = PR_Requirement.parse(line)
                     raw_name = getattr(r, "project_name", None) or getattr(r, "name", None)
@@ -94,7 +94,7 @@ def ensure_requirements():
                     if installed_ver is None:
                         spec_ok = False
                     else:
-                        # r.specs is list of tuples e.g. [('>=', '1.2')]
+                        # r.specs is list of tuples
                         if getattr(r, "specs", None):
                             for op, ver in r.specs:
                                 iv = parse_version(installed_ver)

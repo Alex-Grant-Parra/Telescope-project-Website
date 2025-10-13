@@ -98,6 +98,108 @@ function radecToXYZ(ra, dec) {
 }
 
 // Time and sidereal time utilities
+// Date/time helpers for local datetime input handling with rollover
+function formatLocalDateTime(date) {
+    // Formats a Date as YYYY-MM-DDTHH:MM in local time
+    const pad = (n) => n.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function parseLocalDateTime(str) {
+    // Safely parse local datetime string (YYYY-MM-DDTHH:MM)
+    // new Date(str) with no timezone is treated as local time by modern browsers
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return null;
+    return d;
+}
+
+function setTimeControlFromDate(d, preserveSelectionSegment) {
+    if (!timeControl || !(d instanceof Date) || isNaN(d)) return;
+    const segBounds = preserveSelectionSegment ? getCurrentSegmentBounds(timeControl) : null;
+    timeControl.value = formatLocalDateTime(d);
+    // Try to keep the caret on the same segment if supported
+    if (segBounds && typeof timeControl.setSelectionRange === 'function') {
+        try { timeControl.setSelectionRange(segBounds.start, segBounds.end); } catch {}
+    }
+}
+
+// Determine which segment of the datetime string the caret is on
+// Returns one of: 'year'|'month'|'day'|'hour'|'minute' or null if unknown
+function getCaretSegment(input) {
+    if (!input) return null;
+    const v = input.value || '';
+    // Expect pattern YYYY-MM-DDTHH:MM (length 16)
+    const pos = (typeof input.selectionStart === 'number') ? input.selectionStart : -1;
+    if (pos < 0 || v.length < 16) return null;
+    if (pos <= 4) return 'year';
+    if (pos >= 5 && pos <= 7) return 'month';
+    if (pos >= 8 && pos <= 10) return 'day';
+    if (pos >= 11 && pos <= 13) return 'hour';
+    return 'minute';
+}
+
+function getCurrentSegmentBounds(input) {
+    const seg = getCaretSegment(input);
+    if (!seg) return null;
+    switch (seg) {
+        case 'year': return { start: 0, end: 4 };
+        case 'month': return { start: 5, end: 7 };
+        case 'day': return { start: 8, end: 10 };
+        case 'hour': return { start: 11, end: 13 };
+        case 'minute': return { start: 14, end: 16 };
+        default: return null;
+    }
+}
+
+function adjustDateByUnit(date, unit, delta) {
+    // Returns a new Date adjusted in local time, relying on JS rollover behavior
+    const d = new Date(date.getTime());
+    switch (unit) {
+        case 'minute': d.setMinutes(d.getMinutes() + delta); break;
+        case 'hour': d.setHours(d.getHours() + delta); break;
+        case 'day': d.setDate(d.getDate() + delta); break;
+        case 'month': d.setMonth(d.getMonth() + delta); break;
+        case 'year': d.setFullYear(d.getFullYear() + delta); break;
+        default: d.setMinutes(d.getMinutes() + delta); break;
+    }
+    // Zero seconds and ms for stability with our control
+    d.setSeconds(0, 0);
+    return d;
+}
+
+function handleTimeControlKeydown(e) {
+    if (!timeControl) return;
+    const key = e.key;
+    if (key !== 'ArrowUp' && key !== 'ArrowDown') return;
+
+    const raw = timeControl.value;
+    let baseDate = parseLocalDateTime(raw);
+    if (!baseDate) {
+        baseDate = new Date();
+        baseDate.setSeconds(0, 0);
+    }
+
+    // Determine which unit to adjust. Prefer caret segment when available.
+    let unit = getCaretSegment(timeControl);
+    // Fallback to modifier keys if caret segment is unavailable
+    // Alt: month, Ctrl: day, Shift: hour, Ctrl+Shift: year. Default: minute
+    if (!unit) {
+        if (e.ctrlKey && e.shiftKey) unit = 'year';
+        else if (e.altKey) unit = 'month';
+        else if (e.ctrlKey) unit = 'day';
+        else if (e.shiftKey) unit = 'hour';
+        else unit = 'minute';
+    }
+
+    const delta = (key === 'ArrowUp') ? 1 : -1;
+    const newDate = adjustDateByUnit(baseDate, unit, delta);
+
+    // Prevent native stepping to avoid double changes
+    e.preventDefault();
+    // Update input and redraw. Try to preserve caret segment.
+    setTimeControlFromDate(newDate, true);
+    draw();
+}
 // Convert a Date to Julian Date (UTC)
 function toJulianDate(date) {
     // Algorithm from NOAA; date should be a JS Date in UTC
@@ -932,23 +1034,21 @@ function clearSearch() {
 
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('%cStar Map JS loaded v2025-10-13-2', 'color:#0bf');
+    console.log('%cStar Map JS loaded v2025-10-13-3', 'color:#0bf');
     // Initialize time control to current local time (rounded to minute)
     if (timeControl) {
         const now = new Date();
         now.setSeconds(0, 0);
-        const pad = (n) => n.toString().padStart(2, '0');
-        const local = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-        timeControl.value = local;
+        timeControl.value = formatLocalDateTime(now);
         timeControl.addEventListener('change', draw);
+        // Add keyboard rollover handling for ArrowUp/ArrowDown
+        timeControl.addEventListener('keydown', handleTimeControlKeydown);
     }
     if (timeNowBtn) {
         timeNowBtn.addEventListener('click', () => {
             const now = new Date();
             now.setSeconds(0, 0);
-            const pad = (n) => n.toString().padStart(2, '0');
-            const local = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-            if (timeControl) timeControl.value = local;
+            if (timeControl) timeControl.value = formatLocalDateTime(now);
             draw();
         });
     }
