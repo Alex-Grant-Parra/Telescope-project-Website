@@ -253,10 +253,10 @@ function radecToAltAz(raDeg, decDeg, date, latDeg, lonDeg) {
     const sinAlt = Math.sin(dec) * Math.sin(lat) + Math.cos(dec) * Math.cos(lat) * Math.cos(H);
     const alt = Math.asin(sinAlt);
 
-    // Azimuth: 0° = North, 90° = East (matches our horizon grid)
-    const y = -Math.cos(dec) * Math.sin(H);
-    const x = Math.tan(dec) * Math.cos(lat) - Math.cos(H) * Math.sin(lat);
-    let az = Math.atan2(y, x);
+    // Azimuth (0° = North, 90° = East), standard atan2(sinAz, cosAz)
+    const sinAz = -Math.cos(dec) * Math.sin(H);
+    const cosAz = Math.sin(dec) * Math.cos(lat) - Math.cos(dec) * Math.cos(H) * Math.sin(lat);
+    let az = Math.atan2(sinAz, cosAz);
     if (az < 0) az += 2 * Math.PI;
 
     return { altDeg: alt * 180 / Math.PI, azDeg: az * 180 / Math.PI };
@@ -288,14 +288,18 @@ function rotate([x, y, z], rotX, rotY, lat, lon) {
     return [x2, y2, z4];
 }
 
-// Project 3D point to 2D canvas
+// Project 3D point to 2D canvas (stereographic)
 function project([x, y, z]) {
-    // Perspective projection for camera inside sphere looking outward
-    const fov = 1.2;
-    const scale = Math.max(width, height) * 0.8 * zoom / (fov + z);
+    // Stereographic projection from (0,0,-1) onto plane through origin.
+    // Preserves circles as circles; the horizon (z=0) maps to a circle.
+    const denom = 1 + z;
+    // Callers should cull z <= 0. For safety, clamp extremely small denom.
+    const safeDenom = Math.max(denom, 1e-6);
+    const k = Math.max(width, height) * 0.35 * zoom;
+    const s = (2 * k) / safeDenom;
     return [
-        width / 2 + x * scale,
-        height / 2 - y * scale
+        width / 2 + x * s,
+        height / 2 - y * s
     ];
 }
 
@@ -441,8 +445,8 @@ function drawHorizonGrid(lat, lon) {
 function drawBelowHorizonTint() {
     ctx.save();
     ctx.fillStyle = 'rgba(50, 205, 50, 0.30)'; // grass green at ~30%
-    const altStep = 5; // degrees
-    const azStep = 5;  // degrees
+    const altStep = 3; // finer near horizon to avoid visible faceting
+    const azStep = 4;
     const cullThreshold = 0; // front hemisphere only
 
     // Iterate small horizon cells and fill quads that are fully visible (all corners z>0)
@@ -1089,7 +1093,7 @@ function clearSearch() {
 
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('%cStar Map JS loaded v2025-10-13-5', 'color:#0bf');
+    console.log('%cStar Map JS loaded v2025-10-13-8', 'color:#0bf');
     // Initialize time control to current local time (rounded to minute)
     if (timeControl) {
         const now = new Date();
