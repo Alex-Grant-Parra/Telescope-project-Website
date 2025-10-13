@@ -1,4 +1,7 @@
 from app.db import db
+import logging
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import Table, MetaData, Column, String, REAL
 
 def get_app():
@@ -112,7 +115,7 @@ class PlanetsTable(BaseTable):
 
     @staticmethod
     def query_by_name(name):
-        print(f"Querying PlanetsTable for name: {name}")
+        logger.debug(f"Querying PlanetsTable for name: {name}")
         result = db.session.query(PlanetsTable).filter_by(Name=name).first()
         if result:
             if isinstance(result, dict):

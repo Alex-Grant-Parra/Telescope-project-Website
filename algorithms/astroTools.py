@@ -56,20 +56,29 @@ class CelestialObject:
         self.v = None # True anomaly
         self.r = None # Heliocentric distance
 
-def solveKepler(M, e):
-    if e < 0.1:
-        E0 = M
-        LR_E0 = E0  # Initialize
-        tolerance = 10**-6
-        while True:
-            E1 = E0 - (E0 - e*sin(E0)-M) / (1 - e*cos(E0))
-            if abs(LR_E0 - E1) < tolerance:
-                break
-            LR_E0 = E1
-        return E1
-    else:
-        # print("Eccentricity of orbit must be between 0 and 0.1")
-        return -1
+def solveKepler(M_deg, e):
+    """
+    Solve Kepler's equation M = E - e*sin(E) for E (eccentric anomaly).
+    - Input M in degrees, e dimensionless.
+    - Returns E in degrees.
+    Uses a radian-space Newton iteration internally for numerical correctness.
+    """
+    import math
+    if e < 0 or e >= 1:
+        raise ValueError("Eccentricity must be in [0, 1)")
+    # Convert to radians
+    M = math.radians(M_deg % 360)
+    # Initial guess
+    E = M if e < 0.8 else math.pi
+    tol = 1e-12
+    for _ in range(50):
+        f = E - e * math.sin(E) - M
+        fp = 1 - e * math.cos(E)
+        dE = -f / fp
+        E += dE
+        if abs(dE) < tol:
+            break
+    return math.degrees(E % (2*math.pi))
     
 def getPlanetsData():
     with app.app_context():
@@ -170,15 +179,18 @@ def findSun(year, month, day, usedForMoon=False, hour: int = 0, minute: int = 0,
     LR_e = GD_SUNDATA.get("Eccentricity")
     LR_daysBetween = LR_julianDate - SpaceTime.getJD(1990, 1, 0, 0, 0, 0.0)
     LR_N = ((360/365.242191)*LR_daysBetween)%360
+    # Mean anomaly in DEGREES
     LR_M = LR_N + GD_SUNDATA.get("Ecliptic longitude (epoch)") - GD_SUNDATA.get("Ecliptic longitude (perigee)")
-    LR_M = radians(LR_M)
+    # Solve Kepler's equation using degree-based trig
     LR_E = solveKepler(LR_M, GD_SUNDATA.get("Eccentricity"))
-    LR_V = degrees(atan(((1+LR_e)/(1-LR_e))**(1/2)*tan(LR_E/2))*2)
+    # True anomaly (degrees); atan returns degrees due to overrides
+    LR_V = 2 * atan(((1 + LR_e) / (1 - LR_e))**0.5 * tan(LR_E / 2))
     LR_EclLong = (LR_V + GD_SUNDATA.get("Ecliptic longitude (perigee)"))%360 
     if usedForMoon == False:
         return convert.EclipticToEquatorial(convert.DecimalToHrMinSec(0), convert.DecimalToHrMinSec(LR_EclLong), findAxialTilt(LR_julianDate))
     else:
-        return (degrees(LR_M), LR_EclLong)
+        # Return M (degrees) and ecliptic longitude for Moon phase computations
+        return (LR_M, LR_EclLong)
 
 
 
@@ -248,9 +260,13 @@ def phase_angle(ra_moon, dec_moon, ra_sun, dec_sun):
 
 
 def get_vmag_for_object(name, phaseDeg=None):
-    data = PlanetsTable.query_by_name(name.capitalize())
+    """Return V magnitude for a body without hitting the DB on every call.
+    Uses in-memory 'data' loaded at module import for planets and sun.
+    Moon remains dynamic (phase-dependent).
+    """
+    name_l = name.lower()
 
-    if name.lower() == "moon":
+    if name_l == "moon":
         if phaseDeg is not None:
             illumination_fraction = (1 + cos(phaseDeg)) / 2
             if illumination_fraction <= 0:
@@ -261,8 +277,10 @@ def get_vmag_for_object(name, phaseDeg=None):
             magnitude = -12.73
         return str(magnitude)
 
-    if data and "V-Mag" in data:
-        return data["V-Mag"]
+    # Use static table loaded once at import
+    rec = data.get(name_l)
+    if rec and "V-Mag" in rec:
+        return rec["V-Mag"]
 
     return None
 
