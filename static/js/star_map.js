@@ -362,7 +362,7 @@ function drawHorizonGrid(lat, lon) {
             let [x, y, z] = altazToXYZ(alt, az);
             // Only apply user rotation, not lat/lon (horizon stays fixed)
             [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
-            if (z <= cullThreshold) continue; // Adaptive culling based on zoom
+            if (z <= cullThreshold) { firstPoint = true; continue; } // break path across back side
             const [cx, cy] = project([x, y, z]);
             
             if (firstPoint) {
@@ -392,7 +392,7 @@ function drawHorizonGrid(lat, lon) {
         for (let alt = -90; alt <= 90; alt += 2) {
             let [x, y, z] = altazToXYZ(alt, az);
             [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
-            if (z <= cullThreshold) continue; // Adaptive culling
+            if (z <= cullThreshold) { firstPoint = true; continue; } // break path across back side
             const [cx, cy] = project([x, y, z]);
             
             if (firstPoint) {
@@ -440,7 +440,7 @@ function drawHorizonGrid(lat, lon) {
 // Draw a translucent green tint for the region below the horizon (alt < 0)
 function drawBelowHorizonTint() {
     ctx.save();
-    ctx.fillStyle = 'rgba(50, 205, 50, 0.1)'; // grass green
+    ctx.fillStyle = 'rgba(50, 205, 50, 0.30)'; // grass green at ~30%
     const altStep = 5; // degrees
     const azStep = 5;  // degrees
     const cullThreshold = 0; // front hemisphere only
@@ -513,7 +513,7 @@ function drawEquatorialGrid() {
             let [x, y, z] = altazToXYZ(altDeg, azDeg);
             // Only apply user rotation; horizon is our base frame
             [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
-            if (z <= cullThreshold) continue;
+            if (z <= cullThreshold) { firstPoint = true; continue; }
             const [cx, cy] = project([x, y, z]);
             if (firstPoint) { ctx.moveTo(cx, cy); firstPoint = false; }
             else ctx.lineTo(cx, cy);
@@ -543,7 +543,7 @@ function drawEquatorialGrid() {
             const { altDeg, azDeg } = radecToAltAz(ra, dec, selectedDate, latDeg, lonDeg);
             let [x, y, z] = altazToXYZ(altDeg, azDeg);
             [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
-            if (z <= cullThreshold) continue;
+            if (z <= cullThreshold) { firstPoint = true; continue; }
             const [cx, cy] = project([x, y, z]);
             if (firstPoint) { ctx.moveTo(cx, cy); firstPoint = false; }
             else ctx.lineTo(cx, cy);
@@ -1089,7 +1089,7 @@ function clearSearch() {
 
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('%cStar Map JS loaded v2025-10-13-4', 'color:#0bf');
+    console.log('%cStar Map JS loaded v2025-10-13-5', 'color:#0bf');
     // Initialize time control to current local time (rounded to minute)
     if (timeControl) {
         const now = new Date();
