@@ -2,8 +2,6 @@
 
 An open-source web UI and control stack for an automatic tracking telescope and small planetarium. The repository contains a Flask web application, plate-solver helpers, camera control utilities, and a client-side planetarium view.
 
-> Important: do not commit secrets. Put runtime secrets (API keys, SMTP passwords, etc.) into `instance/.env` or environment variables. `.gitignore` already excludes `.env` and other sensitive files.
-
 ## Repository layout (important locations)
 
 - `Server.py` — main Flask entrypoint used for local development.
@@ -21,7 +19,7 @@ An open-source web UI and control stack for an automatic tracking telescope and 
 
 Prereqs: Python 3.11+, Git, optional tools (Caddy/cloudflared) for local tunnelling.
 
-1. Create and activate a virtual environment (Windows PowerShell example):
+1. Activate the virtual environment (Windows PowerShell example):
 
 ```powershell
 .\.venv\bin\Activate.ps1
@@ -70,3 +68,8 @@ If you move them again, update `Server.py` paths (already configured to use `inf
 - `.env not found`: verify `instance/.env` exists or use system env vars.
 - Caddy/cloudflared fail to start: check `infrastructure/` paths, file permissions, and `infrastructure/config.yml` contents.
 - Planetarium UI broken: open browser DevTools; `static/js/star_map.js` logs helpful debug messages.
+
+## Google Docs project file:
+
+- https://docs.google.com/document/d/1ntlr__WV3JdlY7PkM1GIIkk02cW5x_GakHwJQ8XlgZw/
+
