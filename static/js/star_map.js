@@ -29,6 +29,7 @@ const showPlanets = document.getElementById('show-planets');
 const showHorizonGrid = document.getElementById('show-horizon-grid');
 const showEquatorialGrid = document.getElementById('show-equatorial-grid');
 const showEcliptic = document.getElementById('show-ecliptic');
+const showBelowHorizon = document.getElementById('show-below-horizon');
 const timeControl = document.getElementById('time-control');
 const timeNowBtn = document.getElementById('time-now');
 const timeRotate = document.getElementById('time-rotate');
@@ -81,8 +82,8 @@ let dragging = false, lastX = 0, lastY = 0;
 
 // Zoom parameters
 let zoom = 1.0; // Default zoom level
-const minZoom = 0.8; // 80% - only slightly zoomed out
-const maxZoom = 5.0; // 500% - zoomed way in
+const minZoom = 1; // 80% - only slightly zoomed out
+const maxZoom = 6.7; // 500% - zoomed way in
 const zoomStep = 0.1; // Zoom increment per scroll
 
 // Camera is inside the sphere: invert z-culling (draw z < 0)
@@ -436,6 +437,54 @@ function drawHorizonGrid(lat, lon) {
     ctx.restore();
 }
 
+// Draw a translucent green tint for the region below the horizon (alt < 0)
+function drawBelowHorizonTint() {
+    ctx.save();
+    ctx.fillStyle = 'rgba(50, 205, 50, 0.1)'; // grass green
+    const altStep = 5; // degrees
+    const azStep = 5;  // degrees
+    const cullThreshold = 0; // front hemisphere only
+
+    // Iterate small horizon cells and fill quads that are fully visible (all corners z>0)
+    for (let alt = -90; alt < 0; alt += altStep) {
+        const alt2 = Math.min(alt + altStep, 0);
+        for (let az = 0; az < 360; az += azStep) {
+            const az2 = az + azStep;
+
+            // Compute four corners in horizon coords
+            let p1 = altazToXYZ(alt, az);
+            let p2 = altazToXYZ(alt2, az);
+            let p3 = altazToXYZ(alt2, az2);
+            let p4 = altazToXYZ(alt, az2);
+
+            // Apply only user rotation (horizon base frame)
+            p1 = rotate(p1, rotX, rotY, 0, 0);
+            p2 = rotate(p2, rotX, rotY, 0, 0);
+            p3 = rotate(p3, rotX, rotY, 0, 0);
+            p4 = rotate(p4, rotX, rotY, 0, 0);
+
+            // Cull any cell that is partially or fully behind the camera to avoid artifacts
+            if (p1[2] <= cullThreshold || p2[2] <= cullThreshold || p3[2] <= cullThreshold || p4[2] <= cullThreshold) {
+                continue;
+            }
+
+            // Project and fill the quad
+            const a = project(p1);
+            const b = project(p2);
+            const c = project(p3);
+            const d = project(p4);
+            ctx.beginPath();
+            ctx.moveTo(a[0], a[1]);
+            ctx.lineTo(b[0], b[1]);
+            ctx.lineTo(c[0], c[1]);
+            ctx.lineTo(d[0], d[1]);
+            ctx.closePath();
+            ctx.fill();
+        }
+    }
+    ctx.restore();
+}
+
 // Draw equatorial coordinate grid
 function drawEquatorialGrid() {
     ctx.save();
@@ -537,7 +586,12 @@ function draw() {
     const showStarsVal = showStars.checked;
     const showPlanetsVal = showPlanets.checked;
 
-    // Draw coordinate grids (before stars so they appear behind)
+    // Optional below-horizon tint, draw first so grids and stars are above
+    if (showBelowHorizon && showBelowHorizon.checked) {
+        drawBelowHorizonTint();
+    }
+
+    // Draw coordinate grids (before stars so they appear behind stars but above tint)
     if (showHorizonGrid.checked) {
         // Horizon grid is defined directly in Alt/Az, only user rotation applies
         drawHorizonGrid(0, 0);
@@ -727,6 +781,7 @@ showPlanets.addEventListener('change', draw);
 showHorizonGrid.addEventListener('change', draw);
 showEquatorialGrid.addEventListener('change', draw);
 if (showEcliptic) showEcliptic.addEventListener('change', draw);
+if (showBelowHorizon) showBelowHorizon.addEventListener('change', draw);
 if (timeRotate) timeRotate.addEventListener('change', draw);
 if (flipVerticalCheckbox) {
     flipVerticalCheckbox.addEventListener('change', () => {
@@ -1034,7 +1089,7 @@ function clearSearch() {
 
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('%cStar Map JS loaded v2025-10-13-3', 'color:#0bf');
+    console.log('%cStar Map JS loaded v2025-10-13-4', 'color:#0bf');
     // Initialize time control to current local time (rounded to minute)
     if (timeControl) {
         const now = new Date();
