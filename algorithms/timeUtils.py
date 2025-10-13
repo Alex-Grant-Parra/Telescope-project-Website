@@ -29,7 +29,7 @@ class SpaceTime:
         return LR_GST
 
     @staticmethod
-    def getJD(LI_yearA, LI_monthA, LI_day):
+    def getJD(LI_yearA, LI_monthA, LI_day, LI_hour: int = 0, LI_minute: int = 0, LI_second: float = 0.0):
 
         # This gets the Julian date
         LI_yearB = 0
@@ -54,6 +54,9 @@ class SpaceTime:
 
         LI_D = int(30.6001*(LI_monthB+1))
 
-        LR_julianDate = LI_B + LI_C + LI_D + LI_day + 1720994.5
+        # Fractional day component from time-of-day
+        LR_fractionalDay = (LI_hour + (LI_minute + LI_second/60.0)/60.0) / 24.0
+
+        LR_julianDate = LI_B + LI_C + LI_D + LI_day + 1720994.5 + LR_fractionalDay
 
         return LR_julianDate

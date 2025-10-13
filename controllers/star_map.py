@@ -1,13 +1,11 @@
 from flask import Blueprint, jsonify, render_template, request, session
-from datetime import datetime
+from datetime import datetime, timezone
 from models.tables import HDSTARtable, IndexTable, NGCtable
 
 from algorithms.convert import convert
 from algorithms.astroTools import getAllCelestialData
 
 star_map_bp = Blueprint("star_map", __name__)
-
-now = datetime.utcnow()
 
 def loadStarsFromTables(tables):
     all_stars = []
@@ -30,15 +28,16 @@ def loadStarsFromTables(tables):
     return all_stars
 
 
-def get_all_celestial_objects():
+def get_all_celestial_objects(_dt: datetime | None = None):
 
     tables = [HDSTARtable, IndexTable, NGCtable]
 
     all_objects = loadStarsFromTables(tables)
 
-
-    # Get celestial objects positions for current UTC date
-    celestial_data = getAllCelestialData(now.year, now.month, now.day)
+    # Get celestial objects positions for current UTC date/time
+    if _dt is None:
+        _dt = datetime.utcnow()
+    celestial_data = getAllCelestialData(_dt.year, _dt.month, _dt.day, _dt.hour, _dt.minute, _dt.second)
 
     for obj_name, coords in celestial_data.items():
         ra_h, ra_m, ra_s = coords["ra"]
@@ -64,8 +63,58 @@ def get_all_celestial_objects():
 
 @star_map_bp.route("/api/stars")
 def get_stars():
-    all_objects = get_all_celestial_objects()
+    # Optional datetime query parameter in ISO 8601 (UTC preferred)
+    dt_str = request.args.get("datetime")
+    _dt = None
+    if dt_str:
+        try:
+            # Parse ISO format; if 'Z' present assume UTC
+            _dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+            # Normalize to UTC (timezone-aware)
+            if _dt.tzinfo is not None:
+                _dt = _dt.astimezone(timezone.utc)
+        except Exception:
+            _dt = None
+    all_objects = get_all_celestial_objects(_dt)
     return jsonify(all_objects)
+
+@star_map_bp.route("/api/planets")
+def get_planets():
+    # Returns only planets, sun, and moon; accepts optional datetime param
+    dt_str = request.args.get("datetime")
+    _dt = None
+    if dt_str:
+        try:
+            _dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+            if _dt.tzinfo is not None:
+                _dt = _dt.astimezone(timezone.utc)
+        except Exception:
+            _dt = None
+    if _dt is None:
+        _dt = datetime.utcnow()
+
+    celestial_data = getAllCelestialData(_dt.year, _dt.month, _dt.day, _dt.hour, _dt.minute, _dt.second)
+    planets = []
+    for obj_name, coords in celestial_data.items():
+        ra_h, ra_m, ra_s = coords["ra"]
+        dec_d, dec_m, dec_s = coords["dec"]
+        mag = coords.get("vmag", 30)
+
+        ra_deg = convert.HrMinSecToDegrees(ra_h, ra_m, ra_s) * 15
+        if dec_d < 0:
+            dec_deg = dec_d - dec_m / 60 - dec_s / 3600
+        else:
+            dec_deg = dec_d + dec_m / 60 + dec_s / 3600
+
+        planets.append({
+            "name": obj_name.capitalize(),
+            "ra": ra_deg,
+            "dec": dec_deg,
+            "mag": mag,
+            "icon": f"/static/icons/planets/{obj_name.lower()}.png",
+            "type": "planet"
+        })
+    return jsonify(planets)
 
 @star_map_bp.route("/StarMap")
 def star_map():
@@ -78,7 +127,8 @@ def star_map():
     if RenderStars:
         all_stars = loadStarsFromTables(tables)
 
-    celestial_data = getAllCelestialData(now.year, now.month, now.day)
+    _now = datetime.utcnow()
+    celestial_data = getAllCelestialData(_now.year, _now.month, _now.day, _now.hour, _now.minute, _now.second)
 
     if RenderPlanets:
         for obj_name, coords in celestial_data.items():
@@ -118,7 +168,8 @@ def star_info(star_name):
                 "type": "star"
             })
 
-    celestial_data = getAllCelestialData(now.year, now.month, now.day)
+    _now = datetime.utcnow()
+    celestial_data = getAllCelestialData(_now.year, _now.month, _now.day, _now.hour, _now.minute, _now.second)
     obj_name_lower = star_name.lower()
     if obj_name_lower in celestial_data:
         coords = celestial_data[obj_name_lower]
