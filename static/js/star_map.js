@@ -131,25 +131,122 @@ function getCaretSegment(input) {
     const v = input.value || '';
     // Expect pattern YYYY-MM-DDTHH:MM (length 16)
     const pos = (typeof input.selectionStart === 'number') ? input.selectionStart : -1;
-    if (pos < 0 || v.length < 16) return null;
-    if (pos <= 4) return 'year';
-    if (pos >= 5 && pos <= 7) return 'month';
-    if (pos >= 8 && pos <= 10) return 'day';
-    if (pos >= 11 && pos <= 13) return 'hour';
-    return 'minute';
+    if (pos < 0 || v.length < 4) return null;
+
+    // Match common datetime-local formats: YYYY-MM-DDTHH:MM or YYYY-MM-DDTHH:MM:SS
+    const re = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/;
+    const m = v.match(re);
+    if (!m) return null;
+
+    // Compute start/end indices for each capture group within the full string
+    // Group offsets: year at 0, then '-' at 4, month at 5, '-' at 7, day at 8, 'T' at 10, hour at 11, ':' at 13, minute at 14, optional ':' at 16, second at 17
+    // We'll calculate exact ranges programmatically to stay robust
+    let idx = 0;
+    const ranges = {};
+    // year
+    ranges.year = { start: idx, end: idx + m[1].length - 1 };
+    idx += m[1].length; // 4
+    idx += 1; // '-'
+    // month
+    ranges.month = { start: idx, end: idx + m[2].length - 1 };
+    idx += m[2].length; // 2
+    idx += 1; // '-'
+    // day
+    ranges.day = { start: idx, end: idx + m[3].length - 1 };
+    idx += m[3].length; // 2
+    idx += 1; // 'T'
+    // hour
+    ranges.hour = { start: idx, end: idx + m[4].length - 1 };
+    idx += m[4].length; // 2
+    idx += 1; // ':'
+    // minute
+    ranges.minute = { start: idx, end: idx + m[5].length - 1 };
+    idx += m[5].length; // 2
+
+    if (m[6]) {
+        idx += 1; // ':'
+        ranges.second = { start: idx, end: idx + m[6].length - 1 };
+    }
+
+    // Find which range contains the caret position
+    for (const seg of ['year','month','day','hour','minute','second']) {
+        if (!ranges[seg]) continue;
+        if (pos >= ranges[seg].start && pos <= ranges[seg].end + 1) return seg; // allow caret at end of segment
+    }
+    return null;
+}
+
+// Virtual caret segment used when browser doesn't expose selectionStart for datetime-local
+let virtualTimeSegment = null;
+
+// Map a click position within the input to an approximate character index and then segment
+function getSegmentFromIndex(index, value) {
+    if (!value) return null;
+    const re = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/;
+    const m = value.match(re);
+    if (!m) return null;
+    let idx = 0;
+    const ranges = {};
+    ranges.year = { start: idx, end: idx + m[1].length - 1 };
+    idx += m[1].length; idx += 1; // '-'
+    ranges.month = { start: idx, end: idx + m[2].length - 1 };
+    idx += m[2].length; idx += 1; // '-'
+    ranges.day = { start: idx, end: idx + m[3].length - 1 };
+    idx += m[3].length; idx += 1; // 'T'
+    ranges.hour = { start: idx, end: idx + m[4].length - 1 };
+    idx += m[4].length; idx += 1; // ':'
+    ranges.minute = { start: idx, end: idx + m[5].length - 1 };
+    idx += m[5].length;
+    if (m[6]) { idx += 1; ranges.second = { start: idx, end: idx + m[6].length - 1 }; }
+
+    for (const seg of ['year','month','day','hour','minute','second']) {
+        if (!ranges[seg]) continue;
+        if (index >= ranges[seg].start && index <= ranges[seg].end + 1) return seg;
+    }
+    return null;
+}
+
+function handleTimeInputClick(e) {
+    const input = e.currentTarget;
+    const value = input.value || '';
+    if (!value) return;
+    const rect = input.getBoundingClientRect();
+    // Rough estimation: divide by character count
+    const totalChars = Math.max(1, value.length);
+    const x = e.clientX - rect.left;
+    const charWidth = rect.width / totalChars;
+    let index = Math.floor(x / charWidth);
+    if (index < 0) index = 0;
+    if (index > totalChars) index = totalChars;
+    const seg = getSegmentFromIndex(index, value);
+    if (seg) virtualTimeSegment = seg;
 }
 
 function getCurrentSegmentBounds(input) {
+    const v = input.value || '';
     const seg = getCaretSegment(input);
     if (!seg) return null;
-    switch (seg) {
-        case 'year': return { start: 0, end: 4 };
-        case 'month': return { start: 5, end: 7 };
-        case 'day': return { start: 8, end: 10 };
-        case 'hour': return { start: 11, end: 13 };
-        case 'minute': return { start: 14, end: 16 };
-        default: return null;
-    }
+
+    // Recompute ranges using the same regex-based method so bounds match caret detection
+    const re = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/;
+    const m = v.match(re);
+    if (!m) return null;
+
+    let idx = 0;
+    const bounds = {};
+    bounds.year = { start: idx, end: idx + m[1].length };
+    idx += m[1].length; idx += 1; // '-'
+    bounds.month = { start: idx, end: idx + m[2].length };
+    idx += m[2].length; idx += 1; // '-'
+    bounds.day = { start: idx, end: idx + m[3].length };
+    idx += m[3].length; idx += 1; // 'T'
+    bounds.hour = { start: idx, end: idx + m[4].length };
+    idx += m[4].length; idx += 1; // ':'
+    bounds.minute = { start: idx, end: idx + m[5].length };
+    idx += m[5].length;
+    if (m[6]) { idx += 1; bounds.second = { start: idx, end: idx + m[6].length }; }
+
+    return bounds[seg] || null;
 }
 
 function adjustDateByUnit(date, unit, delta) {
@@ -161,10 +258,11 @@ function adjustDateByUnit(date, unit, delta) {
         case 'day': d.setDate(d.getDate() + delta); break;
         case 'month': d.setMonth(d.getMonth() + delta); break;
         case 'year': d.setFullYear(d.getFullYear() + delta); break;
+        case 'second': d.setSeconds(d.getSeconds() + delta); break;
         default: d.setMinutes(d.getMinutes() + delta); break;
     }
     // Zero seconds and ms for stability with our control
-    d.setSeconds(0, 0);
+    if (unit !== 'second') d.setSeconds(0, 0);
     return d;
 }
 
@@ -182,6 +280,9 @@ function handleTimeControlKeydown(e) {
 
     // Determine which unit to adjust. Prefer caret segment when available.
     let unit = getCaretSegment(timeControl);
+    // If caret-based detection fails (some browsers hide selectionStart for datetime-local),
+    // fall back to a virtual segment set by clicking the input.
+    if (!unit && virtualTimeSegment) unit = virtualTimeSegment;
     // Fallback to modifier keys if caret segment is unavailable
     // Alt: month, Ctrl: day, Shift: hour, Ctrl+Shift: year. Default: minute
     if (!unit) {
@@ -333,6 +434,17 @@ function radecToAltAzFastStar(raDeg, sinDec, cosDec, lstDeg, sinLat, cosLat) {
 function precomputeObserver(latDeg) {
     const lat = latDeg * Math.PI / 180;
     return { sinLat: Math.sin(lat), cosLat: Math.cos(lat) };
+}
+
+// Convenience wrapper: compute Alt/Az for a given RA/Dec at a Date and observer location
+function radecToAltAz(raDeg, decDeg, dateObj, latDeg, lonDeg) {
+    // Normalize date to a Date object and round seconds for stability
+    let d = (dateObj instanceof Date) ? new Date(dateObj.getTime()) : new Date();
+    try { if (dateObj) d = new Date(dateObj); } catch (e) { d = new Date(); }
+    d.setSeconds(0, 0);
+    const lstDegVal = lstDegrees(new Date(d.toISOString()), lonDeg || 0);
+    const obs = precomputeObserver(latDeg || 0);
+    return radecToAltAzFast(raDeg, decDeg, lstDegVal, obs.sinLat, obs.cosLat);
 }
 
 // Convert altitude/azimuth to Cartesian coordinates
@@ -807,6 +919,9 @@ function draw() {
     if (showPlanetsVal) {
         for (let i = 0; i < planetsList.length; i++) {
             const obj = planetsList[i];
+            // Respect magnitude filter for planets: hide planets fainter than limit
+            const effectiveMag = obj.mag == null ? 50 : obj.mag;
+            if (effectiveMag > magLimit) continue;
             const v = obj.xyz || radecToXYZ(obj.ra, obj.dec);
             if (cullBelowHorizon) {
                 const yUp = upRow[0]*v[0] + upRow[1]*v[1] + upRow[2]*v[2];
@@ -1292,6 +1407,10 @@ window.addEventListener('DOMContentLoaded', () => {
     timeControl.addEventListener('change', () => { refreshPlanetsForCurrentTime(); draw(); });
         // Add keyboard rollover handling for ArrowUp/ArrowDown
         timeControl.addEventListener('keydown', handleTimeControlKeydown);
+        // Add click handler to support virtual caret segmentation on browsers without selectionStart
+        timeControl.addEventListener('click', handleTimeInputClick);
+        timeControl.addEventListener('focus', () => { virtualTimeSegment = null; });
+        timeControl.addEventListener('blur', () => { virtualTimeSegment = null; });
     }
     if (timeNowBtn) {
         timeNowBtn.addEventListener('click', () => {
