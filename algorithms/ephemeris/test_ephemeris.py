@@ -1,19 +1,19 @@
 from loader import load_all
 
 # Example Julian Date
-jd = 2460000.5  # adjust as needed
+jd = 2460963.25256  # adjust as needed
 
 def test_planet(planets, name):
     planet = planets.get(name)
     if not planet:
         print(f"Planet '{name}' not found in loaded data.")
         return
-    ra, dec, r = planet.position(jd)
-    print(f"{name} -> RA: {ra}, Dec: {dec}, Dist: {r}")
+    lat, long, r = planet.position(jd)
+    
 
 def test_moon(moon):
-    ra, dec, r = moon.position(jd)
-    print(f"Moon -> RA: {ra}, Dec: {dec}, Dist: {r}")
+    lat, long, r = moon.position(jd)
+    
 
 if __name__ == "__main__":
     planets, moon = load_all()

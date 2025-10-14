@@ -6,26 +6,59 @@ PICKLE_DIR = r"instance\ephemerisData\pickled"
 os.makedirs(PICKLE_DIR, exist_ok=True)
 
 def parse_vsop87(file_path):
-    data = {}
-    current_series = None
+    """Parse a VSOP87A raw file into X/Y/Z series terms.
+
+    The provided raw files (e.g. VSOP87A.ear) appear to list the VSOP87 terms
+    grouped under headers like:
+        VSOP87 VERSION A1    EARTH     VARIABLE 1 (XYZ)       *T**0    843 TERMS
+
+    We treat VARIABLE 1 -> X, 2 -> Y, 3 -> Z.
+    Each following numeric line (until the next header) contains many integer
+    columns followed by five floating values. Based on inspection we map the
+    last five floats as:
+        f1 f2 f3 phase frequency
+    We approximate a standard VSOP term A * cos(B + C*T) by choosing:
+        A = f3, B = phase, C = frequency
+    (This is a simplification; for accurate ephemerides a full formal parser
+    with power-of-T handling is required.)
+
+    Returns dict with keys 'X','Y','Z' each a list of (A,B,C) triples.
+    """
+    series = {"X": [], "Y": [], "Z": []}
+    current_key = None
     with open(file_path, "r") as f:
-        for line in f:
-            line = line.strip()
+        for raw_line in f:
+            line = raw_line.strip()
             if not line:
                 continue
-            # detect series header like L0, L1, B0, etc.
-            if line.startswith(("L", "B", "R")) and line[1].isdigit():
-                current_series = line
-                data[current_series] = []
+            if line.startswith("VSOP87") and "VARIABLE" in line:
+                # Identify variable number
+                parts = line.split()
+                try:
+                    var_index = int(parts[parts.index("VARIABLE") + 1])
+                except Exception:
+                    current_key = None
+                    continue
+                current_key = {1: "X", 2: "Y", 3: "Z"}.get(var_index)
+                continue
+            # skip non-data lines
+            if current_key is None:
                 continue
             parts = line.split()
-            if len(parts) < 3 or current_series is None:
+            # Need at least 5 trailing float columns; attempt to parse last 5
+            if len(parts) < 5:
                 continue
+            tail = parts[-5:]
             try:
-                data[current_series].append(tuple(map(float, parts[:3])))
+                f1, f2, f3, phase, freq = map(float, tail)
             except ValueError:
                 continue
-    return data
+            # Use f3 as amplitude (A) producing non-zero contributions
+            A = f3
+            B = phase
+            C = freq
+            series[current_key].append((A, B, C))
+    return series
 
 def parse_elp82b(raw_dir):
     data = {}
@@ -53,11 +86,27 @@ def save_pickle(data, file_name):
         pickle.dump(data, f)
 
 def main():
+    # Map common file extensions to planet names
+    ext_to_name = {
+        'mer': 'Mercury',
+        'ven': 'Venus',
+        'ear': 'Earth',
+        'mar': 'Mars',
+        'jup': 'Jupiter',
+        'sat': 'Saturn',
+        'ura': 'Uranus',
+        'nep': 'Neptune',
+    }
+
     vsop = {}
-    for fn in os.listdir(RAW_DIR):
-        if fn.endswith(".mer"):
-            planet = os.path.splitext(fn)[0]
-            vsop[planet] = parse_vsop87(os.path.join(RAW_DIR, fn))
+    for fn in sorted(os.listdir(RAW_DIR)):
+        parts = fn.split('.')
+        if len(parts) < 2:
+            continue
+        ext = parts[-1].lower()
+        if ext in ext_to_name:
+            planet_name = ext_to_name[ext]
+            vsop[planet_name] = parse_vsop87(os.path.join(RAW_DIR, fn))
     save_pickle(vsop, "vsop.pkl")
     print("VSOP87 pickled.")
 
