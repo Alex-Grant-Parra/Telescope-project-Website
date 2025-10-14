@@ -1,4 +1,5 @@
 from utils import series_to_position, elp_to_position
+from .utils import series_to_equatorial_xyz
 
 class CelestialBody:
     def __init__(self, name, series):
@@ -9,11 +10,13 @@ class CelestialBody:
         """Compute RA, Dec, distance. To be implemented in subclass."""
         raise NotImplementedError
 
-
 class Planet(CelestialBody):
     def position(self, jd):
         ra, dec, r = series_to_position(self.series, jd)
         return ra, dec, r
+    def cartesian(self, jd):
+        xyz = series_to_equatorial_xyz(self.series, jd)
+        return xyz  # (X,Y,Z,r) or None
 
 class Moon(CelestialBody):
     def position(self, jd):

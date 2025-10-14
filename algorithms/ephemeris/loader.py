@@ -1,6 +1,11 @@
 import os
 import pickle
-from celestial import Planet, Moon
+try:
+    # Prefer absolute package import
+    from algorithms.ephemeris.celestial import Planet, Moon
+except ImportError:
+    # Fallback to local import if package context not set
+    from celestial import Planet, Moon  # type: ignore
 
 # Paths to pickled data
 PICKLE_DIR = os.path.join("instance", "ephemerisData", "pickled")

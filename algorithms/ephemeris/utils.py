@@ -2,6 +2,9 @@
 # utils.py
 import math
 
+# Mean obliquity of the ecliptic (J2000) in radians
+OBLIQUITY_EPS = math.radians(23.4392911)
+
 # ---------- Trig helpers in degrees ----------
 sin = lambda x: math.sin(math.radians(x))
 cos = lambda x: math.cos(math.radians(x))
@@ -31,16 +34,42 @@ def series_to_position(series, jd):
                 A, B, C = term[0], term[1], term[2]
                 total += A * math.cos(B + C * T)
             return total
-        X = eval_list(series.get("X", []))
-        Y = eval_list(series.get("Y", []))
-        Z = eval_list(series.get("Z", []))
-        # Convert to RA (deg), Dec (deg), distance (AU) assuming heliocentric coords
-        r = math.sqrt(X*X + Y*Y + Z*Z)
-        # RA in degrees (0..360)
-        ra = math.degrees(math.atan2(Y, X)) % 360.0
-        # Dec in degrees
-        dec = math.degrees(math.asin(Z / r)) if r != 0 else 0.0
+        # Heliocentric ecliptic rectangular coordinates (approximate AU)
+        X_ecl = eval_list(series.get("X", []))
+        Y_ecl = eval_list(series.get("Y", []))
+        Z_ecl = eval_list(series.get("Z", []))
+        # Rotate from ecliptic to equatorial frame using obliquity
+        X_eq = X_ecl
+        Y_eq = Y_ecl * math.cos(OBLIQUITY_EPS) - Z_ecl * math.sin(OBLIQUITY_EPS)
+        Z_eq = Y_ecl * math.sin(OBLIQUITY_EPS) + Z_ecl * math.cos(OBLIQUITY_EPS)
+        r = math.sqrt(X_eq*X_eq + Y_eq*Y_eq + Z_eq*Z_eq)
+        ra = (math.degrees(math.atan2(Y_eq, X_eq)) + 360.0) % 360.0 if r != 0 else 0.0
+        dec = math.degrees(math.asin(Z_eq / r)) if r != 0 else 0.0
         return ra, dec, r
+
+def series_to_equatorial_xyz(series, jd):
+    """Return equatorial rectangular (X,Y,Z) and distance r (AU) for a VSOP X/Y/Z series.
+    This uses the simplified parsing currently implemented.
+    """
+    T = (jd - 2451545.0) / 365250.0
+    if not any(k in series for k in ("X", "Y", "Z")):
+        return None
+    def eval_list(terms):
+        total = 0.0
+        for term in terms:
+            if len(term) < 3:
+                continue
+            A, B, C = term[0], term[1], term[2]
+            total += A * math.cos(B + C * T)
+        return total
+    X_ecl = eval_list(series.get("X", []))
+    Y_ecl = eval_list(series.get("Y", []))
+    Z_ecl = eval_list(series.get("Z", []))
+    X_eq = X_ecl
+    Y_eq = Y_ecl * math.cos(OBLIQUITY_EPS) - Z_ecl * math.sin(OBLIQUITY_EPS)
+    Z_eq = Y_ecl * math.sin(OBLIQUITY_EPS) + Z_ecl * math.cos(OBLIQUITY_EPS)
+    r = math.sqrt(X_eq*X_eq + Y_eq*Y_eq + Z_eq*Z_eq)
+    return X_eq, Y_eq, Z_eq, r
 
     # Case 2: Summed L/B/R grouped series (fallback)
     def sum_group(prefix):
@@ -54,13 +83,25 @@ def series_to_position(series, jd):
                 A, B, C = term[0], term[1], term[2]
                 total += A * math.cos(B + C * T)
         return total
-    L = sum_group('L')
-    B_ = sum_group('B')
+    L = sum_group('L')  # longitude (radians)
+    B_ = sum_group('B')  # latitude (radians)
     R = sum_group('R')
-    L_deg = math.degrees(L)
-    B_deg = math.degrees(B_)
-    ra = atan2(cos(B_deg) * sin(L_deg), cos(L_deg)) % 360
-    dec = asin(sin(B_deg))
+    # Apply ecliptic (λ,β) -> equatorial (α,δ)
+    # α = atan2( sinλ cosε - tanβ sinε, cosλ )
+    # δ = asin( sinβ cosε + cosβ sinε sinλ )
+    lam = L
+    beta = B_
+    cos_eps = math.cos(OBLIQUITY_EPS)
+    sin_eps = math.sin(OBLIQUITY_EPS)
+    sin_lam = math.sin(lam)
+    cos_lam = math.cos(lam)
+    tan_beta = math.tan(beta)
+    sin_beta = math.sin(beta)
+    cos_beta = math.cos(beta)
+    alpha = math.atan2(sin_lam * cos_eps - tan_beta * sin_eps, cos_lam)
+    delta = math.asin(sin_beta * cos_eps + cos_beta * sin_eps * sin_lam)
+    ra = (math.degrees(alpha) + 360.0) % 360.0
+    dec = math.degrees(delta)
     return ra, dec, R
 
 # ---------- ELP82b Moon evaluation ----------
@@ -84,6 +125,19 @@ def elp_to_position(series, jd):
         B_ += A * math.sin(B + C * jd)
     R = 384400  # approximate lunar distance in km
 
-    ra = atan2(cos(B_) * sin(L), cos(L))
-    dec = asin(sin(B_))
-    return ra % 360, dec, R
+    # Treat L as ecliptic longitude, B_ as latitude (already in radians?) —
+    # current placeholder uses raw sums; for now convert assuming radians.
+    lam = L
+    beta = B_
+    cos_eps = math.cos(OBLIQUITY_EPS)
+    sin_eps = math.sin(OBLIQUITY_EPS)
+    sin_lam = math.sin(lam)
+    cos_lam = math.cos(lam)
+    tan_beta = math.tan(beta)
+    sin_beta = math.sin(beta)
+    cos_beta = math.cos(beta)
+    alpha = math.atan2(sin_lam * cos_eps - tan_beta * sin_eps, cos_lam)
+    delta = math.asin(sin_beta * cos_eps + cos_beta * sin_eps * sin_lam)
+    ra = (math.degrees(alpha) + 360.0) % 360.0
+    dec = math.degrees(delta)
+    return ra, dec, R
