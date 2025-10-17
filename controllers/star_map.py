@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, render_template, request, session
 from datetime import datetime, timezone
+from typing import Optional
 from models.tables import HDSTARtable, IndexTable, NGCtable
 
 from algorithms.convert import convert
@@ -28,7 +29,7 @@ def loadStarsFromTables(tables):
     return all_stars
 
 
-def get_all_celestial_objects(_dt: datetime | None = None):
+def get_all_celestial_objects(_dt: Optional[datetime] = None):
 
     tables = [HDSTARtable, IndexTable, NGCtable]
 
