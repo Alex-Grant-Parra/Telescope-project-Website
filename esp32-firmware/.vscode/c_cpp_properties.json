@@ -10,6 +10,7 @@
             "includePath": [
                 "/home/alex/Rpi5Client/esp32-firmware/include",
                 "/home/alex/Rpi5Client/esp32-firmware/src",
+                "/home/alex/Rpi5Client/esp32-firmware/.pio/libdeps/esp32dev/ArduinoJson/src",
                 "/home/alex/Rpi5Client/esp32-firmware/.pio/libdeps/esp32dev/TMCStepper/src",
                 "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SPI/src",
                 "/home/alex/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
@@ -247,6 +248,7 @@
                 "path": [
                     "/home/alex/Rpi5Client/esp32-firmware/include",
                     "/home/alex/Rpi5Client/esp32-firmware/src",
+                    "/home/alex/Rpi5Client/esp32-firmware/.pio/libdeps/esp32dev/ArduinoJson/src",
                     "/home/alex/Rpi5Client/esp32-firmware/.pio/libdeps/esp32dev/TMCStepper/src",
                     "/home/alex/.platformio/packages/framework-arduinoespressif32/libraries/SPI/src",
                     "/home/alex/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
