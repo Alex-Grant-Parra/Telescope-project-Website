@@ -98,17 +98,14 @@ class User(UserMixin, db.Model):
     # TOTP setup
     def set_totp_secret(self):
         self.totp_secret = ''.join(random.choices('0123456789abcdef', k=16))
-        print(f"TOTP secret set: {self.totp_secret}")
 
     def generate_totp_code(self):
         self.current_2fa_code = ''.join(random.choices('0123456789abcdef', k=6))
         db.session.commit()  # Save the generated code to the database
-        print(f"Generated 2FA code: {self.current_2fa_code}")
         return self.current_2fa_code
 
     def verify_2fa_code(self, code):
         result = self.current_2fa_code == code
-        print(f"Verification result: {result} for code: {code}")
         if result:
             self.current_2fa_code = None  # Clear the 2FA code after successful verification
             db.session.commit()

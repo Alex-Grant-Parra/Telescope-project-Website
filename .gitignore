@@ -5,6 +5,8 @@ security/logs/
 infrastructure/logs/
 security/blacklist.txt
 api_tokens.json
+security/api_tokens.json
+instance/.env
 config.yml
 .vscode
 
