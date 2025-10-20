@@ -156,17 +156,24 @@ def star_map():
 
 def extract_friendly_common_name(common_names_field: str) -> str:
     """
-    Extract the first non-HD name from commonNames field.
-    commonNames format: 'Sirius, HD 48915, HD48915'
-    Returns: 'Sirius' or '' if no friendly name found.
+    Extract the first friendly name from commonNames field.
+    commonNames format: 'Sirius, HD 48915, HD48915' or 'Andromeda Galaxy, M31, NGC 224'
+    Returns: 'Sirius' or 'Andromeda Galaxy' or '' if no friendly name found.
+    Skips catalog designations like HD, NGC, IC, M (Messier).
     """
     if not common_names_field:
         return ''
     parts = [p.strip() for p in common_names_field.split(',')]
     for name in parts:
-        # Skip HD variants (with or without space)
-        if not name.upper().startswith('HD'):
-            return name
+        name_upper = name.upper()
+        # Skip catalog designations (HD, NGC, IC, M followed by number)
+        if (name_upper.startswith('HD') or 
+            name_upper.startswith('NGC') or 
+            name_upper.startswith('IC') or 
+            (name_upper.startswith('M') and len(name) > 1 and name[1:].strip().replace(' ', '').isdigit())):
+            continue
+        # Found a friendly name
+        return name
     return ''
 
 @star_map_bp.route("/star_info/<star_name>")
@@ -184,7 +191,8 @@ def star_info(star_name):
                 "type": "star"
             }
             # Add friendly common name if available
-            common_names_raw = getattr(result, 'commonNames', None)
+            # Try both 'commonNames' (HDSTARtable) and 'Common names' (NGCtable)
+            common_names_raw = getattr(result, 'commonNames', None) or getattr(result, 'Common names', None)
             if common_names_raw:
                 friendly_name = extract_friendly_common_name(common_names_raw)
                 if friendly_name:
