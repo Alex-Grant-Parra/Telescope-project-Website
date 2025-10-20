@@ -63,29 +63,35 @@ def search_object():
 
     searchableCelestials = ["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"]
     try:
+        # Normalize search for robust matching
+        raw = search_value
+        norm = raw.strip()
+        norm_upper = norm.upper()
         # Determine the table based on prefix or content
-        if search_value.startswith("HD"):
-            # search_value = "HD" + search_value[2:]  # Ensure full name format
-            print(f"Querying HDSTARtable for {search_value}")
-            result = HDSTARtable.query_by_name(search_value)
-            print(result)
+        if norm_upper.startswith("HD"):
+            # Accept variations like hd48915 or hd 48915
+            print(f"Querying HDSTARtable (flex) for {norm}")
+            result = HDSTARtable.query_by_name_flexible(norm)
+            if not result:
+                # As a fallback, try exact
+                result = HDSTARtable.query_by_name(norm)
 
-        elif search_value.startswith("NGC"):
+        elif norm_upper.startswith("NGC"):
             print(f"Querying NGCtable for {search_value}")
             result = NGCtable.query_by_name(search_value)
 
-        elif search_value.startswith("IC"):
+        elif norm_upper.startswith("IC"):
             print(f"Querying IndexTable for {search_value}")
             result = IndexTable.query_by_name(search_value)
 
-        elif search_value.upper().startswith("M") and len(search_value) > 1 and search_value[1:].isdigit():
+        elif norm_upper.startswith("M") and len(norm_upper) > 1 and norm_upper[1:].isdigit():
             # Handle Messier objects (e.g., "M1", "m42", "M104")
-            messier_designation = search_value.upper()
+            messier_designation = norm_upper
             print(f"Querying NGCtable for Messier object {messier_designation}")
             result = NGCtable.query_by_messier(messier_designation)
 
-        elif search_value.lower() in searchableCelestials:
-            search_value = search_value.lower()
+        elif norm.lower() in searchableCelestials:
+            search_value = norm.lower()
             now = datetime.utcnow()
             CelestialData = getAllCelestialData(now.year, now.month, now.day)
 
@@ -97,9 +103,13 @@ def search_object():
                 print("Celestial object not found.")
 
         else:
-            # Try searching by common name in NGCtable
-            print(f"Searching for common name: {search_value}")
-            result = NGCtable.query_by_common_name(search_value)
+            # Try searching by common name in HD stars first, then in NGC table
+            print(f"Searching by common name across stars and NGC: {norm}")
+            # Try HD table commonNames (case-insensitive contains)
+            result = HDSTARtable.query_by_common_name(norm)
+            if not result:
+                # Then try NGC common names (exact ilike on full cell)
+                result = NGCtable.query_by_common_name(norm)
             
             if not result:
                 print("Object not found by common name")
@@ -132,7 +142,6 @@ def search_object():
         #     "dec": dec,
         #     "mag": mag
         # }
-
         return jsonify({"status": "success", "data": result_data})
     else:
         print("Object not found")
