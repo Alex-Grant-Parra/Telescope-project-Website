@@ -45,6 +45,56 @@ class HDSTARtable(BaseTable):
             return result_data
         return None
 
+    @staticmethod
+    def query_by_name_flexible(name_or_hd: str):
+        """
+        Query HDSTARtable matching HD name case/space-insensitively.
+        Examples accepted: "HD48915", "hd48915", "HD 48915".
+        Also tries exact Name match for non-HD inputs.
+        Returns a dict of row data or None.
+        """
+        try:
+            from sqlalchemy import text
+            # Normalize: remove spaces and uppercase for comparison
+            norm = (name_or_hd or "").strip().replace(" ", "").upper()
+            # If it looks like an HD pattern without prefix, leave as-is for exact fallthrough
+            if norm.startswith("HD"):
+                stmt = text(
+                    "SELECT * FROM HDSTARTable WHERE REPLACE(UPPER(Name),' ', '') = :norm LIMIT 1"
+                )
+                row = db.session.execute(stmt, {"norm": norm}).mappings().first()
+                if row:
+                    return dict(row)
+            # Fallback: try exact Name (case-sensitive as stored)
+            result = db.session.query(HDSTARtable).filter_by(Name=name_or_hd).first()
+            if result:
+                return {column: getattr(result, column) for column in result.__table__.columns.keys()}
+        except Exception as e:
+            logger.error(f"query_by_name_flexible failed: {e}")
+        return None
+
+    @staticmethod
+    def query_by_common_name(common_name: str):
+        """
+        Query HDSTARtable by commonNames column using case-insensitive substring match.
+        Requires the 'commonNames' column to exist; returns dict or None.
+        """
+        try:
+            col_map = getattr(HDSTARtable, "__table__").c
+            if 'commonNames' not in col_map:
+                return None
+            # Use ilike for case-insensitive match on the comma-separated names list
+            result = db.session.query(HDSTARtable).filter(
+                col_map['commonNames'].ilike(f"%{common_name}%")
+            ).first()
+            if result:
+                if isinstance(result, dict):
+                    return result
+                return {column: getattr(result, column) for column in result.__table__.columns.keys()}
+        except Exception as e:
+            logger.error(f"query_by_common_name failed: {e}")
+        return None
+
 
 # IndexTable: Define columns dynamically using reflection
 class IndexTable(BaseTable):
