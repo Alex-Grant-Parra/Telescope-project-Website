@@ -154,6 +154,21 @@ def star_map():
 
     return render_template("star_map.html", stars=all_stars)
 
+def extract_friendly_common_name(common_names_field: str) -> str:
+    """
+    Extract the first non-HD name from commonNames field.
+    commonNames format: 'Sirius, HD 48915, HD48915'
+    Returns: 'Sirius' or '' if no friendly name found.
+    """
+    if not common_names_field:
+        return ''
+    parts = [p.strip() for p in common_names_field.split(',')]
+    for name in parts:
+        # Skip HD variants (with or without space)
+        if not name.upper().startswith('HD'):
+            return name
+    return ''
+
 @star_map_bp.route("/star_info/<star_name>")
 def star_info(star_name):
     tables = [HDSTARtable, IndexTable, NGCtable]
@@ -161,13 +176,20 @@ def star_info(star_name):
     for table in tables:
         result = table.query.filter_by(Name=star_name).first()
         if result:
-            return jsonify({
+            response_data = {
                 "name": result.Name,
                 "ra": float(result.RA) if result.RA is not None else 0,
                 "dec": float(result.DEC) if result.DEC is not None else 0,
                 "mag": getattr(result, "V-Mag", 0) or 0,
                 "type": "star"
-            })
+            }
+            # Add friendly common name if available
+            common_names_raw = getattr(result, 'commonNames', None)
+            if common_names_raw:
+                friendly_name = extract_friendly_common_name(common_names_raw)
+                if friendly_name:
+                    response_data['friendlyName'] = friendly_name
+            return jsonify(response_data)
 
     _now = datetime.utcnow()
     celestial_data = getAllCelestialData(_now.year, _now.month, _now.day, _now.hour, _now.minute, _now.second)

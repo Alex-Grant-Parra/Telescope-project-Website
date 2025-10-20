@@ -50,6 +50,21 @@ def update_camera():
 
     return jsonify(response)
 
+def extract_friendly_common_name(common_names_field: str) -> str:
+    """
+    Extract the first non-HD name from commonNames field.
+    commonNames format: 'Sirius, HD 48915, HD48915'
+    Returns: 'Sirius' or '' if no friendly name found.
+    """
+    if not common_names_field:
+        return ''
+    parts = [p.strip() for p in common_names_field.split(',')]
+    for name in parts:
+        # Skip HD variants (with or without space)
+        if not name.upper().startswith('HD'):
+            return name
+    return ''
+
 @interface_bp.route("/search_object", methods=["POST"])
 def search_object():
     from algorithms.astroTools import getAllCelestialData
@@ -133,6 +148,12 @@ def search_object():
         ra = float(result_data.get('RA', 0))  # Default to 0 if RA is missing or None
         dec = float(result_data.get('DEC', 0))  # Default to 0 if DEC is missing or None
         mag = result_data.get('V-Mag', 0)  # Default to 0 if V-Mag is missing or None
+
+        # Extract friendly common name (non-HD variant) if available
+        common_names_raw = result_data.get('commonNames', '')
+        friendly_name = extract_friendly_common_name(common_names_raw)
+        if friendly_name:
+            result_data['friendlyName'] = friendly_name
 
         # print(f"\n[TRACKING] {name} at RA: {ra}°, DEC: {dec}° with magnitude {mag}.\n", flush=True)
 

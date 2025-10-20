@@ -1017,9 +1017,31 @@ canvas.addEventListener('click', function(e) {
             const displayMag = obj.mag == null ? "null" : obj.mag;
             const lstDegNow = lstDegrees(new Date((timeControl && timeControl.value) ? new Date(timeControl.value).toISOString() : new Date().toISOString()), parseFloat(lonInput.value));
             const ha = hourAngleDegrees(obj.ra, lstDegNow);
-            document.getElementById('info').innerHTML =
-                `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}° | HA: ${(ha/15).toFixed(2)}h<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}<br>
-                 <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
+            
+            // Fetch full star info to get friendlyName if available
+            fetch(`/star_info/${encodeURIComponent(obj.name)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && !data.error) {
+                        const displayName = data.friendlyName 
+                            ? `${data.name} (${data.friendlyName})`
+                            : data.name;
+                        document.getElementById('info').innerHTML =
+                            `<b>${displayName}</b><br>RA: ${obj.ra.toFixed(2)}° | HA: ${(ha/15).toFixed(2)}h<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}<br>
+                             <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
+                    } else {
+                        // Fallback if fetch fails
+                        document.getElementById('info').innerHTML =
+                            `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}° | HA: ${(ha/15).toFixed(2)}h<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}<br>
+                             <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
+                    }
+                })
+                .catch(() => {
+                    // Fallback on error
+                    document.getElementById('info').innerHTML =
+                        `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}° | HA: ${(ha/15).toFixed(2)}h<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}<br>
+                         <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
+                });
             return;
         }
     }
@@ -1204,34 +1226,75 @@ function hideLoading() {
 
 // Function to track a celestial object
 function trackObject(name, ra, dec, mag) {
-    fetch('/track_star', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            name: name,
-            ra: ra,
-            dec: dec,
-            mag: mag
+    // First fetch star info to get friendly name if available
+    fetch(`/star_info/${encodeURIComponent(name)}`)
+        .then(response => response.json())
+        .then(starData => {
+            const displayName = starData.friendlyName 
+                ? `${starData.name} (${starData.friendlyName})`
+                : name;
+            
+            // Now send the tracking request
+            fetch('/track_star', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: name,
+                    ra: ra,
+                    dec: dec,
+                    mag: mag
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'tracking') {
+                    document.getElementById('info').innerHTML = 
+                        `<b>${displayName}</b><br>RA: ${ra.toFixed(2)}°<br>DEC: ${dec.toFixed(2)}°<br>Mag: ${mag}<br>
+                         <span style="color: #4CAF50; font-weight: bold;">✓ Tracking ${displayName}</span>`;
+                    console.log(`Successfully started tracking ${name}`);
+                } else {
+                    console.error('Tracking failed:', data);
+                    alert('Failed to start tracking. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to start tracking. Please check your connection.');
+            });
         })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'tracking') {
-            document.getElementById('info').innerHTML = 
-                `<b>${name}</b><br>RA: ${ra.toFixed(2)}°<br>DEC: ${dec.toFixed(2)}°<br>Mag: ${mag}<br>
-                 <span style="color: #4CAF50; font-weight: bold;">✓ Tracking ${name}</span>`;
-            console.log(`Successfully started tracking ${name}`);
-        } else {
-            console.error('Tracking failed:', data);
-            alert('Failed to start tracking. Please try again.');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Failed to start tracking. Please check your connection.');
-    });
+        .catch(() => {
+            // Fallback if star info fetch fails - just use the raw name
+            fetch('/track_star', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: name,
+                    ra: ra,
+                    dec: dec,
+                    mag: mag
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'tracking') {
+                    document.getElementById('info').innerHTML = 
+                        `<b>${name}</b><br>RA: ${ra.toFixed(2)}°<br>DEC: ${dec.toFixed(2)}°<br>Mag: ${mag}<br>
+                         <span style="color: #4CAF50; font-weight: bold;">✓ Tracking ${name}</span>`;
+                    console.log(`Successfully started tracking ${name}`);
+                } else {
+                    console.error('Tracking failed:', data);
+                    alert('Failed to start tracking. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to start tracking. Please check your connection.');
+            });
+        });
 }
 
 // Function to search for objects
@@ -1272,12 +1335,18 @@ function searchObject() {
                     ra: parseFloat(objData.RA) || 0,
                     dec: parseFloat(objData.DEC) || 0,
                     mag: objData['V-Mag'] || 30,
-                    type: objData.type || 'star'
+                    type: objData.type || 'star',
+                    friendlyName: objData.friendlyName || null
                 };
                 // Precompute xyz for transient search result
                 // Note: Do NOT invert Y here; projection already handles canvas Y direction
                 const _tmp = radecToXYZ(foundObject.ra, foundObject.dec);
                 foundObject.xyz = _tmp;
+            } else {
+                // Update friendlyName if returned from search
+                if (objData.friendlyName) {
+                    foundObject.friendlyName = objData.friendlyName;
+                }
             }
             
             // Set as searched object and move camera to it
@@ -1285,11 +1354,14 @@ function searchObject() {
             highlightAnimation = 0;
             moveToObject(foundObject);
             
-            // Show info
+            // Show info with friendly name in brackets if available
             const lstDeg2 = lstDegrees(new Date((timeControl && timeControl.value) ? new Date(timeControl.value).toISOString() : new Date().toISOString()), parseFloat(lonInput.value));
             const ha2 = hourAngleDegrees(foundObject.ra, lstDeg2);
+            const displayName = foundObject.friendlyName 
+                ? `${foundObject.name} (${foundObject.friendlyName})`
+                : foundObject.name;
             document.getElementById('info').innerHTML = 
-                `<b>🔍 ${foundObject.name}</b><br>RA: ${foundObject.ra.toFixed(2)}° | HA: ${(ha2/15).toFixed(2)}h<br>DEC: ${foundObject.dec.toFixed(2)}°<br>Mag: ${foundObject.mag}<br>
+                `<b>🔍 ${displayName}</b><br>RA: ${foundObject.ra.toFixed(2)}° | HA: ${(ha2/15).toFixed(2)}h<br>DEC: ${foundObject.dec.toFixed(2)}°<br>Mag: ${foundObject.mag}<br>
                  <button onclick="trackObject('${foundObject.name}', ${foundObject.ra}, ${foundObject.dec}, ${foundObject.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
         } else {
             alert(data.message || 'Object not found.');
