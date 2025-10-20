@@ -32,7 +32,7 @@ const showEcliptic = document.getElementById('show-ecliptic');
 const showBelowHorizon = document.getElementById('show-below-horizon');
 const timeControl = document.getElementById('time-control');
 const timeNowBtn = document.getElementById('time-now');
-const timeRotate = document.getElementById('time-rotate');
+const timeSegmentIndicator = document.getElementById('time-segment-indicator');
 let currentLSTDeg = 0; // updated per draw based on time and longitude
 const resetBtn = document.getElementById('reset-view');
 const helpBtn = document.getElementById('help-btn');
@@ -210,8 +210,20 @@ function handleTimeInputClick(e) {
     const input = e.currentTarget;
     const value = input.value || '';
     if (!value) return;
+    
+    // For datetime-local inputs, try to detect which segment was clicked
+    // by checking if selectionStart is available
+    if (typeof input.selectionStart === 'number' && input.selectionStart >= 0) {
+        const seg = getCaretSegment(input);
+        if (seg) {
+            virtualTimeSegment = seg;
+            updateTimeSegmentIndicator(seg);
+            return;
+        }
+    }
+    
+    // Fallback: estimate from click position
     const rect = input.getBoundingClientRect();
-    // Rough estimation: divide by character count
     const totalChars = Math.max(1, value.length);
     const x = e.clientX - rect.left;
     const charWidth = rect.width / totalChars;
@@ -219,7 +231,10 @@ function handleTimeInputClick(e) {
     if (index < 0) index = 0;
     if (index > totalChars) index = totalChars;
     const seg = getSegmentFromIndex(index, value);
-    if (seg) virtualTimeSegment = seg;
+    if (seg) {
+        virtualTimeSegment = seg;
+        updateTimeSegmentIndicator(seg);
+    }
 }
 
 function getCurrentSegmentBounds(input) {
@@ -266,9 +281,50 @@ function adjustDateByUnit(date, unit, delta) {
     return d;
 }
 
+// Update the visual indicator showing which time segment is selected
+let segmentIndicatorTimeout = null;
+function updateTimeSegmentIndicator(segment) {
+    if (!timeSegmentIndicator) return;
+    
+    const labels = {
+        'year': 'Year',
+        'month': 'Month',
+        'day': 'Day',
+        'hour': 'Hour',
+        'minute': 'Minute'
+    };
+    
+    if (segment && labels[segment]) {
+        timeSegmentIndicator.textContent = `[${labels[segment]}]`;
+        timeSegmentIndicator.style.display = 'inline';
+        
+        // Auto-hide after 2 seconds
+        if (segmentIndicatorTimeout) clearTimeout(segmentIndicatorTimeout);
+        segmentIndicatorTimeout = setTimeout(() => {
+            timeSegmentIndicator.style.display = 'none';
+        }, 2000);
+    } else {
+        timeSegmentIndicator.style.display = 'none';
+    }
+}
+
 function handleTimeControlKeydown(e) {
     if (!timeControl) return;
     const key = e.key;
+    
+    // Handle Tab key to cycle through segments
+    if (key === 'Tab') {
+        e.preventDefault();
+        const segments = ['hour', 'minute', 'day', 'month', 'year'];
+        const currentIndex = segments.indexOf(virtualTimeSegment || 'hour');
+        const nextIndex = e.shiftKey 
+            ? (currentIndex - 1 + segments.length) % segments.length 
+            : (currentIndex + 1) % segments.length;
+        virtualTimeSegment = segments[nextIndex];
+        updateTimeSegmentIndicator(virtualTimeSegment);
+        return;
+    }
+    
     if (key !== 'ArrowUp' && key !== 'ArrowDown') return;
 
     const raw = timeControl.value;
@@ -278,27 +334,45 @@ function handleTimeControlKeydown(e) {
         baseDate.setSeconds(0, 0);
     }
 
-    // Determine which unit to adjust. Prefer caret segment when available.
-    let unit = getCaretSegment(timeControl);
-    // If caret-based detection fails (some browsers hide selectionStart for datetime-local),
-    // fall back to a virtual segment set by clicking the input.
-    if (!unit && virtualTimeSegment) unit = virtualTimeSegment;
-    // Fallback to modifier keys if caret segment is unavailable
-    // Alt: month, Ctrl: day, Shift: hour, Ctrl+Shift: year. Default: minute
-    if (!unit) {
+    // Try multiple methods to determine which segment is focused
+    let unit = null;
+    
+    // Method 1: Try to get caret position (works in some browsers)
+    unit = getCaretSegment(timeControl);
+    
+    // Method 2: Use stored virtual segment from last click
+    if (!unit && virtualTimeSegment) {
+        unit = virtualTimeSegment;
+    }
+    
+    // Method 3: Use modifier keys for explicit control
+    if (!unit || e.ctrlKey || e.shiftKey || e.altKey) {
         if (e.ctrlKey && e.shiftKey) unit = 'year';
         else if (e.altKey) unit = 'month';
         else if (e.ctrlKey) unit = 'day';
-        else if (e.shiftKey) unit = 'hour';
-        else unit = 'minute';
+        else if (e.shiftKey) unit = 'minute';
     }
+    
+    // Method 4: If still no unit and no virtualTimeSegment, start with hour as default
+    if (!unit) {
+        unit = 'hour';
+        virtualTimeSegment = 'hour';
+    }
+    
+    // Prevent native browser handling to enable our rollover behavior
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Store the unit for consistency in subsequent keypresses
+    virtualTimeSegment = unit;
+    
+    // Show visual feedback of which segment is being adjusted
+    updateTimeSegmentIndicator(unit);
 
     const delta = (key === 'ArrowUp') ? 1 : -1;
     const newDate = adjustDateByUnit(baseDate, unit, delta);
 
-    // Prevent native stepping to avoid double changes
-    e.preventDefault();
-    // Update input and redraw. Try to preserve caret segment.
+    // Update input and redraw
     setTimeControlFromDate(newDate, true);
     schedulePlanetsRefresh();
     draw();
@@ -882,16 +956,11 @@ function draw() {
 
     // Draw stars/planets using view-matrix transform
     const { Mview, upRow } = buildEqToViewMatrix(latDeg, currentLSTDeg, rotX, rotY);
-    const cullBelowHorizon = !(showBelowHorizon && showBelowHorizon.checked);
     // Stars first (filtered)
     if (showStarsVal) {
         for (let i = 0; i < visibleStars.length; i++) {
             const obj = visibleStars[i];
             const v = obj.xyz || radecToXYZ(obj.ra, obj.dec);
-            if (cullBelowHorizon) {
-                const yUp = upRow[0]*v[0] + upRow[1]*v[1] + upRow[2]*v[2];
-                if (yUp <= 0) continue;
-            }
             const w0 = Mview[0], w1 = Mview[1], w2 = Mview[2];
             const x = w0[0]*v[0] + w0[1]*v[1] + w0[2]*v[2];
             const y = w1[0]*v[0] + w1[1]*v[1] + w1[2]*v[2];
@@ -923,10 +992,6 @@ function draw() {
             const effectiveMag = obj.mag == null ? 50 : obj.mag;
             if (effectiveMag > magLimit) continue;
             const v = obj.xyz || radecToXYZ(obj.ra, obj.dec);
-            if (cullBelowHorizon) {
-                const yUp = upRow[0]*v[0] + upRow[1]*v[1] + upRow[2]*v[2];
-                if (yUp <= 0) continue;
-            }
             const w0 = Mview[0], w1 = Mview[1], w2 = Mview[2];
             const x = w0[0]*v[0] + w0[1]*v[1] + w0[2]*v[2];
             const y = w1[0]*v[0] + w1[1]*v[1] + w1[2]*v[2];
@@ -1113,7 +1178,6 @@ showHorizonGrid.addEventListener('change', draw);
 showEquatorialGrid.addEventListener('change', draw);
 if (showEcliptic) showEcliptic.addEventListener('change', draw);
 if (showBelowHorizon) showBelowHorizon.addEventListener('change', draw);
-if (timeRotate) timeRotate.addEventListener('change', draw);
 if (flipVerticalCheckbox) {
     flipVerticalCheckbox.addEventListener('change', () => {
         // Capture current orientation so toggling doesn't move the map
@@ -1481,8 +1545,6 @@ window.addEventListener('DOMContentLoaded', () => {
         timeControl.addEventListener('keydown', handleTimeControlKeydown);
         // Add click handler to support virtual caret segmentation on browsers without selectionStart
         timeControl.addEventListener('click', handleTimeInputClick);
-        timeControl.addEventListener('focus', () => { virtualTimeSegment = null; });
-        timeControl.addEventListener('blur', () => { virtualTimeSegment = null; });
     }
     if (timeNowBtn) {
         timeNowBtn.addEventListener('click', () => {
@@ -1503,6 +1565,7 @@ window.addEventListener('DOMContentLoaded', () => {
             invertControls = !!flipVerticalCheckbox.checked;
         }
     } catch { invertControls = !!(flipVerticalCheckbox && flipVerticalCheckbox.checked); }
+    
     console.log('DOM loaded. Star data:', stars.filter(s => s.type === 'planet'));
     // Precompute Cartesian coordinates (x,y,z) for all objects to reduce per-frame trig work
     function precomputeStars() {

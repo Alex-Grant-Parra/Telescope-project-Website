@@ -70,7 +70,10 @@
             <input type="datetime-local" id="time-control" style="flex:1; padding: 4px; background:#222; color:#fff; border:1px solid #555; border-radius:3px;">
             <button id="time-now" title="Set to current time" style="padding:4px 8px;">Now</button>
         </div>
-        <div style="font-size: 0.85em; color:#bbb; margin-top:4px;">Grid shows Hour Angle (HA) using your longitude and the selected time.</div>
+        <div style="font-size: 0.85em; color:#bbb; margin-top:4px;">
+            Grid shows Hour Angle (HA) using your longitude and the selected time.
+            <span id="time-segment-indicator" style="display:none; color:#4CAF50; font-weight:bold; margin-left:8px;"></span>
+        </div>
     </div>
     <div>
         <label for="show-stars" style="margin-right: 8px;">
@@ -85,9 +88,6 @@
         <input type="checkbox" id="show-equatorial-grid"> Equatorial Grid
         <input type="checkbox" id="show-ecliptic"> Ecliptic
         <input type="checkbox" id="show-below-horizon" checked> Below-horizon tint
-    </label>
-    <label>
-        <input type="checkbox" id="time-rotate" checked> Rotate with time
     </label>
     <label>
         <input type="checkbox" id="flip-vertical"> Invert controls
