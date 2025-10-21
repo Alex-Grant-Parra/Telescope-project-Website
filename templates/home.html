@@ -94,38 +94,38 @@ function tryAutoplayVideos() {
         if (p !== undefined) promises.push(p.catch(() => ({error:true, video:v})));
     });
 
-    if (promises.length === 0) return;
+    // if (promises.length === 0) return;
 
-    Promise.all(promises).then(results => {
-        const blocked = results.filter(r => r && r.error);
-        if (blocked.length) {
-            // Show a play overlay button
-            showPlayOverlay(blocked.map(x => x.video));
-        }
-    }).catch(() => {
-        // generic fallback: show overlay
-        showPlayOverlay(Array.from(vids));
-    });
+//     Promise.all(promises).then(results => {
+//         const blocked = results.filter(r => r && r.error);
+//         if (blocked.length) {
+//             // Show a play overlay button
+//             showPlayOverlay(blocked.map(x => x.video));
+//         }
+//     }).catch(() => {
+//         // generic fallback: show overlay
+//         showPlayOverlay(Array.from(vids));
+//     });
 }
 
-function showPlayOverlay(videos) {
-    let overlay = document.getElementById('play-overlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'play-overlay';
-        overlay.innerHTML = '<button id="play-overlay-btn" class="btn btn-lg btn-primary">Tap to play</button>';
-        overlay.style.position = 'fixed';
-        overlay.style.left = '50%';
-        overlay.style.top = '50%';
-        overlay.style.transform = 'translate(-50%, -50%)';
-        overlay.style.zIndex = '9999';
-        document.body.appendChild(overlay);
-        document.getElementById('play-overlay-btn').addEventListener('click', function(){
-            videos.forEach(v => { v.play().catch(()=>{}); });
-            overlay.remove();
-        });
-    }
-}
+// function showPlayOverlay(videos) {
+//     let overlay = document.getElementById('play-overlay');
+//     if (!overlay) {
+//         overlay = document.createElement('div');
+//         overlay.id = 'play-overlay';
+//         overlay.innerHTML = '<button id="play-overlay-btn" class="btn btn-lg btn-primary">Tap to play</button>';
+//         overlay.style.position = 'fixed';
+//         overlay.style.left = '50%';
+//         overlay.style.top = '50%';
+//         overlay.style.transform = 'translate(-50%, -50%)';
+//         overlay.style.zIndex = '9999';
+//         document.body.appendChild(overlay);
+//         document.getElementById('play-overlay-btn').addEventListener('click', function(){
+//             videos.forEach(v => { v.play().catch(()=>{}); });
+//             overlay.remove();
+//         });
+//     }
+// }
 
 document.addEventListener('DOMContentLoaded', function(){
     tryAutoplayVideos();
