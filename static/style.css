@@ -256,9 +256,10 @@ body {
     color: #f8f9fa;
 }
 
+/* Make night mode almost fully black for a SpaceX-like look */
 body.night-mode {
-    background-color: #0a1020 !important;
-    color: #ffb;
+    background-color: #000 !important;
+    color: #e6e6e6;
 }
 
 body.night-mode .navbar,
@@ -273,9 +274,9 @@ body.night-mode .draggable-panel {
 body.night-mode .btn,
 body.night-mode .form-control,
 body.night-mode .form-select {
-    background-color: #162040 !important;
-    color: #ffb !important;
-    border-color: #233 !important;
+    background-color: #0b0b0b !important;
+    color: #e6e6e6 !important;
+    border-color: #111 !important;
 }
 
 body.night-mode .btn-outline-light {
@@ -290,8 +291,226 @@ body.night-mode .btn-outline-light:hover {
 
 body.night-mode a,
 body.night-mode a.text-white {
-    color: #ffb !important;
+    color: #e6e6e6 !important;
 }
+
+/* --- Video hero / stacked videos (SpaceX-like) --- */
+.video-hero {
+    position: relative;
+    overflow: hidden;
+    padding: 0;
+    /* enable scroll snapping container */
+    scroll-snap-type: y mandatory;
+}
+
+/* Make the hero full-bleed even when it's rendered inside a centered .container
+   by expanding to the viewport width and recentring. This avoids editing base.html. */
+.video-hero {
+    box-sizing: border-box;
+    width: 100vw;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-left: 0;
+    margin-right: 0;
+    z-index: 0;
+}
+
+.video-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.video-section,
+.video-item {
+    position: relative;
+    width: 100%;
+    /* will be overwritten by video-section to fill viewport */
+    overflow: hidden;
+}
+
+/* Allow sections to fill viewport under the navbar. If your navbar height differs, adjust --nav-height */
+:root { --nav-height: 56px; }
+
+.video-section {
+    height: calc(100vh - var(--nav-height));
+    min-height: 420px;
+    scroll-snap-align: start;
+}
+
+.hero-video {
+    position: absolute;
+    inset: 0; /* top:0; right:0; bottom:0; left:0 */
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: none;
+    filter: brightness(0.75) contrast(1.03);
+    transition: transform 0.6s ease, filter 0.4s ease;
+}
+
+/* Per-video scale tweaks to even out perceived sizes */
+/* Slightly reduce Jupiter and CrabNebula which appear oversized */
+.hero-video.jupiter-video { transform: scale(0.92); }
+.video-item.small .hero-video { transform: scale(0.90); }
+.video-item.milky .hero-video { transform: scale(1.00); }
+
+/* Ensure scaling anchors from center */
+.hero-video { transform-origin: center center; }
+
+.section-overlay,
+.hero-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* allow clicks to pass through unless on buttons */
+}
+
+.section-overlay .overlay-content,
+.hero-inner {
+    position: absolute; /* absolute so it can sit over the right-middle */
+    right: 6vw;
+    top: 50%;
+    transform: translateY(-50%);
+    max-width: 520px;
+    margin: 0;
+    text-align: left;
+    padding: 2rem 1.25rem;
+    pointer-events: auto; /* allow interactions with buttons/links */
+    background: linear-gradient(90deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.55) 30%, rgba(0,0,0,0.85) 100%);
+    border-radius: 8px;
+}
+
+.hero-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 8px 30px rgba(0,0,0,0.7);
+}
+
+.hero-desc {
+    font-size: 1.125rem;
+    color: rgba(255,255,255,0.9);
+    margin-bottom: 1rem;
+}
+
+.hero-inner .btn {
+    pointer-events: auto;
+}
+
+/* Slight dark gradient between stacked videos so the text remains readable */
+.video-item::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.18), rgba(0,0,0,0.45));
+    pointer-events: none;
+}
+
+/* Per-video size tweaks */
+.video-item.milky {
+    height: 75vh;
+    min-height: 360px;
+}
+.video-item.small {
+    height: 40vh;
+}
+.hero-video.jupiter-video {
+    /* slightly zoom-in for jupiter to keep subject visible */
+    height: 120%;
+}
+
+/* Ensure hero videos fill their section containers */
+.video-section .hero-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Quarter-sized videos: center and make them occupy approx 25% area (50% both dimensions) */
+.hero-video.quarter {
+    position: absolute;
+    width: 50%;
+    height: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) !important;
+    object-fit: cover;
+    border-radius: 6px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+}
+
+/* Slightly dim background behind quarter videos for contrast */
+.video-section#section-album::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.15);
+    pointer-events: none;
+}
+
+/* Persistent fade for the Jupiter section: a bottom-to-black gradient that covers
+   the lower portion of the section so the planet blends into the page background */
+.video-section#section-starmap {
+    position: relative;
+    /* allow the fade pseudo-elements to extend beyond the section bounds */
+    overflow: visible;
+    /* raise stacking so fades overlay neighboring sections */
+    z-index: 10;
+}
+
+/* Bottom fade that extends beyond the section into the next one */
+.video-section#section-starmap::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -20vh; /* extend 20vh into the next section */
+    height: 20vh; /* size of the extension */
+    /* flip: black at the top (touching Jupiter) -> transparent downward into the next section */
+    background: linear-gradient(to bottom, rgba(0,0,0,1), rgba(0,0,0,0));
+    pointer-events: none;
+    z-index: 11;
+}
+
+/* Top fade that extends above into the previous section */
+.video-section#section-starmap::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -20vh; /* extend 20vh into the previous section */
+    height: 20vh;
+    /* flip: black at the bottom (touching Jupiter) -> transparent upward into the previous section */
+    background: linear-gradient(to top, rgba(0,0,0,1), rgba(0,0,0,0));
+    pointer-events: none;
+    z-index: 11;
+}
+
+/* Ensure the video itself is behind the fade and overlay content is above */
+.video-section#section-starmap .hero-video { z-index: 0; }
+.video-section#section-starmap .section-overlay { z-index: 3; }
+
+/* Stronger, per-video mask to fade the bottom of the Jupiter video into black
+   across its entire visible area. Uses CSS mask for a consistent result. */
+.video-section#section-starmap {
+    background: #000; /* ensure the section behind the fades is black */
+}
+
+/* Make sure videos stack compactly on small screens */
+@media (max-width: 768px) {
+    .video-item { height: 45vh; }
+    .hero-title { font-size: 1.6rem; }
+    .hero-inner { top: 12vh; padding: 1.25rem; }
+}
+
+@media (max-width: 480px) {
+    .video-item { height: 35vh; }
+    .hero-title { font-size: 1.25rem; }
+}
+
 
 .navbar-brand {
     font-weight: bold;
