@@ -4,7 +4,7 @@ import argparse
 import os
 import time
 
-from esp32 import ESP32Motor, ESP32Config
+from esp32.esp32 import ESP32Motor, ESP32Config
 
 
 def parse_args():

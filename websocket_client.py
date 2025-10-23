@@ -364,7 +364,7 @@ def setup_client_config():
     print("\nConfiguration saved! You can now run the client.")
     return current_config
 
-async def main():
+async def websocketClient():
     """Main async function that runs both WebSocket client and frame sender"""
     # Check if we need to run setup
     if len(sys.argv) > 1 and sys.argv[1] == "setup":
@@ -395,11 +395,4 @@ async def main():
     except Exception as e:
         print(f"[main] Unexpected exception: {e}")
     finally:
-        cleanup_camera()
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("[global] KeyboardInterrupt received, exiting and releasing camera...")
         cleanup_camera()
