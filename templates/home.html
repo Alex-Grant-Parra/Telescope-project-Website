@@ -7,8 +7,9 @@
 
     <!-- Section 1: Interface -->
     <section class="video-section" id="section-interface">
-        <video class="hero-video milky-video" autoplay muted loop playsinline preload="auto">
-            <source src="{{ url_for('static', filename='videos/milkyWay.mp4') }}" type="video/mp4">
+        <!-- Lazy video: source stored in data-src; preload disabled to avoid fetching everything at once -->
+        <video class="hero-video milky-video lazy-video" muted loop playsinline preload="none">
+            <source data-src="{{ url_for('static', filename='videos/milkyWay.mp4') }}" type="video/mp4">
         </video>
         <div class="section-overlay">
             <div class="overlay-content">
@@ -21,8 +22,8 @@
 
     <!-- Section 2: Star map -->
     <section class="video-section" id="section-starmap">
-        <video class="hero-video jupiter-video quarter" autoplay muted loop playsinline preload="auto">
-            <source src="{{ url_for('static', filename='videos/jupiter.mp4') }}" type="video/mp4">
+        <video class="hero-video jupiter-video quarter lazy-video" muted loop playsinline preload="none">
+            <source data-src="{{ url_for('static', filename='videos/jupiter.mp4') }}" type="video/mp4">
         </video>
         <div class="section-overlay">
             <div class="overlay-content">
@@ -35,8 +36,8 @@
 
     <!-- Section 3: Album -->
     <section class="video-section" id="section-album">
-        <video class="hero-video" autoplay muted loop playsinline preload="auto">
-            <source src="{{ url_for('static', filename='videos/crabNebula.mp4') }}" type="video/mp4">
+        <video class="hero-video lazy-video" muted loop playsinline preload="none">
+            <source data-src="{{ url_for('static', filename='videos/crabNebula.mp4') }}" type="video/mp4">
         </video>
         <div class="section-overlay">
             <div class="overlay-content">
@@ -49,8 +50,8 @@
 
     <!-- Section 4: About -->
     <section class="video-section" id="section-about">
-        <video class="hero-video" autoplay muted loop playsinline preload="auto">
-            <source src="{{ url_for('static', filename='videos/n11.mp4') }}" type="video/mp4">
+        <video class="hero-video lazy-video" muted loop playsinline preload="none">
+            <source data-src="{{ url_for('static', filename='videos/n11.mp4') }}" type="video/mp4">
         </video>
         <div class="section-overlay">
             <div class="overlay-content">
@@ -83,30 +84,6 @@ if ('serviceWorker' in navigator) {
         .catch((e) => console.warn('SW registration failed', e));
 }
 
-// Attempt to play all videos. If autoplay blocked, show play overlay to request user interaction.
-function tryAutoplayVideos() {
-    const vids = document.querySelectorAll('.hero-video');
-    const promises = [];
-    vids.forEach(v => {
-        // load first to prompt browser to fetch (may be served from cache via SW)
-        v.load();
-        const p = v.play();
-        if (p !== undefined) promises.push(p.catch(() => ({error:true, video:v})));
-    });
-
-    // if (promises.length === 0) return;
-
-//     Promise.all(promises).then(results => {
-//         const blocked = results.filter(r => r && r.error);
-//         if (blocked.length) {
-//             // Show a play overlay button
-//             showPlayOverlay(blocked.map(x => x.video));
-//         }
-//     }).catch(() => {
-//         // generic fallback: show overlay
-//         showPlayOverlay(Array.from(vids));
-//     });
-}
 
 // function showPlayOverlay(videos) {
 //     let overlay = document.getElementById('play-overlay');
@@ -127,9 +104,139 @@ function tryAutoplayVideos() {
 //     }
 // }
 
-document.addEventListener('DOMContentLoaded', function(){
-    tryAutoplayVideos();
-});
+// Autoplay handled by IntersectionObserver lazy-loader below (safer: loads source then plays)
+</script>
+<script>
+// Lazy-load videos and only play videos when visible to reduce CPU load
+(function(){
+    const lazyVideos = document.querySelectorAll('video.lazy-video');
+    let playingVideo = null;
+    let prefetchStarted = false;
+
+    function bufferedAheadSeconds(video) {
+        try {
+            const b = video.buffered;
+            if (b.length) {
+                const end = b.end(b.length - 1);
+                return Math.max(0, end - video.currentTime);
+            }
+        } catch (e) {}
+        return 0;
+    }
+
+    function getNotLoadedVideos() {
+        return Array.from(lazyVideos).filter(v => {
+            const s = v.querySelector('source[data-src]');
+            return s && !s.src;
+        });
+    }
+
+    function startPrefetchQueue() {
+        if (prefetchStarted) return;
+        prefetchStarted = true;
+        const queue = getNotLoadedVideos();
+        let i = 0;
+        function loadNext() {
+            if (i >= queue.length) return;
+            const v = queue[i++];
+            const src = v.querySelector('source[data-src]');
+            if (src && !src.src) {
+                src.src = src.getAttribute('data-src');
+                // Only call load() so browser fetches but we avoid immediate playback
+                try { v.load(); } catch (e) {}
+            }
+            // Stagger next load to avoid network spikes
+            setTimeout(loadNext, 600);
+        }
+        loadNext();
+    }
+
+    function maybeStartPrefetchFrom(video) {
+        if (prefetchStarted || !video) return;
+
+        function checkAndMaybe() {
+            // Consider readyState HAVE_ENOUGH_DATA (4) or at least 5s buffered ahead
+            if (video.readyState >= 4 || bufferedAheadSeconds(video) >= 5) {
+                startPrefetchQueue();
+                cleanup();
+            }
+        }
+
+        function onProgress() { checkAndMaybe(); }
+        function onTime() { checkAndMaybe(); }
+        function onCanPlayThrough() { checkAndMaybe(); }
+
+        function cleanup() {
+            video.removeEventListener('progress', onProgress);
+            video.removeEventListener('timeupdate', onTime);
+            video.removeEventListener('canplaythrough', onCanPlayThrough);
+        }
+
+        video.addEventListener('progress', onProgress);
+        video.addEventListener('timeupdate', onTime);
+        video.addEventListener('canplaythrough', onCanPlayThrough);
+        // Check immediately in case condition already met
+        checkAndMaybe();
+    }
+
+    if ('IntersectionObserver' in window) {
+        const io = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                const vid = entry.target;
+                if (entry.isIntersecting) {
+                    // Load source if not loaded
+                    const src = vid.querySelector('source[data-src]');
+                    if (src && !src.src) {
+                        src.src = src.getAttribute('data-src');
+                        vid.load();
+                    }
+
+                    // If nothing else is playing, start this one
+                    if (!playingVideo) {
+                        const p = vid.play();
+                        if (p !== undefined) p.catch(()=>{});
+                        playingVideo = vid;
+                        // Kick off prefetch once this primary video has buffered enough
+                        maybeStartPrefetchFrom(vid);
+                    }
+                } else {
+                    // Pause when not visible
+                    if (!vid.paused) {
+                        vid.pause();
+                        if (playingVideo === vid) playingVideo = null;
+                    }
+                }
+            });
+        }, { threshold: 0.5 });
+
+        lazyVideos.forEach(v => io.observe(v));
+    } else {
+        // Fallback: load and play first video and prefetch others once buffered
+        if (lazyVideos.length) {
+            const v = lazyVideos[0];
+            const src = v.querySelector('source[data-src]');
+            if (src) {
+                src.src = src.getAttribute('data-src');
+                try { v.load(); } catch (e) {}
+                v.play().catch(()=>{});
+                playingVideo = v;
+                maybeStartPrefetchFrom(v);
+            }
+        }
+    }
+
+    // Ensure only one video plays at a time and update prefetch trigger when a new video starts
+    document.addEventListener('play', (e) => {
+        const target = e.target;
+        if (target.tagName !== 'VIDEO') return;
+        if (playingVideo && playingVideo !== target) {
+            try { playingVideo.pause(); } catch (err) {}
+        }
+        playingVideo = target;
+        // If prefetch hasn't started yet, check buffer on the newly playing video
+        maybeStartPrefetchFrom(target);
+    }, true);
+})();
 </script>
 <style>
 /* Play overlay small inline style so it exists without editing main CSS */
