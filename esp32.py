@@ -123,3 +123,4 @@ if __name__ == "__main__":
 	finally:
 		m.close()
 
+# MICROSTEPS=16 python turn_degrees.py 360 --duration 5

@@ -12,7 +12,9 @@ from function_handlers import function_map, is_liveview_enabled
 
 CLIENT_ID_FILE = "client_id.json"
 CONFIG_FILE = "client_config.json"
-SERVER_URI = "wss://ws.telescopes.dev"
+SERVER_URI = "wss://ws.telescopes.dev"  # Command websocket
+LIVEVIEW_URI = "wss://liveview.telescopes.dev"  # Liveview websocket
+SERVER_HTTP_URL = "https://telescopes.dev"
 CLIENT_ID = "pi-001"
 
 def load_config():
@@ -28,6 +30,8 @@ def load_config():
     return {
         "client_id": CLIENT_ID,
         "server_uri": SERVER_URI,
+        "liveview_uri": LIVEVIEW_URI,
+        "server_http_url": SERVER_HTTP_URL,
         "api_token": None
     }
 
@@ -44,6 +48,8 @@ def save_config(config):
 config = load_config()
 CLIENT_ID = config.get("client_id", CLIENT_ID)
 SERVER_URI = config.get("server_uri", SERVER_URI)
+LIVEVIEW_URI = config.get("liveview_uri", LIVEVIEW_URI)
+SERVER_HTTP_URL = config.get("server_http_url", SERVER_HTTP_URL)
 API_TOKEN = config.get("api_token")
 
 async def authenticate_with_server(ws):
@@ -166,7 +172,6 @@ async def authenticate_liveview(ws):
 
 async def send_frames():
     """Send live camera frames via WebSocket with automatic reconnection"""
-    uri = "wss://liveview.telescopes.dev"
     JPEG_START = b'\xff\xd8'
     JPEG_END = b'\xff\xd9'
     proc = None
@@ -177,8 +182,8 @@ async def send_frames():
         connection_start_time = time.time()
         ws = None
         try:
-            print(f"[send_frames] Connecting to {uri} at {datetime.now()}...")
-            ws = await websockets.connect(uri, max_size=2*1024*1024, ping_interval=20, ping_timeout=10)
+            print(f"[send_frames] Connecting to {LIVEVIEW_URI} at {datetime.now()}...")
+            ws = await websockets.connect(LIVEVIEW_URI, max_size=2*1024*1024, ping_interval=20, ping_timeout=10)
             print(f"[send_frames] Connected successfully at {datetime.now()}")
             # Send authentication as first message
             await authenticate_liveview(ws)

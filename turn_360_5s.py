@@ -12,13 +12,16 @@ def main():
     cfg = ESP32Config(port=port, baudrate=115200)
     m = ESP32Motor(cfg)
 
-    # Motor/microstep assumptions
-    FULL_STEPS_PER_REV = 200   # typical NEMA17
-    MICROSTEPS = 16            # must match driver setting
+    # Motor/microstep assumptions (overridable via environment)
+    FULL_STEPS_PER_REV = int(os.environ.get("FULL_STEPS_PER_REV", "200"))   # typical NEMA17
+    MICROSTEPS = int(os.environ.get("MICROSTEPS", "16"))                   # must match driver setting
     DURATION_SEC = 5.0
 
     steps = FULL_STEPS_PER_REV * MICROSTEPS  # 360 degrees worth of microsteps
     sps = steps / DURATION_SEC                # steps per second for ~5s duration
+
+    print(f"FULL_STEPS_PER_REV={FULL_STEPS_PER_REV}, MICROSTEPS={MICROSTEPS}")
+    print(f"Commanding steps={steps} microsteps total -> sps={sps:.2f} steps/sec for duration={DURATION_SEC}s")
 
     try:
         # Basic setup for a quiet single revolution

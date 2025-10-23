@@ -4,7 +4,18 @@ import os
 import json
 from cameraController import Camera # type: ignore
 
-SERVER_URL = "https://telescopes.dev"  # Update with your server's URL
+CONFIG_FILE = "client_config.json"
+
+# Default server URL; will be overridden by config if present
+SERVER_URL = "https://telescopes.dev"
+try:
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as cf:
+            cfg = json.load(cf)
+            SERVER_URL = cfg.get('server_http_url', SERVER_URL)
+except Exception:
+    # If the config can't be read, continue with default
+    pass
 LIVEVIEW_STATE_FILE = "liveview_state.json"
 
 def load_liveview_state():
