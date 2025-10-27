@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, render_template, request, session
 from datetime import datetime, timezone
 from typing import Optional
 from models.tables import HDSTARtable, IndexTable, NGCtable
+from app.db import db
 
 from algorithms.convert import convert
 from algorithms.astroTools import getAllCelestialData
@@ -64,20 +65,104 @@ def get_all_celestial_objects(_dt: Optional[datetime] = None):
 
 @star_map_bp.route("/api/stars")
 def get_stars():
-    # Optional datetime query parameter in ISO 8601 (UTC preferred)
+    # Parameters: optional datetime, mag (float), limit (int), include_planets (bool)
     dt_str = request.args.get("datetime")
+    mag_limit = request.args.get("mag", type=float)
+    limit = request.args.get("limit", type=int)
+    include_planets = request.args.get("include_planets", default="false").lower() in ("1", "true", "yes")
+
     _dt = None
     if dt_str:
         try:
-            # Parse ISO format; if 'Z' present assume UTC
             _dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-            # Normalize to UTC (timezone-aware)
             if _dt.tzinfo is not None:
                 _dt = _dt.astimezone(timezone.utc)
         except Exception:
             _dt = None
-    all_objects = get_all_celestial_objects(_dt)
-    return jsonify(all_objects)
+
+    # If include_planets, compute planets for given or current UTC
+    planets = []
+    if include_planets:
+        if _dt is None:
+            _dt = datetime.utcnow()
+        celestial_data = getAllCelestialData(_dt.year, _dt.month, _dt.day, _dt.hour, _dt.minute, _dt.second)
+        for obj_name, coords in celestial_data.items():
+            ra_h, ra_m, ra_s = coords["ra"]
+            dec_d, dec_m, dec_s = coords["dec"]
+            mag = coords.get("vmag", 30)
+
+            ra_deg = convert.HrMinSecToDegrees(ra_h, ra_m, ra_s) * 15
+            if dec_d < 0:
+                dec_deg = dec_d - dec_m / 60 - dec_s / 3600
+            else:
+                dec_deg = dec_d + dec_m / 60 + dec_s / 3600
+
+            planets.append({
+                "name": obj_name.capitalize(),
+                "ra": ra_deg,
+                "dec": dec_deg,
+                "mag": mag,
+                "icon": f"/static/icons/planets/{obj_name.lower()}.png",
+                "type": "planet"
+            })
+
+    # Build stars result, using DB-side filters if possible for fast initial loads
+    def query_table_stars(table, limit_override: Optional[int] = None):
+        stars_list = []
+        try:
+            col_map = table.__table__.c
+            q = db.session.query(table)
+            # Apply magnitude filter at DB level if column exists
+            if mag_limit is not None and 'V-Mag' in col_map:
+                q = q.filter(col_map['V-Mag'] <= mag_limit)
+            # Apply limit if provided
+            eff_limit = limit_override if (limit_override is not None and limit_override > 0) else limit
+            if eff_limit is not None and eff_limit > 0:
+                q = q.limit(eff_limit)
+            rows = q.all()
+            for star in rows:
+                try:
+                    ra = float(getattr(star, 'RA')) if getattr(star, 'RA', None) is not None else 0
+                    dec = float(getattr(star, 'DEC')) if getattr(star, 'DEC', None) is not None else 0
+                    mag_val = getattr(star, 'V-Mag', None)
+                    try:
+                        magv = float(mag_val) if mag_val is not None else 30
+                    except Exception:
+                        magv = 30
+                    # If DB-side filter not possible, enforce client filter here
+                    if mag_limit is not None and ('V-Mag' not in table.__table__.c) and magv > mag_limit:
+                        continue
+                    stars_list.append({
+                        "name": getattr(star, 'Name', None),
+                        "ra": ra,
+                        "dec": dec,
+                        "mag": magv,
+                        "type": "star"
+                    })
+                except Exception as e:
+                    print(f"Error processing star {getattr(star, 'Name', 'UNKNOWN')}: {e}")
+        except Exception as e:
+            print(f"Query failed for table {getattr(table, '__tablename__', 'unknown')}: {e}")
+        return stars_list
+
+    tables = [HDSTARtable, IndexTable, NGCtable]
+    all_stars = []
+    # Distribute per-table limits when a limit is provided to avoid exceeding total
+    per_table_limit = None
+    if limit is not None and limit > 0:
+        per_table_limit = max(1, limit // len(tables))
+    for table in tables:
+        subset = query_table_stars(table, limit_override=per_table_limit)
+        all_stars.extend(subset)
+
+    # If we enforced per-table limits and have room left (due to small tables), top-up without limit
+    if limit is not None and len(all_stars) > limit:
+        all_stars = all_stars[:limit]
+
+    if include_planets:
+        return jsonify(all_stars + planets)
+    else:
+        return jsonify(all_stars)
 
 @star_map_bp.route("/api/planets")
 def get_planets():
@@ -119,40 +204,9 @@ def get_planets():
 
 @star_map_bp.route("/StarMap")
 def star_map():
-    all_stars = []
-
-    tables = [HDSTARtable, IndexTable, NGCtable]
-    RenderStars = True
-    RenderPlanets = True
-
-    if RenderStars:
-        all_stars = loadStarsFromTables(tables)
-
-    _now = datetime.utcnow()
-    celestial_data = getAllCelestialData(_now.year, _now.month, _now.day, _now.hour, _now.minute, _now.second)
-
-    if RenderPlanets:
-        for obj_name, coords in celestial_data.items():
-            ra_h, ra_m, ra_s = coords["ra"]
-            dec_d, dec_m, dec_s = coords["dec"]
-            mag = coords.get("vmag", 30)
-
-            ra_deg = convert.HrMinSecToDegrees(ra_h, ra_m, ra_s) * 15
-            if dec_d < 0:
-                dec_deg = dec_d - dec_m / 60 - dec_s / 3600
-            else:
-                dec_deg = dec_d + dec_m / 60 + dec_s / 3600
-
-            all_stars.append({
-                "name": obj_name.capitalize(),
-                "ra": ra_deg,
-                "dec": dec_deg,
-                "mag": mag,
-                "icon": f"/static/icons/planets/{obj_name.lower()}.png",
-                "type": "planet"
-            })
-
-    return render_template("star_map.html", stars=all_stars)
+    # For fast initial load, render without embedding the entire star dataset
+    # The client will fetch stars and planets via APIs progressively
+    return render_template("star_map.html", stars=[])
 
 def extract_friendly_common_name(common_names_field: str) -> str:
     """
