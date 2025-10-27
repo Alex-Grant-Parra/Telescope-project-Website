@@ -132,11 +132,9 @@
         <button id="mag-cancel">Cancel</button>
     </div>
 </div>
-<script type="application/json" id="stars-data">
-    {{ stars|tojson }}
-</script>
-<script src="{{ url_for('static', filename='js/csrf-protection.js') }}"></script>
+<script type="application/json" id="stars-data">[]</script>
+<script src="{{ url_for('static', filename='js/csrf-protection.js') }}" defer></script>
 <!-- Cache-busting query param to ensure latest JS is fetched -->
-<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-13-9"></script>
+<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-27-1" defer></script>
 </body>
 </html>

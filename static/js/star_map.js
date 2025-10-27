@@ -1,5 +1,5 @@
 // 3D Planetarium JavaScript
-// Get star/planet data from Flask
+// Initial stars are empty (we fetch a small filtered set after load)
 const stars = JSON.parse(document.getElementById('stars-data').textContent);
 
 // Image cache for planet sprites
@@ -585,6 +585,39 @@ function rebuildVisibleStars(magLimit) {
     }
 }
 
+// Chunked precomputation of star vectors to avoid blocking the main thread
+function precomputeStarsChunked(starsList, chunkSize = 1000, onProgress, onDone) {
+    let i = 0;
+    function processChunk(deadline) {
+        const end = Math.min(i + chunkSize, starsList.length);
+        for (; i < end; i++) {
+            const obj = starsList[i];
+            try {
+                const _v = radecToXYZ(obj.ra, obj.dec);
+                obj.xyz = _v;
+                if (obj.type === 'star') {
+                    const decRad = (obj.dec || 0) * Math.PI / 180;
+                    obj._sinDec = Math.sin(decRad);
+                    obj._cosDec = Math.cos(decRad);
+                }
+            } catch (e) {
+                obj.xyz = radecToXYZ(0, 0);
+            }
+        }
+        if (typeof onProgress === 'function') onProgress(i, starsList.length);
+        // Redraw to show progressively more stars
+        draw();
+        if (i < starsList.length) {
+            if (window.requestIdleCallback) window.requestIdleCallback(processChunk, { timeout: 50 });
+            else setTimeout(processChunk, 0);
+        } else if (typeof onDone === 'function') {
+            onDone();
+        }
+    }
+    if (window.requestIdleCallback) window.requestIdleCallback(processChunk, { timeout: 50 });
+    else setTimeout(processChunk, 0);
+}
+
 // Build a 3x3 matrix that maps equatorial unit vectors (x=cosδcosα, y=sinδ, z=cosδsinα)
 // into view space (after converting to horizon frame using LST/latitude, then applying user rotY, rotX)
 function buildEqToViewMatrix(latDeg, lstDeg, rotX, rotY) {
@@ -915,7 +948,6 @@ function drawEquatorialGrid() {
 // Draw all stars/planets
 function draw() {
     ctx.clearRect(0, 0, width, height);
-    // Remove celestial sphere outline to let stars fill entire screen
 
     // Get filter values
     const magLimit = parseFloat(magFilter.value);
@@ -1163,6 +1195,28 @@ function preloadPlanetImages() {
     return Promise.all(loadPromises).then(() => {
         console.log('All planet images loaded. Cache contains:', Object.keys(planetImages));
     });
+}
+
+// Fetch a small initial set of bright stars for fast first paint
+async function fetchInitialStars() {
+    try {
+        const res = await fetch(`/api/stars?mag=4&limit=2000&include_planets=false`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        // Merge into stars array in-place
+        for (const s of data) stars.push(s);
+        // Precompute in chunks and update visible list as we go
+        precomputeStarsChunked(data, 1000, () => {
+            // Ensure visibleStars is rebuilt with new arrivals
+            const magLimit = parseFloat(magFilter.value);
+            rebuildVisibleStars(magLimit);
+        }, () => {
+            const magLimit = parseFloat(magFilter.value);
+            rebuildVisibleStars(magLimit);
+        });
+    } catch (e) {
+        console.error('Initial stars fetch failed:', e);
+    }
 }
 
 // UI event listeners
@@ -1534,13 +1588,13 @@ function clearSearch() {
 
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('%cStar Map JS loaded v2025-10-13-8', 'color:#0bf');
+    console.log('%cStar Map JS loaded v2025-10-27-1', 'color:#0bf');
     // Initialize time control to current local time (rounded to minute)
     if (timeControl) {
         const now = new Date();
         now.setSeconds(0, 0);
         timeControl.value = formatLocalDateTime(now);
-    timeControl.addEventListener('change', () => { refreshPlanetsForCurrentTime(); draw(); });
+        timeControl.addEventListener('change', () => { refreshPlanetsForCurrentTime(); draw(); });
         // Add keyboard rollover handling for ArrowUp/ArrowDown
         timeControl.addEventListener('keydown', handleTimeControlKeydown);
         // Add click handler to support virtual caret segmentation on browsers without selectionStart
@@ -1566,40 +1620,23 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     } catch { invertControls = !!(flipVerticalCheckbox && flipVerticalCheckbox.checked); }
     
-    console.log('DOM loaded. Star data:', stars.filter(s => s.type === 'planet'));
-    // Precompute Cartesian coordinates (x,y,z) for all objects to reduce per-frame trig work
-    function precomputeStars() {
-        for (const obj of stars) {
-            try {
-                const _v = radecToXYZ(obj.ra, obj.dec);
-                // Keep native coordinate orientation: +Dec (north) maps upward in project()
-                obj.xyz = _v;
-                if (obj.type === 'star') {
-                    const decRad = (obj.dec || 0) * Math.PI / 180;
-                    obj._sinDec = Math.sin(decRad);
-                    obj._cosDec = Math.cos(decRad);
+    // Start initial fetches: planets for current time and a small bright-star set
+    const planetsPromise = refreshPlanetsForCurrentTime();
+    const starsPromise = fetchInitialStars();
+
+    Promise.allSettled([planetsPromise, starsPromise]).then(() => {
+        // Once planets are present, preload their icons, then draw
+        preloadPlanetImages().then(() => {
+            draw();
+            setTimeout(hideLoading, 200);
+            // Start animation loop for search highlighting
+            function animate() {
+                if (searchedObject) {
+                    draw();
                 }
-            } catch (e) {
-                // Fallback in case of bad data
-                const _v = radecToXYZ(0, 0);
-                obj.xyz = _v;
+                requestAnimationFrame(animate);
             }
-        }
-    }
-    precomputeStars();
-    // Preload planet images first, then draw
-    preloadPlanetImages().then(() => {
-    console.log('Images preloaded, starting first draw...');
-        draw();
-        setTimeout(hideLoading, 400); // allow a short delay for effect
-        
-        // Start animation loop for search highlighting
-        function animate() {
-            if (searchedObject) {
-                draw();
-            }
-            requestAnimationFrame(animate);
-        }
-        animate();
+            animate();
+        });
     });
 });
