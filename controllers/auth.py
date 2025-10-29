@@ -76,8 +76,10 @@ def logout():
     except Exception:
         pass
     logout_user()
-    # Clear trusted device cookie on logout to avoid stale tokens
-    resp.set_cookie('trusted_device_token', '', expires=0, httponly=True, samesite='Lax')
+    # Note: Do NOT clear the trusted device cookie here.
+    # Leaving the cookie intact allows the device to remain trusted across logouts,
+    # which is the expected behavior for a "trusted device" 2FA bypass.
+    # Users can explicitly revoke devices from their profile or via revoke routes.
     session.clear()  # Clear the session
     flash('Logged out successfully', 'info')
     return resp
