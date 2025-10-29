@@ -23,6 +23,11 @@ def update_camera():
     # print("Received Camera Settings:", data)
     response = {"status": "success", "message": "Settings updated"}
 
+    # Determine target telescope
+    telescope_id = (data or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+    if not telescope_id:
+        return jsonify({"status": "error", "message": "No telescope selected"}), 400
+
     # Set shutter speed if provided
     shutter_speed = data.get("shutterSpeed")
     iso = data.get("iso")
@@ -32,7 +37,7 @@ def update_camera():
         try:
             # Set the shutter speed using Camera class
             print("Changing shutterspeed")
-            Cameralink.setSettings(["/main/capturesettings/shutterspeed", shutter_speed])
+            Cameralink.setSettings(["/main/capturesettings/shutterspeed", shutter_speed], client_id_override=telescope_id)
         except Exception as e:
             response = {"status": "error", "message": f"Failed to set shutter speed: {e}"}
             print(response)
@@ -42,7 +47,7 @@ def update_camera():
     if iso:
         try:
             print("Changing iso")
-            Cameralink.setSettings(["/main/imgsettings/iso", iso])
+            Cameralink.setSettings(["/main/imgsettings/iso", iso], client_id_override=telescope_id)
         except Exception as e:
             response = {"status": "error", "message": f"Failed to set ISO: {e}"}
             print(response)
@@ -181,11 +186,15 @@ def format_celestial_data(name, data):
 @interface_bp.route("/get_camera_choices")
 def get_camera_choices():
     try:
-        choices = Cameralink.getSettings()
+        selected = session.get('selected_telescope')
+        if not selected or not selected.get('telescopeId'):
+            return jsonify({"status": "error", "message": "No telescope selected"}), 400
+        choices = Cameralink.getSettings(client_id_override=selected.get('telescopeId'))
         # print(choices)
         return jsonify(choices)
     except (KeyError, TypeError) as e:
         print(f"{e}. Maybe camera is not connected?")
+        return jsonify({"status": "error", "message": str(e)})
     
 
 @interface_bp.route("/take_photo", methods=["POST"])
@@ -200,7 +209,10 @@ def take_photo():
             print(f"User ID: {currentId}")
 
             try:
-                print(Cameralink.capturePhoto(currentId))
+                telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+                if not telescope_id:
+                    return jsonify({"status": "error", "message": "No telescope selected"}), 400
+                print(Cameralink.capturePhoto(currentId, client_id_override=telescope_id))
 
                 return jsonify({"status": "success"})
             except Exception as e:
@@ -356,7 +368,10 @@ def start_live_view():
     """Start live view on the telescope"""
     print("Started live view")
     try:
-        result = Cameralink.startLiveView()
+        telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+        if not telescope_id:
+            return jsonify({"status": "error", "message": "No telescope selected"}), 400
+        result = Cameralink.startLiveView(client_id_override=telescope_id)
         return jsonify({"status": "success", "message": "Live view started", "result": result})
     except Exception as e:
         return jsonify({"status": "error", "message": f"Failed to start live view: {str(e)}"})
@@ -366,7 +381,10 @@ def stop_live_view():
     """Stop live view on the telescope"""
     print("Stopped live view")
     try:
-        result = Cameralink.stopLiveView()
+        telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+        if not telescope_id:
+            return jsonify({"status": "error", "message": "No telescope selected"}), 400
+        result = Cameralink.stopLiveView(client_id_override=telescope_id)
         return jsonify({"status": "success", "message": "Live view stopped", "result": result})
     except Exception as e:
         return jsonify({"status": "error", "message": f"Failed to stop live view: {str(e)}"})

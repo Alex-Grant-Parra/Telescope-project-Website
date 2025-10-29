@@ -34,15 +34,43 @@ document.querySelectorAll(".draggable-panel").forEach(panel => {
     });
 });
 
+        // Selected telescope state
+        let selectedTelescopeId = null;
+
+        // Enable/disable UI controls based on telescope selection
+        function setControlsEnabled(enabled) {
+            const ids = [
+                "shutterSpeedSelect",
+                "isoSelect",
+                "whiteBalance",
+                "photoFormat",
+                "takePhotoBtn",
+                "liveViewToggleBtn"
+            ];
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = !enabled;
+            });
+        }
+
 // Fetch camera choices and populate dropdowns
 function populateCameraChoices() {
-    fetch("/interface/get_camera_choices")
+            if (!selectedTelescopeId) {
+                console.warn("Skipping camera choices fetch: no telescope selected");
+                return;
+            }
+
+            fetch("/interface/get_camera_choices")
         .then(response => response.json())
         .then(data => {
+                    if (data && data.status === "error") {
+                        console.error("Failed to fetch camera choices:", data.message);
+                        return;
+                    }
             // Populate shutter speed
             let shutterSelect = document.getElementById("shutterSpeedSelect");
             shutterSelect.innerHTML = "";
-            (data.shutterSpeed || []).forEach(choice => {
+                    (data.shutterSpeed || []).forEach(choice => {
                 let opt = document.createElement("option");
                 opt.value = choice;
                 opt.text = choice;
@@ -66,19 +94,24 @@ function populateCameraChoices() {
 
 // Call on page load
 document.addEventListener("DOMContentLoaded", function() {
-    populateCameraChoices();
+    setControlsEnabled(false);
     loadTelescopes();
     loadSelectedTelescope();
 });
 
 // Update settings to backend
 function updateSetting() {
+    if (!selectedTelescopeId) {
+        alert("Please select a telescope first.");
+        return;
+    }
     let data = {
         shutterSpeed: document.getElementById("shutterSpeedSelect").value,
         iso: document.getElementById("isoSelect").value,
         aperture: document.getElementById("apertureValue").innerText,
         whiteBalance: document.getElementById("whiteBalance").value,
-        photoFormat: document.getElementById("photoFormat").value
+        photoFormat: document.getElementById("photoFormat").value,
+        telescopeId: selectedTelescopeId
     };
     fetch("/interface/update_camera", {
         method: "POST",
@@ -90,8 +123,14 @@ function updateSetting() {
 }
 
 function takePhoto() {
+    if (!selectedTelescopeId) {
+        alert("Please select a telescope first.");
+        return;
+    }
     fetch("/interface/take_photo", {
-        method: "POST"
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telescopeId: selectedTelescopeId })
     })
     .then(response => response.json())
     .then(data => {
@@ -115,7 +154,7 @@ const REFRESH_RATE = 1000; // Refresh every 1 second
 // Function to start refreshing the live view image
 function startImageRefresh() {
     if (!liveViewImage) {
-        liveViewImage = document.querySelector('img[alt="Live Feed"]');
+        liveViewImage = document.getElementById('liveViewImage');
     }
     
     if (liveViewImage && !refreshInterval) {
@@ -149,6 +188,10 @@ function toggleLiveView() {
         alert("Live view button not found in the page!");
         return;
     }
+    if (!selectedTelescopeId) {
+        alert("Please select a telescope first.");
+        return;
+    }
     
     // console.log("Button found, current liveViewActive state:", liveViewActive);
     
@@ -158,7 +201,8 @@ function toggleLiveView() {
         console.log("Making POST request to /interface/stop_live_view");
         fetch("/interface/stop_live_view", {
             method: "POST",
-            headers: { "Content-Type": "application/json" }
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ telescopeId: selectedTelescopeId })
         })
         .then(response => {
             console.log("Stop live view response received:", response);
@@ -186,9 +230,12 @@ function toggleLiveView() {
         // Start live view
         console.log("Attempting to start live view...");
         console.log("Making POST request to /interface/start_live_view");
+        // Ensure the image src matches the selected telescope before starting refresh
+        updateLiveViewSrcForTelescope(selectedTelescopeId);
         fetch("/interface/start_live_view", {
             method: "POST",
-            headers: { "Content-Type": "application/json" }
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ telescopeId: selectedTelescopeId })
         })
         .then(response => {
             console.log("Start live view response received:", response);
@@ -328,6 +375,8 @@ function selectTelescope() {
     
     if (!selectedValue) {
         document.getElementById("telescopeInfo").style.display = "none";
+        selectedTelescopeId = null;
+        setControlsEnabled(false);
         return;
     }
     
@@ -352,6 +401,10 @@ function selectTelescope() {
     .then(data => {
         if (data.status === "success") {
             console.log("Telescope selected:", data.message);
+            selectedTelescopeId = selectedValue;
+            setControlsEnabled(true);
+            updateLiveViewSrcForTelescope(selectedTelescopeId);
+            populateCameraChoices();
         } else {
             alert("Failed to select telescope: " + data.message);
         }
@@ -376,13 +429,48 @@ function loadSelectedTelescope() {
                 for (let i = 0; i < select.options.length; i++) {
                     if (select.options[i].value === data.telescope.telescopeId) {
                         select.selectedIndex = i;
-                        selectTelescope(); // Update the info panel
+                        // Update the info panel and local state without re-posting to backend
+                        const selectedOption = select.options[select.selectedIndex];
+                        const telescope = JSON.parse(selectedOption.dataset.telescope);
+                        document.getElementById("telescopeId").textContent = telescope.telescopeId;
+                        document.getElementById("telescopeIp").textContent = telescope.ipAddress;
+                        document.getElementById("telescopeVersion").textContent = telescope.firmwareVersion;
+                        const statusEl = document.getElementById("telescopeStatus");
+                        statusEl.textContent = telescope.online ? 'Online' : 'Offline';
+                        statusEl.className = telescope.online ? 'text-success' : 'text-danger';
+                        document.getElementById("telescopeInfo").style.display = "block";
+                        selectedTelescopeId = data.telescope.telescopeId;
+                        setControlsEnabled(true);
+                        updateLiveViewSrcForTelescope(selectedTelescopeId);
+                        populateCameraChoices();
                         break;
                     }
                 }
+            } else {
+                selectedTelescopeId = null;
+                setControlsEnabled(false);
             }
         })
         .catch(error => {
             console.error("Error loading selected telescope:", error);
         });
+}
+
+// Update the main live view image src to point to the selected telescope
+function updateLiveViewSrcForTelescope(telescopeId) {
+    if (!telescopeId) return;
+    if (!liveViewImage) {
+        liveViewImage = document.getElementById('liveViewImage');
+    }
+    if (!liveViewImage) return;
+
+    const newSrc = `http://telescopes.dev/liveview/${telescopeId}`;
+    const wasRefreshing = !!refreshInterval;
+    if (wasRefreshing) {
+        stopImageRefresh();
+    }
+    liveViewImage.src = newSrc;
+    if (wasRefreshing) {
+        startImageRefresh();
+    }
 }

@@ -45,9 +45,14 @@ def load_api_token():
 
 class Cameralink:
 
+    @staticmethod
+    def _effective_client_id(provided_id=None):
+        """Return provided client_id if given, else fall back to module default."""
+        return provided_id or client_id
+
     # @staticmethod
-    def getSettings():
-        payload = {"client_id": client_id, "command": "getCameraChoices"}
+    def getSettings(client_id_override=None):
+        payload = {"client_id": Cameralink._effective_client_id(client_id_override), "command": "getCameraChoices"}
         response = requests.post(url, json=payload).text 
         
         data = ujson.loads(response) 
@@ -56,8 +61,8 @@ class Cameralink:
         return extracted_data  
     
     # @staticmethod
-    def setSettings(args):
-        payload = {"client_id": client_id, "command": "setCameraSetting", "args": args}
+    def setSettings(args, client_id_override=None):
+        payload = {"client_id": Cameralink._effective_client_id(client_id_override), "command": "setCameraSetting", "args": args}
         response = requests.post(url, json=payload).text
 
         data = ujson.loads(response)
@@ -65,8 +70,8 @@ class Cameralink:
         
         return extracted_data  
     
-    def capturePhoto(currentid):
-        payload = {"client_id": client_id, "command": "capturePhoto", "args": currentid}
+    def capturePhoto(currentid, client_id_override=None):
+        payload = {"client_id": Cameralink._effective_client_id(client_id_override), "command": "capturePhoto", "args": currentid}
         response = requests.post(url, json=payload).text
 
         data = ujson.loads(response)
@@ -163,9 +168,9 @@ class Cameralink:
         asyncio.run(send_frames())
 
     @staticmethod
-    def startLiveView():
+    def startLiveView(client_id_override=None):
         print("Starting Live View from telescopeLink.py")
-        payload = {"client_id": client_id, "command": "startLiveView"}
+        payload = {"client_id": Cameralink._effective_client_id(client_id_override), "command": "startLiveView"}
         response = requests.post(url, json=payload).text
 
         data = ujson.loads(response)
@@ -174,9 +179,9 @@ class Cameralink:
         return extracted_data
     
     @staticmethod
-    def stopLiveView():
+    def stopLiveView(client_id_override=None):
         print("Stopping Live View from telescopeLink.py")
-        payload = {"client_id": client_id, "command": "stopLiveView"}
+        payload = {"client_id": Cameralink._effective_client_id(client_id_override), "command": "stopLiveView"}
         response = requests.post(url, json=payload).text
 
         data = ujson.loads(response)
