@@ -16,8 +16,8 @@ for (const obj of stars) {
 }
 
 // Set reasonable defaults if no valid magnitudes found
-// Force default slider and fetch range to 0..20 as requested
-if (minMag === Infinity) minMag = 0;
+// Include very bright negative magnitudes; cap faint end at +20
+if (minMag === Infinity) minMag = -2;
 if (maxMag === -Infinity) maxMag = 20;
 
 // Track fetched magnitude coverage and de-duplication set for stars
@@ -1243,7 +1243,8 @@ function preloadPlanetImages() {
 // Fetch a small initial set of bright stars for fast first paint
 async function fetchInitialStars() {
     try {
-    const res = await fetch(`/api/stars?minMag=0&maxMag=20&limit=2000&include_planets=false`);
+    // Fetch all bright stars first (up to mag 6) with negatives included, no limit to avoid missing famous stars
+    const res = await fetch(`/api/stars?minMag=-2&maxMag=6&include_planets=false`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         // Merge into stars array in-place
@@ -1277,7 +1278,7 @@ async function fetchMoreStarsIfNeeded(newMagLimit) {
     if (newMagLimit <= fetchedMaxMag + 1e-6) return; // already have up to this mag
     try {
     const capped = Math.min(newMagLimit, 20);
-    const res = await fetch(`/api/stars?minMag=0&maxMag=${encodeURIComponent(capped)}&limit=10000&include_planets=false`);
+    const res = await fetch(`/api/stars?minMag=-2&maxMag=${encodeURIComponent(capped)}&limit=10000&include_planets=false`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const newlyAdded = [];
@@ -1712,8 +1713,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const starsPromise = fetchInitialStars();
 
     Promise.allSettled([planetsPromise, starsPromise]).then(() => {
-        // Force slider to 0..20 per user request and ensure UI reflects that range
-        updateMagSliderRange(0, 20);
+        // Use -2..20 so very bright negative-magnitude stars are in range
+        updateMagSliderRange(-2, 20);
 
         // Once planets are present, preload their icons, then draw
         preloadPlanetImages().then(() => {

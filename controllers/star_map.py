@@ -75,7 +75,8 @@ def get_stars():
     include_planets = request.args.get("include_planets", default="false").lower() in ("1", "true", "yes")
 
     if min_mag is None:
-        min_mag = 0.0
+        # Include negative magnitudes for very bright stars (e.g., Sirius ~ -1.46)
+        min_mag = -2.0
     if max_mag is None:
         max_mag = 20.0
     if mag_limit is not None and mag_limit < max_mag:
@@ -122,9 +123,13 @@ def get_stars():
         try:
             col_map = table.__table__.c
             q = db.session.query(table)
-            # Apply magnitude filter at DB level if column exists
+            # Apply magnitude filter at DB level if column exists and sort by brightness
             if 'V-Mag' in col_map:
                 q = q.filter(col_map['V-Mag'] >= min_mag, col_map['V-Mag'] <= max_mag)
+                try:
+                    q = q.order_by(col_map['V-Mag'].asc())
+                except Exception:
+                    pass
             # Apply limit if provided
             eff_limit = limit_override if (limit_override is not None and limit_override > 0) else limit
             if eff_limit is not None and eff_limit > 0:
