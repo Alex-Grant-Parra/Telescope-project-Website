@@ -330,6 +330,47 @@ body.night-mode a.text-white {
     color: #e6e6e6 !important;
 }
 
+/* Make links inside tables inherit surrounding text color so things like
+    mailto: links in admin tables remain readable. Do this for both normal
+    and night modes, but DO NOT override Bootstrap button links (which use
+    .btn) so the 'Open' buttons keep their visible button styling. */
+table a:not(.btn),
+table a:link:not(.btn),
+table a:visited:not(.btn),
+.table a:not(.btn),
+.table a:link:not(.btn),
+.table a:visited:not(.btn) {
+    color: inherit !important;
+    text-decoration: underline; /* keep them clearly links while matching color */
+}
+/* Keep hover/focus consistent too */
+table a:not(.btn):hover,
+table a:not(.btn):focus,
+.table a:not(.btn):hover,
+.table a:not(.btn):focus {
+    color: inherit !important;
+    text-decoration: underline; /* maintain underline on interaction */
+}
+
+/* Night-mode specific table link selector kept for clarity/compat, but the
+    general rules above already ensure correct behavior in night-mode too. */
+body.night-mode table a:not(.btn),
+body.night-mode table a:link:not(.btn),
+body.night-mode table a:visited:not(.btn),
+.night-mode .table a:not(.btn),
+.night-mode .table a:link:not(.btn),
+.night-mode .table a:visited:not(.btn) {
+    color: inherit !important;
+    text-decoration: underline; /* keep them clearly links while matching color */
+}
+body.night-mode table a:not(.btn):hover,
+body.night-mode table a:not(.btn):focus,
+.night-mode .table a:not(.btn):hover,
+.night-mode .table a:not(.btn):focus {
+    color: inherit !important;
+    text-decoration: underline; /* maintain underline on interaction */
+}
+
 /* --- Video hero / stacked videos (SpaceX-like) --- */
 .video-hero {
     position: relative;
