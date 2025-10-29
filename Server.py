@@ -131,10 +131,42 @@ print("Security middleware initialized - IP blacklist active")
 # HTTPS Enforcement Middleware
 @app.before_request
 def force_https():
+    # Only force HTTPS when the request is not already secure and no reverse proxy
+    # has indicated the original protocol. However, if the client is connecting
+    # using a raw IP address (e.g. 192.168.x.x) we assume this is a direct
+    # HTTP connection to the Flask dev server and should not be redirected to
+    # HTTPS (which would cause browsers to attempt a TLS handshake against a
+    # non-TLS server and trigger ERR_SSL_PROTOCOL_ERROR).
     if not request.is_secure and request.headers.get('X-Forwarded-Proto') != 'https':
         # Allow localhost for development/testing
-        if request.host.startswith('127.0.0.1') or request.host.startswith('localhost'):
+        host = (request.host or '')
+        # Extract hostname portion if a port is present
+        if ':' in host:
+            host = host.split(':', 1)[0]
+
+        if host.startswith('127.0.0.1') or host.startswith('localhost'):
             return None
+
+        # If the host is an IP address (IPv4 or IPv6), do not redirect here.
+        # This avoids sending a 301 to https:// on a server that is not
+        # configured with TLS, which causes the client to start a TLS
+        # handshake to a plain HTTP server (the cause of the errors seen).
+        try:
+            import ipaddress
+            ipaddress.ip_address(host)
+            # It's a valid IP address; skip HTTPS enforcement for direct IP access
+            print(f"force_https: detected IP host={host}; skipping HTTPS redirect")
+            return None
+        except Exception:
+            # Not an IP address — fall through to enforce HTTPS
+            pass
+
+        # Log the decision for diagnostics
+        try:
+            print(f"force_https: host={host}, secure={request.is_secure}, x-forwarded-proto={request.headers.get('X-Forwarded-Proto')}; redirecting to HTTPS")
+        except Exception:
+            pass
+
         return redirect(request.url.replace('http://', 'https://'), code=301)
 
 # Register Blueprints
@@ -321,8 +353,35 @@ if __name__ == '__main__':
     # Start websocket servers using the new module
     start_websocket_servers()
 
+    # Determine whether SSL/TLS should be enabled when starting the Flask
+    # server. If the environment requests SSL and provides a cert/key pair,
+    # we'll start Flask with an ssl_context so the server can accept TLS
+    # handshakes. Otherwise, run plain HTTP. This makes explicit the behavior
+    # and prevents ERR_SSL_PROTOCOL_ERROR when clients attempt HTTPS against a
+    # plain HTTP server.
     print(f"Starting Flask server on {gethostname()} at http://127.0.0.1:{FlaskServerPort}")
-    # serve(app, host="127.0.0.1", port=FlaskServerPort)
-    app.run(host="0.0.0.0", port=FlaskServerPort, debug=False)
+
+    # Environment-driven SSL toggle
+    use_ssl = os.getenv('FLASK_USE_SSL', 'False').lower() in ('1', 'true', 'yes')
+    ssl_cert = os.getenv('SSL_CERT_PATH')
+    ssl_key = os.getenv('SSL_KEY_PATH')
+
+    if use_ssl:
+        # Require both cert and key to be present on disk
+        if ssl_cert and ssl_key and os.path.exists(ssl_cert) and os.path.exists(ssl_key):
+            print(f"Starting Flask with SSL on 0.0.0.0:{FlaskServerPort} using cert: {ssl_cert}")
+            try:
+                app.run(host="0.0.0.0", port=FlaskServerPort, debug=False, ssl_context=(ssl_cert, ssl_key))
+            except Exception as e:
+                print(f"Failed to start Flask with SSL: {e}")
+                print("Falling back to plain HTTP on the same port")
+                app.run(host="0.0.0.0", port=FlaskServerPort, debug=False)
+        else:
+            print("FLASK_USE_SSL is set but SSL_CERT_PATH/SSL_KEY_PATH are missing or files do not exist.")
+            print("Starting without SSL. If you want HTTPS, set FLASK_USE_SSL=True and provide valid SSL_CERT_PATH and SSL_KEY_PATH.")
+            app.run(host="0.0.0.0", port=FlaskServerPort, debug=False)
+    else:
+        # Plain HTTP
+        app.run(host="0.0.0.0", port=FlaskServerPort, debug=False)
 
     
