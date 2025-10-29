@@ -119,20 +119,16 @@ def submit_contact():
 
     # Send confirmation email (best-effort)
     try:
-        from flask_mail import Message
-        mail = current_app.extensions.get('mail')
-        if mail:
-            # Prefer user-provided title in subject when available
-            effective_title = (title or message_type or 'Your message')
-            subject = f"We received your message (Ticket #{cm.id}) - {effective_title}"
-            body = (
-                f"Hi,\n\nThanks for contacting us. We've received your message under ticket #{cm.id}.\n"
-                f"Type: {message_type}\nSent at: {cm.created_at} UTC\n\n"
-                "We'll get back to you as soon as possible.\n\n— Telescope Control"
-            )
-            msg = Message(subject, recipients=[email])
-            msg.body = body
-            mail.send(msg)
+        from utility.emailer import send_email
+        # Prefer user-provided title in subject when available
+        effective_title = (title or message_type or 'Your message')
+        subject = f"We received your message (Ticket #{cm.id}) - {effective_title}"
+        body = (
+            f"Hi,\n\nThanks for contacting us. We've received your message under ticket #{cm.id}.\n"
+            f"Type: {message_type}\nSent at: {cm.created_at} UTC\n\n"
+            "We'll get back to you as soon as possible.\n\n— Telescope Control"
+        )
+        send_email(current_app, 'support', [email], subject, body, reply_to=current_app.config.get('MAIL_SUPPORT_SENDER'))
     except Exception:
         # Do not fail submission if email fails
         pass
@@ -204,15 +200,11 @@ def admin_contact_detail(message_id):
         # If sending reply
         if action == 'send_reply' and reply_body:
             try:
-                from flask_mail import Message
-                mail = current_app.extensions.get('mail')
-                if mail:
-                    m = Message(reply_subject, recipients=[msg.email])
-                    m.body = reply_body
-                    mail.send(m)
-                    msg.admin_response = reply_body
-                    msg.responded_at = datetime.utcnow()
-                    flash('Reply sent to user.', 'success')
+                from utility.emailer import send_email
+                send_email(current_app, 'support', [msg.email], reply_subject, reply_body, reply_to=current_app.config.get('MAIL_SUPPORT_SENDER'))
+                msg.admin_response = reply_body
+                msg.responded_at = datetime.utcnow()
+                flash('Reply sent to user.', 'success')
             except Exception as e:
                 flash(f'Failed to send email: {e}', 'danger')
 

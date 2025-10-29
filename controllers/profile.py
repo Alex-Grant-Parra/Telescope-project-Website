@@ -4,7 +4,7 @@ from utility.hash import hash_password, check_password
 from models.user import User
 from models.trusted_device import TrustedDevice
 from app.db import db
-from flask_mail import Message
+from utility.emailer import send_email
 
 profile_bp = Blueprint('profile', __name__)
 
@@ -70,9 +70,7 @@ def edit_profile():
             
             # Send confirmation email
             try:
-                msg = Message("Password Changed", recipients=[current_user.get_email()])
-                msg.body = "Your password has been successfully changed. If you did not make this change, please contact support immediately."
-                current_app.extensions['mail'].send(msg)
+                send_email(current_app, 'auth', [current_user.get_email()], "Password Changed", "Your password has been successfully changed. If you did not make this change, please contact support immediately.")
             except Exception as e:
                 print(f"Failed to send password change confirmation email: {e}")
             

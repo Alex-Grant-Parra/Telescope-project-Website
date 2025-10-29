@@ -109,6 +109,28 @@ app.config["MAIL_USERNAME"] = os.getenv("MAIL_USERNAME")
 app.config["MAIL_PASSWORD"] = os.getenv("MAIL_PASSWORD")
 app.config["MAIL_DEFAULT_SENDER"] = app.config["MAIL_USERNAME"]
 
+# Optional role-based sender identities (From header). These can be plain emails
+# or configured aliases. If not provided, fallback to the default sender.
+app.config["MAIL_SUPPORT_SENDER"] = os.getenv("MAIL_SUPPORT_SENDER", app.config["MAIL_DEFAULT_SENDER"])
+app.config["MAIL_SUPPORT_NAME"] = os.getenv("MAIL_SUPPORT_NAME", "Support")
+app.config["MAIL_AUTH_SENDER"] = os.getenv("MAIL_AUTH_SENDER", app.config["MAIL_DEFAULT_SENDER"])
+app.config["MAIL_AUTH_NAME"] = os.getenv("MAIL_AUTH_NAME", "Auth")
+
+# Optional: separate SMTP configs per role (Support/Auth). If provided, the
+# app will use these credentials and server to send emails for that role.
+# Otherwise, it will fallback to the default Flask-Mail sender above.
+app.config["MAIL_SUPPORT_SMTP_SERVER"] = os.getenv("MAIL_SUPPORT_SMTP_SERVER")
+app.config["MAIL_SUPPORT_SMTP_PORT"] = int(os.getenv("MAIL_SUPPORT_SMTP_PORT", "0") or 0)
+app.config["MAIL_SUPPORT_SMTP_USE_TLS"] = os.getenv("MAIL_SUPPORT_SMTP_USE_TLS", "True").lower() in ("1","true","yes")
+app.config["MAIL_SUPPORT_SMTP_USERNAME"] = os.getenv("MAIL_SUPPORT_SMTP_USERNAME")
+app.config["MAIL_SUPPORT_SMTP_PASSWORD"] = os.getenv("MAIL_SUPPORT_SMTP_PASSWORD")
+
+app.config["MAIL_AUTH_SMTP_SERVER"] = os.getenv("MAIL_AUTH_SMTP_SERVER")
+app.config["MAIL_AUTH_SMTP_PORT"] = int(os.getenv("MAIL_AUTH_SMTP_PORT", "0") or 0)
+app.config["MAIL_AUTH_SMTP_USE_TLS"] = os.getenv("MAIL_AUTH_SMTP_USE_TLS", "True").lower() in ("1","true","yes")
+app.config["MAIL_AUTH_SMTP_USERNAME"] = os.getenv("MAIL_AUTH_SMTP_USERNAME")
+app.config["MAIL_AUTH_SMTP_PASSWORD"] = os.getenv("MAIL_AUTH_SMTP_PASSWORD")
+
 # Flask-Login & Email Configurations
 login_manager = LoginManager()
 login_manager.init_app(app)

@@ -7,7 +7,7 @@ from utility.hash import hash_password, check_password
 from models.user import User
 from models.trusted_device import TrustedDevice
 from app.db import db
-from flask_mail import Message
+from utility.emailer import send_email
 
 
 auth_bp = Blueprint('auth', __name__)
@@ -56,9 +56,8 @@ def login():
                 # Generate and send the 2FA code
                 totp_code = user.generate_totp_code()
                 # print(f"TOTP code sent: {totp_code}")  # Debug statement
-                msg = Message("Your 2FA Code", recipients=[user.get_email()])
-                msg.body = f"Your 2FA code is {totp_code}. Please enter this code to complete your login."
-                current_app.extensions['mail'].send(msg)
+                # Auth-related email sender
+                send_email(current_app, 'auth', [user.get_email()], "Your 2FA Code", f"Your 2FA code is {totp_code}. Please enter this code to complete your login.")
                 flash('Check your email for the 2FA code to complete the login.', 'info')
                 sec_logger.info(json.dumps({'event': 'login_2fa_required', 'user_id': user.id}))
                 return redirect(url_for('auth.login_2fa'))
@@ -143,13 +142,8 @@ def forgot_password():
 
             # Send an email with the token link
             reset_url = url_for('auth.reset_password', token=reset_token, _external=True)
-            msg = Message("Password Reset Request", recipients=[email])
-            msg.body = f"Click the following link to reset your password: {reset_url}"
-
             try:
-                # Access mail object using current_app
-                with current_app.app_context():
-                    current_app.extensions['mail'].send(msg)
+                send_email(current_app, 'auth', [email], "Password Reset Request", f"Click the following link to reset your password: {reset_url}")
                 flash('A password reset link has been sent to your email.', 'info')
             except Exception as e:
                 flash(f"Error sending email: {str(e)}", 'danger')
