@@ -6,7 +6,7 @@
 <a href="{{ url_for('contact.admin_contact_list') }}" class="btn btn-outline-secondary mb-3">← Back to messages</a>
 
 <div class="row g-3">
-  <div class="col-lg-7">
+  <div class="col-lg-8">
     <div class="card shadow-sm">
       <div class="card-body">
         <h3 class="card-title mb-1">Ticket #{{ msg.id }}</h3>
@@ -29,40 +29,43 @@
         </div>
         {% endif %}
         <hr>
-        <pre class="mb-0" style="white-space:pre-wrap">{{ msg.message }}</pre>
-      </div>
-    </div>
-
-    <div class="card shadow-sm mt-3">
-      <div class="card-body">
-  <h5>Collected Metadata</h5>
-  <pre class="small text-muted" style="white-space:pre-wrap">{{ msg.meta|tojson(indent=2) }}</pre>
-      </div>
-    </div>
-  </div>
-  <div class="col-lg-5">
-    <div class="card shadow-sm">
-      <div class="card-body">
+        <h5 class="mb-3">Conversation</h5>
+        <div class="vstack gap-3">
+          {% for e in entries %}
+          <div class="p-3 rounded border" style="background: rgba(255,255,255,0.02);">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <div>
+                <span class="badge {% if e.author == 'admin' %}bg-primary{% else %}bg-secondary{% endif %}">{{ e.author }}</span>
+                {% if e.subject %}<strong class="ms-2">{{ e.subject }}</strong>{% endif %}
+              </div>
+              <small class="text-muted">{{ e.created_at.strftime('%Y-%m-%d %H:%M:%S') if e.created_at else '' }} UTC</small>
+            </div>
+            <div style="white-space:pre-wrap">{{ e.body }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        <hr>
         <h5 class="card-title">Respond to user</h5>
         <form method="post" action="{{ url_for('contact.admin_contact_detail', message_id=msg.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
 
-          <div class="mb-2">
-            <label for="status" class="form-label">Status</label>
-            <select class="form-select" id="status" name="status">
-              {% set statuses = ['new','in_progress','resolved','closed'] %}
-              {% for st in statuses %}
-              <option value="{{ st }}" {% if st == msg.status %}selected{% endif %}>{{ st }}</option>
-              {% endfor %}
-            </select>
+          <div class="row g-2">
+            <div class="col-md-4">
+              <label for="status" class="form-label">Status</label>
+              <select class="form-select" id="status" name="status">
+                {% set statuses = ['new','in_progress','resolved','closed'] %}
+                {% for st in statuses %}
+                <option value="{{ st }}" {% if st == msg.status %}selected{% endif %}>{{ st }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-8">
+              <label for="reply_subject" class="form-label">Subject</label>
+              <input type="text" id="reply_subject" name="reply_subject" class="form-control" value="Re: Your contact request (Ticket #{{ msg.id }})">
+            </div>
           </div>
 
-          <div class="mb-2">
-            <label for="reply_subject" class="form-label">Subject</label>
-            <input type="text" id="reply_subject" name="reply_subject" class="form-control" value="Re: Your contact request (Ticket #{{ msg.id }})">
-          </div>
-
-          <div class="mb-3">
+          <div class="mb-3 mt-2">
             <label for="reply_body" class="form-label">Message</label>
             <textarea id="reply_body" name="reply_body" class="form-control" rows="8" placeholder="Write your response..."></textarea>
           </div>
@@ -77,6 +80,13 @@
         <div class="small text-muted">Last response sent {{ msg.responded_at.strftime('%Y-%m-%d %H:%M:%S') if msg.responded_at else '' }} UTC</div>
         <pre class="small" style="white-space:pre-wrap">{{ msg.admin_response }}</pre>
         {% endif %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
+      <div class="card-body">
+        <h5>Collected Metadata</h5>
+        <pre class="small text-muted" style="white-space:pre-wrap">{{ msg.meta|tojson(indent=2) }}</pre>
       </div>
     </div>
   </div>

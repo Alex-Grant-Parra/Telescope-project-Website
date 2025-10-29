@@ -20,6 +20,8 @@ class ContactMessage(db.Model):
     responded_at = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship('User', backref='contact_messages')
+    # Threaded conversation entries for this ticket
+    entries = db.relationship('ContactMessageEntry', backref='contact', cascade='all, delete-orphan')
 
     @property
     def meta(self):

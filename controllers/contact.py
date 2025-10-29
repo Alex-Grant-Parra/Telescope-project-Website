@@ -8,6 +8,7 @@ import mimetypes
 
 from app.db import db
 from models.contact import ContactMessage
+from models.contact_thread import ContactMessageEntry
 
 
 contact_bp = Blueprint('contact', __name__)
@@ -19,6 +20,34 @@ ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.log', '.txt', '.fits'}
 def _allowed_file(filename: str) -> bool:
     _, ext = os.path.splitext(filename.lower())
     return ext in ALLOWED_EXTENSIONS
+
+
+# --- Support landing and user tickets (placeholder) ---
+@contact_bp.route('/support')
+def support_home():
+    """Minimal Support landing page with links to contact form and tickets list."""
+    return render_template('support.html')
+
+
+@contact_bp.route('/support/tickets')
+def support_tickets():
+    """List of the current user's tickets (placeholder). If not logged in, show prompt."""
+    tickets = []
+    require_login = False
+    try:
+        if getattr(current_user, 'is_authenticated', False):
+            tickets = (
+                ContactMessage
+                .query
+                .filter(ContactMessage.user_id == current_user.id)
+                .order_by(ContactMessage.created_at.desc())
+                .all()
+            )
+        else:
+            require_login = True
+    except Exception:
+        tickets = []
+    return render_template('support_tickets.html', tickets=tickets, require_login=require_login)
 
 
 @contact_bp.route('/contact', methods=['GET'])
@@ -115,6 +144,21 @@ def submit_contact():
     )
     cm.meta = meta
     db.session.add(cm)
+    db.session.flush()  # get cm.id before creating entries
+
+    # Seed first conversation entry with the user's initial message
+    try:
+        first_entry = ContactMessageEntry(
+            contact_id=cm.id,
+            author='user',
+            user_id=(current_user.id if getattr(current_user, 'is_authenticated', False) else None),
+            subject=title or None,
+            body=message
+        )
+        db.session.add(first_entry)
+    except Exception:
+        pass
+
     db.session.commit()
 
     # Send confirmation email (best-effort)
@@ -179,6 +223,14 @@ def admin_contact_detail(message_id):
         return redirect(url_for('home.home'))
 
     msg = ContactMessage.query.get_or_404(message_id)
+    # Load conversation entries (ascending)
+    entries = ContactMessageEntry.query.filter_by(contact_id=msg.id).order_by(ContactMessageEntry.created_at.asc()).all()
+    # Backfill for legacy tickets without entries
+    if not entries:
+        seed = ContactMessageEntry(contact_id=msg.id, author='user', user_id=msg.user_id, subject=(msg.meta or {}).get('title'), body=msg.message)
+        db.session.add(seed)
+        db.session.commit()
+        entries = [seed]
 
     if request.method == 'POST':
         action = request.form.get('action')
@@ -204,6 +256,11 @@ def admin_contact_detail(message_id):
                 send_email(current_app, 'support', [msg.email], reply_subject, reply_body, reply_to=current_app.config.get('MAIL_SUPPORT_SENDER'))
                 msg.admin_response = reply_body
                 msg.responded_at = datetime.utcnow()
+                # Add to threaded history
+                try:
+                    db.session.add(ContactMessageEntry(contact_id=msg.id, author='admin', user_id=getattr(current_user, 'id', None), subject=reply_subject, body=reply_body))
+                except Exception:
+                    pass
                 flash('Reply sent to user.', 'success')
             except Exception as e:
                 flash(f'Failed to send email: {e}', 'danger')
@@ -211,7 +268,36 @@ def admin_contact_detail(message_id):
         db.session.commit()
         return redirect(url_for('contact.admin_contact_detail', message_id=msg.id))
 
-    return render_template('admin_contact_detail.html', msg=msg)
+    return render_template('admin_contact_detail.html', msg=msg, entries=entries)
+
+
+@contact_bp.route('/support/tickets/<int:message_id>', methods=['GET', 'POST'])
+@login_required
+def support_ticket_detail(message_id):
+    # User must own the ticket
+    msg = ContactMessage.query.get_or_404(message_id)
+    if msg.user_id != current_user.id:
+        flash('You do not have access to this ticket.', 'danger')
+        return redirect(url_for('contact.support_tickets'))
+
+    if request.method == 'POST':
+        reply_body = (request.form.get('reply_body') or '').strip()
+        if reply_body:
+            db.session.add(ContactMessageEntry(contact_id=msg.id, author='user', user_id=current_user.id, body=reply_body))
+            # Set status to in_progress/new when user replies
+            if msg.status in ('resolved', 'closed'):
+                msg.status = 'in_progress'
+            db.session.commit()
+            flash('Your reply has been added to the ticket.', 'success')
+            return redirect(url_for('contact.support_ticket_detail', message_id=msg.id))
+
+    entries = ContactMessageEntry.query.filter_by(contact_id=msg.id).order_by(ContactMessageEntry.created_at.asc()).all()
+    if not entries:
+        seed = ContactMessageEntry(contact_id=msg.id, author='user', user_id=msg.user_id, subject=(msg.meta or {}).get('title'), body=msg.message)
+        db.session.add(seed)
+        db.session.commit()
+        entries = [seed]
+    return render_template('support_ticket_detail.html', msg=msg, entries=entries)
 
 
 @contact_bp.route('/admin/contact/<int:message_id>/attachment')
