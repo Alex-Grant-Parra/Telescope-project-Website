@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Contact Us{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <h1 class="mb-3">Contact Us</h1>
+    <p class="text-muted">Have a question or found an issue? Send us a message below.</p>
+
+    <form id="contactForm" method="post" action="{{ url_for('contact.submit_contact') }}" enctype="multipart/form-data" class="card p-3 shadow-sm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <input type="hidden" name="client_meta" id="client_meta" value="{}" />
+
+      <div class="mb-3">
+        <label for="email" class="form-label">Your Email</label>
+        <input type="email" class="form-control" id="email" name="email" value="{{ prefill_email }}" required>
+        {% if prefill_email %}<div class="form-text">Auto-filled from your account. You can change it if needed.</div>{% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label for="message_type" class="form-label">Type</label>
+        <select id="message_type" name="message_type" class="form-select" required>
+          <option value="" disabled selected>Select a type</option>
+          {% for opt in type_options %}
+          <option value="{{ opt }}">{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label for="title" class="form-label">Title</label>
+        <input type="text" id="title" name="title" class="form-control" maxlength="200" placeholder="Short summary (e.g., Telescope slews off target)" required aria-required="true">
+      </div>
+
+      <div class="mb-3">
+        <label for="message" class="form-label">Message</label>
+        <textarea id="message" name="message" class="form-control" rows="6" placeholder="Describe the issue or question..." required aria-required="true"></textarea>
+      </div>
+
+      <div class="mb-3">
+        <label for="attachment" class="form-label">Attach a file (optional)</label>
+        <input class="form-control" type="file" id="attachment" name="attachment" accept=".png,.jpg,.jpeg,.log,.txt,.fits">
+        <div class="form-text">Allowed types: .png, .jpg, .jpeg, .log, .txt, .fits</div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2">
+        <a class="btn btn-outline-secondary" href="{{ url_for('home.home') }}">Cancel</a>
+        <button type="submit" class="btn btn-primary">Send</button>
+      </div>
+    </form>
+  </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Collect client metadata immediately after DOM is ready; start latency pings lazily on user interaction
+(function(){
+  function init(){
+    const meta = {
+      client_collected_at: new Date().toISOString(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      tz_offset_minutes: new Date().getTimezoneOffset(),
+      screen: { w: screen.width, h: screen.height, dpr: window.devicePixelRatio || 1 },
+      navigator: {
+        userAgent: navigator.userAgent,
+        language: navigator.language,
+        platform: navigator.platform,
+        online: navigator.onLine
+      },
+      performance: {}
+    };
+
+    try {
+      if (performance && performance.timing) {
+        const t = performance.timing;
+        meta.performance.navigation_start = t.navigationStart;
+      }
+    } catch(e) {}
+
+    const hidden = document.getElementById('client_meta');
+    if (hidden) hidden.value = JSON.stringify(meta);
+
+    let latencyStarted = false;
+    async function measureLatency(samples = 3){
+      const url = "{{ url_for('contact.contact_ping') }}";
+      const rtts = [];
+      for (let i=0; i<samples; i++){
+        const t0 = performance.now();
+        try{ await fetch(url, { cache: 'no-store' }); } catch(e) {}
+        const t1 = performance.now();
+        rtts.push(t1 - t0);
+        // small pause between samples; non-blocking to user typing
+        await new Promise(r => setTimeout(r, 120));
+      }
+      rtts.sort((a,b)=>a-b);
+      const median = rtts[Math.floor(rtts.length/2)] || null;
+      return { rtts, median };
+    }
+
+    function startLatencyIfNeeded(){
+      if (latencyStarted) return;
+      latencyStarted = true;
+      // Run in background; update hidden field when done
+      measureLatency(3).then(stats => {
+        meta.network_latency_ms = stats;
+        if (hidden) hidden.value = JSON.stringify(meta);
+      }).catch(()=>{
+        if (hidden) hidden.value = JSON.stringify(meta);
+      });
+    }
+
+    // Start latency measurement only after the form is visible and user starts interacting
+    const msg = document.getElementById('message');
+    const email = document.getElementById('email');
+    const typeSel = document.getElementById('message_type');
+
+    // Kick off on first interaction
+    [msg, email, typeSel].forEach(el => {
+      if (!el) return;
+      el.addEventListener('focus', startLatencyIfNeeded, { once: true });
+      el.addEventListener('input', startLatencyIfNeeded, { once: true });
+    });
+
+    // Fallback: if no interaction within 1.5s, start anyway (form is already loaded)
+    setTimeout(startLatencyIfNeeded, 1500);
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+{% endblock %}

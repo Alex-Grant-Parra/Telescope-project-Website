@@ -21,3 +21,5 @@ utility/__pycache__
 templates/routes.txt
 
 __pycache__/
+
+instance/uploads/contact/
