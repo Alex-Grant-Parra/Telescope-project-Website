@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from models.tables import HDSTARtable, IndexTable, NGCtable
 from app.db import db
+from sqlalchemy import func
 
 from algorithms.convert import convert
 from algorithms.astroTools import getAllCelestialData
@@ -65,11 +66,20 @@ def get_all_celestial_objects(_dt: Optional[datetime] = None):
 
 @star_map_bp.route("/api/stars")
 def get_stars():
-    # Parameters: optional datetime, mag (float), limit (int), include_planets (bool)
+    # Parameters and defaults
     dt_str = request.args.get("datetime")
-    mag_limit = request.args.get("mag", type=float)
+    min_mag = request.args.get("minMag", type=float)
+    max_mag = request.args.get("maxMag", type=float)
+    mag_limit = request.args.get("mag", type=float)  # backward compatibility
     limit = request.args.get("limit", type=int)
     include_planets = request.args.get("include_planets", default="false").lower() in ("1", "true", "yes")
+
+    if min_mag is None:
+        min_mag = 0.0
+    if max_mag is None:
+        max_mag = 20.0
+    if mag_limit is not None and mag_limit < max_mag:
+        max_mag = mag_limit
 
     _dt = None
     if dt_str:
@@ -106,15 +116,15 @@ def get_stars():
                 "type": "planet"
             })
 
-    # Build stars result, using DB-side filters if possible for fast initial loads
+    # Build stars result, using DB-side filters when possible
     def query_table_stars(table, limit_override: Optional[int] = None):
         stars_list = []
         try:
             col_map = table.__table__.c
             q = db.session.query(table)
             # Apply magnitude filter at DB level if column exists
-            if mag_limit is not None and 'V-Mag' in col_map:
-                q = q.filter(col_map['V-Mag'] <= mag_limit)
+            if 'V-Mag' in col_map:
+                q = q.filter(col_map['V-Mag'] >= min_mag, col_map['V-Mag'] <= max_mag)
             # Apply limit if provided
             eff_limit = limit_override if (limit_override is not None and limit_override > 0) else limit
             if eff_limit is not None and eff_limit > 0:
@@ -129,8 +139,8 @@ def get_stars():
                         magv = float(mag_val) if mag_val is not None else 30
                     except Exception:
                         magv = 30
-                    # If DB-side filter not possible, enforce client filter here
-                    if mag_limit is not None and ('V-Mag' not in table.__table__.c) and magv > mag_limit:
+                    # If DB-side filter not possible, enforce min/max in Python
+                    if 'V-Mag' not in col_map and (magv < min_mag or magv > max_mag):
                         continue
                     stars_list.append({
                         "name": getattr(star, 'Name', None),
@@ -155,7 +165,7 @@ def get_stars():
         subset = query_table_stars(table, limit_override=per_table_limit)
         all_stars.extend(subset)
 
-    # If we enforced per-table limits and have room left (due to small tables), top-up without limit
+    # Trim to limit if necessary
     if limit is not None and len(all_stars) > limit:
         all_stars = all_stars[:limit]
 
@@ -163,6 +173,47 @@ def get_stars():
         return jsonify(all_stars + planets)
     else:
         return jsonify(all_stars)
+
+@star_map_bp.route("/api/stars_meta")
+def get_stars_meta():
+    """
+    Return overall magnitude extremes across star tables.
+    Includes only objects with a 'V-Mag' column. Planets are excluded here (client will merge).
+    Response: {"minMag": float, "maxMag": float}
+    """
+    tables = [HDSTARtable, IndexTable, NGCtable]
+    overall_min = None
+    overall_max = None
+    for table in tables:
+        try:
+            col_map = table.__table__.c
+            if 'V-Mag' not in col_map:
+                continue
+            col = col_map['V-Mag']
+            mn, mx = db.session.query(func.min(col), func.max(col)).first()
+            # Normalize types
+            try:
+                if mn is not None:
+                    mn = float(mn)
+            except Exception:
+                mn = None
+            try:
+                if mx is not None:
+                    mx = float(mx)
+            except Exception:
+                mx = None
+            if mn is not None:
+                overall_min = mn if (overall_min is None or mn < overall_min) else overall_min
+            if mx is not None:
+                overall_max = mx if (overall_max is None or mx > overall_max) else overall_max
+        except Exception as e:
+            print(f"stars_meta aggregation failed for table {getattr(table, '__tablename__', 'unknown')}: {e}")
+
+    if overall_min is None:
+        overall_min = -2.0
+    if overall_max is None:
+        overall_max = 12.0
+    return jsonify({"minMag": overall_min, "maxMag": overall_max})
 
 @star_map_bp.route("/api/planets")
 def get_planets():

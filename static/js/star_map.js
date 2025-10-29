@@ -16,8 +16,51 @@ for (const obj of stars) {
 }
 
 // Set reasonable defaults if no valid magnitudes found
-if (minMag === Infinity) minMag = -2;
-if (maxMag === -Infinity) maxMag = 10;
+// Force default slider and fetch range to 0..20 as requested
+if (minMag === Infinity) minMag = 0;
+if (maxMag === -Infinity) maxMag = 20;
+
+// Track fetched magnitude coverage and de-duplication set for stars
+let fetchedMaxMag = 0;
+const starKeySet = new Set(); // keys by name or RA,DEC
+
+function starKey(obj) {
+    if (obj && obj.name) return `name:${obj.name}`;
+    if (obj && typeof obj.ra === 'number' && typeof obj.dec === 'number') return `pos:${obj.ra.toFixed(6)},${obj.dec.toFixed(6)}`;
+    return Math.random().toString(36).slice(2);
+}
+
+function updateMagSliderRange(minVal, maxVal) {
+    if (typeof minVal !== 'number' || typeof maxVal !== 'number') return;
+    if (!isFinite(minVal) || !isFinite(maxVal)) return;
+    // Ensure min < max
+    if (maxVal <= minVal) maxVal = minVal + 0.1;
+    magFilter.min = minVal.toFixed(1);
+    magFilter.max = maxVal.toFixed(1);
+    // Clamp current value
+    let current = parseFloat(magFilter.value);
+    if (isNaN(current)) current = Math.min(4.0, maxVal);
+    const clamped = Math.min(Math.max(current, minVal), maxVal);
+    if (Math.abs(clamped - current) > 1e-6) {
+        magFilter.value = clamped.toFixed(1);
+        magValue.textContent = clamped.toFixed(1);
+        rebuildVisibleStars(clamped);
+        draw();
+    }
+}
+
+function getPlanetsMagRange() {
+    if (!planetsList || planetsList.length === 0) return null;
+    let pmin = Infinity, pmax = -Infinity;
+    for (const p of planetsList) {
+        const m = (p && typeof p.mag === 'number') ? p.mag : null;
+        if (m == null || isNaN(m)) continue;
+        if (m < pmin) pmin = m;
+        if (m > pmax) pmax = m;
+    }
+    if (pmin === Infinity || pmax === -Infinity) return null;
+    return { min: pmin, max: pmax };
+}
 
 // UI elements
 const magFilter = document.getElementById('mag-filter');
@@ -1200,11 +1243,20 @@ function preloadPlanetImages() {
 // Fetch a small initial set of bright stars for fast first paint
 async function fetchInitialStars() {
     try {
-        const res = await fetch(`/api/stars?mag=4&limit=2000&include_planets=false`);
+    const res = await fetch(`/api/stars?minMag=0&maxMag=20&limit=2000&include_planets=false`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         // Merge into stars array in-place
-        for (const s of data) stars.push(s);
+        for (const s of data) {
+            const key = starKey(s);
+            if (starKeySet.has(key)) continue;
+            starKeySet.add(key);
+            stars.push(s);
+        }
+        // Update fetched max coverage
+        for (const s of data) {
+            if (s && typeof s.mag === 'number' && !isNaN(s.mag)) fetchedMaxMag = Math.max(fetchedMaxMag, s.mag);
+        }
         // Precompute in chunks and update visible list as we go
         precomputeStarsChunked(data, 1000, () => {
             // Ensure visibleStars is rebuilt with new arrivals
@@ -1219,9 +1271,44 @@ async function fetchInitialStars() {
     }
 }
 
+// Fetch more stars if user extends the magnitude beyond what we've fetched so far
+async function fetchMoreStarsIfNeeded(newMagLimit) {
+    if (!isFinite(newMagLimit)) return;
+    if (newMagLimit <= fetchedMaxMag + 1e-6) return; // already have up to this mag
+    try {
+    const capped = Math.min(newMagLimit, 20);
+    const res = await fetch(`/api/stars?minMag=0&maxMag=${encodeURIComponent(capped)}&limit=10000&include_planets=false`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const newlyAdded = [];
+        for (const s of data) {
+            const key = starKey(s);
+            if (starKeySet.has(key)) continue;
+            starKeySet.add(key);
+            stars.push(s);
+            newlyAdded.push(s);
+            if (s && typeof s.mag === 'number') fetchedMaxMag = Math.max(fetchedMaxMag, s.mag || 0);
+        }
+        if (newlyAdded.length > 0) {
+            precomputeStarsChunked(newlyAdded, 1000, () => {
+                const magLimit = parseFloat(magFilter.value);
+                rebuildVisibleStars(magLimit);
+            }, () => {
+                const magLimit = parseFloat(magFilter.value);
+                rebuildVisibleStars(magLimit);
+            });
+        }
+    } catch (e) {
+        console.error('Additional stars fetch failed:', e);
+    }
+}
+
 // UI event listeners
 magFilter.addEventListener('input', () => {
     magValue.textContent = magFilter.value;
+    // If user expands the magnitude beyond what we've fetched, fetch more
+    const newMagLimit = parseFloat(magFilter.value);
+    fetchMoreStarsIfNeeded(newMagLimit);
     draw();
 });
 latInput.addEventListener('change', draw);
@@ -1625,6 +1712,9 @@ window.addEventListener('DOMContentLoaded', () => {
     const starsPromise = fetchInitialStars();
 
     Promise.allSettled([planetsPromise, starsPromise]).then(() => {
+        // Force slider to 0..20 per user request and ensure UI reflects that range
+        updateMagSliderRange(0, 20);
+
         // Once planets are present, preload their icons, then draw
         preloadPlanetImages().then(() => {
             draw();
