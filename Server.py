@@ -202,20 +202,6 @@ def force_https():
         if host.startswith('127.0.0.1') or host.startswith('localhost'):
             return None
 
-        # If the host is an IP address (IPv4 or IPv6), do not redirect here.
-        # This avoids sending a 301 to https:// on a server that is not
-        # configured with TLS, which causes the client to start a TLS
-        # handshake to a plain HTTP server (the cause of the errors seen).
-        try:
-            import ipaddress
-            ipaddress.ip_address(host)
-            # It's a valid IP address; skip HTTPS enforcement for direct IP access
-            print(f"force_https: detected IP host={host}; skipping HTTPS redirect")
-            return None
-        except Exception:
-            # Not an IP address — fall through to enforce HTTPS
-            pass
-
         # Log the decision for diagnostics
         try:
             print(f"force_https: host={host}, secure={request.is_secure}, x-forwarded-proto={request.headers.get('X-Forwarded-Proto')}; redirecting to HTTPS")
