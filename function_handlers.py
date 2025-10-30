@@ -2,6 +2,7 @@ import time
 import requests
 import os
 import json
+from typing import Optional
 from cameraController import Camera # type: ignore
 
 CONFIG_FILE = "client_config.json"
@@ -17,6 +18,84 @@ except Exception:
     # If the config can't be read, continue with default
     pass
 LIVEVIEW_STATE_FILE = "liveview_state.json"
+
+# Reusable HTTP session for cookies and connection pooling
+SESSION = requests.Session()
+
+# Simple in-memory cache for CSRF token
+_CSRF_TOKEN: Optional[str] = None
+_CSRF_FETCH_TS: float = 0.0
+_CSRF_TTL_SECONDS = 10 * 60  # Refresh every 10 minutes
+
+def _extract_csrf_from_json(data: dict) -> Optional[str]:
+    """Try common keys to find a CSRF token in a JSON payload."""
+    # Common key names that servers might use
+    for key in (
+        "csrfToken",
+        "csrf_token",
+        "token",
+        "csrf",
+        "xsrfToken",
+        "XSRFToken",
+    ):
+        val = data.get(key)
+        if isinstance(val, str) and val:
+            return val
+    # Fallback: search any string value containing 'csrf' or 'xsrf'
+    for k, v in data.items():
+        if isinstance(v, str) and ("csrf" in k.lower() or "xsrf" in k.lower()):
+            return v
+    return None
+
+def get_csrf_token(force_refresh: bool = False) -> Optional[str]:
+    """
+    Fetch and cache a CSRF token from <SERVER_URL>/security/csrf-token.
+    Returns the token string if found, otherwise None. Uses a shared session so
+    any cookie-based associations are preserved.
+    """
+    global _CSRF_TOKEN, _CSRF_FETCH_TS
+
+    now = time.time()
+    # If we have a cached token and it's fresh, reuse it only if we still have cookies
+    if (
+        not force_refresh
+        and _CSRF_TOKEN
+        and (now - _CSRF_FETCH_TS) < _CSRF_TTL_SECONDS
+        and len(SESSION.cookies) > 0
+    ):
+        return _CSRF_TOKEN
+
+    endpoint = f"{SERVER_URL}/security/csrf-token"
+    try:
+        resp = SESSION.get(endpoint, timeout=10)
+        resp.raise_for_status()
+        token = None
+        # Try JSON first
+        try:
+            data = resp.json()
+            if isinstance(data, dict):
+                token = _extract_csrf_from_json(data)
+        except ValueError:
+            # Not JSON; try plain text
+            text = resp.text.strip()
+            if text:
+                token = text
+
+        if token:
+            _CSRF_TOKEN = token
+            _CSRF_FETCH_TS = now
+            try:
+                # Helpful for debugging cookie presence
+                print("[DEBUG] CSRF token obtained; session cookies:", SESSION.cookies.get_dict())
+            except Exception:
+                pass
+            return token
+        else:
+            print("[WARN] CSRF endpoint responded but no token was found in the payload.")
+            return None
+    except requests.RequestException as e:
+        print(f"[WARN] Failed to fetch CSRF token: {e}")
+        return None
 
 def load_liveview_state():
     """Load live view state from file"""
@@ -90,12 +169,55 @@ def capturePhoto(currentid):
     
     server_url = f"{SERVER_URL}/upload"
 
-    file_data = {f"file{index}": open(file, "rb") for index, file in enumerate(files)}
+    # Prepare file tuples with filenames and basic content-types
+    def _guess_mime(path: str) -> str:
+        ext = os.path.splitext(path)[1].lower().lstrip(".")
+        if ext in {"jpg", "jpeg"}:
+            return "image/jpeg"
+        if ext in {"png"}:
+            return "image/png"
+        if ext in {"gif"}:
+            return "image/gif"
+        if ext in {"bmp"}:
+            return "image/bmp"
+        if ext in {"tiff", "tif"}:
+            return "image/tiff"
+        if ext in {"webp"}:
+            return "image/webp"
+        # RAW/other
+        return "application/octet-stream"
+
+    file_data = {
+        f"file{index}": (os.path.basename(file), open(file, "rb"), _guess_mime(file))
+        for index, file in enumerate(files)
+    }
+
+    # Prepare headers, attach CSRF if available
+    headers = {}
+    data = None
+    token = get_csrf_token()
+    if token:
+        # Send both common header variations to be safe
+        headers["X-CSRF-Token"] = token
+        headers["X-CSRFToken"] = token
+        # Also include token as form field to support Flask-WTF style
+        data = {"csrf_token": token}
 
     try:
         print("[DEBUG] Sending files to server...")
-        response = requests.post(server_url, files=file_data)
-        print("[DEBUG] Server response:", response.json())
+        response = SESSION.post(
+            server_url,
+            files=file_data,
+            headers=headers,
+            data=data,
+            timeout=60,
+        )
+        # Try to print JSON if available, else status/text
+        try:
+            print("[DEBUG] Server response:", response.json())
+        except ValueError:
+            print(f"[DEBUG] Server response status={response.status_code}, body={response.text[:300]}")
+        response.raise_for_status()
     except requests.exceptions.RequestException as e:
         print(f"[ERROR] Failed to upload files: {e}")
     finally:

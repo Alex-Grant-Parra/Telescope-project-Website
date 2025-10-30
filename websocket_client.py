@@ -10,47 +10,51 @@ import os
 from datetime import datetime
 from function_handlers import function_map, is_liveview_enabled
 
-CLIENT_ID_FILE = "client_id.json"
-CONFIG_FILE = "client_config.json"
-SERVER_URI = "wss://ws.telescopes.dev"  # Command websocket
-LIVEVIEW_URI = "wss://liveview.telescopes.dev"  # Liveview websocket
-SERVER_HTTP_URL = "https://telescopes.dev"
-CLIENT_ID = "pi-001"
+# Configuration values are provided via `client_config.json` at runtime.
+# No hard-coded defaults are kept here.
 
-def load_config():
-    """Load client configuration including API token"""
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"[config] Error loading config: {e}")
-    
-    # Return default config
-    return {
-        "client_id": CLIENT_ID,
-        "server_uri": SERVER_URI,
-        "liveview_uri": LIVEVIEW_URI,
-        "server_http_url": SERVER_HTTP_URL,
-        "api_token": None
-    }
+# Module-level placeholders (populated from the config passed into websocketClient)
+CLIENT_ID = None
+SERVER_URI = None
+LIVEVIEW_URI = None
+SERVER_HTTP_URL = None
+
+def load_config(allow_missing: bool = False):
+    """Load client configuration from `client_config.json`.
+
+    If `allow_missing` is False (default) this will raise FileNotFoundError when
+    the config file does not exist. When `allow_missing` is True an empty dict
+    is returned to allow interactive setup to proceed.
+    """
+    config_path = "client_config.json"
+    if not os.path.exists(config_path):
+        if allow_missing:
+            return {}
+        raise FileNotFoundError(
+            f"Configuration file '{config_path}' not found. Run 'python websocket_client.py setup' to create it."
+        )
+
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        # Propagate the error to make failures explicit
+        raise
 
 def save_config(config):
     """Save client configuration"""
     try:
-        with open(CONFIG_FILE, 'w') as f:
+        with open("client_config.json", 'w') as f:
             json.dump(config, f, indent=2)
-        print(f"[config] Configuration saved to {CONFIG_FILE}")
+        print(f"[config] Configuration saved to client_config.json")
     except Exception as e:
         print(f"[config] Error saving config: {e}")
 
-# Load configuration
-config = load_config()
-CLIENT_ID = config.get("client_id", CLIENT_ID)
-SERVER_URI = config.get("server_uri", SERVER_URI)
-LIVEVIEW_URI = config.get("liveview_uri", LIVEVIEW_URI)
-SERVER_HTTP_URL = config.get("server_http_url", SERVER_HTTP_URL)
-API_TOKEN = config.get("api_token")
+# Note: configuration is now loaded at runtime inside `websocketClient()` so
+# that the `setup` command can create the config file when it doesn't exist.
+# There are no hard-coded defaults — the values must come from
+# `client_config.json`.
+API_TOKEN = None
 
 async def authenticate_with_server(ws):
     """Send authentication message to server"""
@@ -343,7 +347,8 @@ def setup_client_config():
     print("=== Telescope Client Configuration Setup ===")
     print()
     
-    current_config = load_config()
+    # Allow setup to run even if the config file doesn't exist yet
+    current_config = load_config(allow_missing=True)
     
     print(f"Current client ID: {current_config.get('client_id', 'Not set')}")
     new_client_id = input("Enter client ID (press Enter to keep current): ").strip()
@@ -364,19 +369,29 @@ def setup_client_config():
     print("\nConfiguration saved! You can now run the client.")
     return current_config
 
-async def websocketClient():
+async def websocketClient(cfg: dict = None):
     """Main async function that runs both WebSocket client and frame sender"""
     # Check if we need to run setup
     if len(sys.argv) > 1 and sys.argv[1] == "setup":
         setup_client_config()
         return
-    
-    # Check if API token is configured
-    if not API_TOKEN:
-        print("ERROR: No API token configured!")
-        print("Run 'python websocket_client.py setup' to configure the client.")
-        print("Or manually create client_config.json with your API token.")
-        return
+    # If no config was passed in, load it from disk (this errors if missing)
+    if cfg is None:
+        cfg = load_config()
+
+    # Ensure required keys are present in the config (no defaults)
+    required_keys = ["client_id", "server_uri", "liveview_uri", "server_http_url", "api_token"]
+    missing = [k for k in required_keys if k not in cfg]
+    if missing:
+        raise KeyError(f"Missing keys in client_config.json: {', '.join(missing)}. Run 'python websocket_client.py setup' to create or fix the config.")
+
+    # Export values to module-level globals used by other functions
+    global CLIENT_ID, SERVER_URI, LIVEVIEW_URI, SERVER_HTTP_URL, API_TOKEN
+    CLIENT_ID = cfg["client_id"]
+    SERVER_URI = cfg["server_uri"]
+    LIVEVIEW_URI = cfg["liveview_uri"]
+    SERVER_HTTP_URL = cfg["server_http_url"]
+    API_TOKEN = cfg["api_token"]
     
     # Set up signal handlers
     signal.signal(signal.SIGTERM, handle_exit)
