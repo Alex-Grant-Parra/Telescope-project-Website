@@ -34,6 +34,10 @@
         <td><a href="mailto:{{ m.email }}">{{ m.email }}</a></td>
         <td>
           <a href="{{ url_for('contact.admin_contact_detail', message_id=m.id) }}" class="btn btn-sm btn-outline-primary">Open</a>
+          <form method="post" action="{{ url_for('contact.admin_contact_delete', message_id=m.id) }}" class="d-inline" onsubmit="return confirm('Delete ticket #{{ m.id }} permanently? This cannot be undone.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+          </form>
         </td>
       </tr>
       {% else %}

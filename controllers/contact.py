@@ -271,6 +271,43 @@ def admin_contact_detail(message_id):
     return render_template('admin_contact_detail.html', msg=msg, entries=entries)
 
 
+@contact_bp.route('/admin/contact/<int:message_id>/delete', methods=['POST'])
+@login_required
+def admin_contact_delete(message_id):
+    """Admin-only hard delete of a support ticket and its conversation entries."""
+    if not getattr(current_user, 'is_admin', False):
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('home.home'))
+
+    msg = ContactMessage.query.get_or_404(message_id)
+
+    # Best-effort cleanup of attachment on disk
+    try:
+        if msg.file_path and os.path.exists(msg.file_path):
+            # Remove the file
+            os.remove(msg.file_path)
+            # Attempt to remove the timestamp folder if empty
+            parent_dir = os.path.dirname(msg.file_path)
+            try:
+                if parent_dir and os.path.isdir(parent_dir) and not os.listdir(parent_dir):
+                    os.rmdir(parent_dir)
+            except Exception:
+                pass
+    except Exception:
+        # Non-fatal; continue with DB delete
+        pass
+
+    try:
+        db.session.delete(msg)
+        db.session.commit()
+        flash(f'Ticket #{message_id} deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Failed to delete ticket: {e}', 'danger')
+
+    return redirect(url_for('contact.admin_contact_list'))
+
+
 @contact_bp.route('/support/tickets/<int:message_id>', methods=['GET', 'POST'])
 @login_required
 def support_ticket_detail(message_id):
