@@ -1,4 +1,5 @@
 import os
+import re
 from flask import Blueprint, render_template, request, send_file, jsonify, abort
 from werkzeug.utils import secure_filename
 import zipfile
@@ -25,16 +26,35 @@ def get_jpeg_files():
     files = []
     for fname in os.listdir(user_dir):
         if fname.lower().endswith(".jpg") or fname.lower().endswith(".jpeg"):
-            # Extract date from filename (assume format: photoYYYYMMDDHHMMSS.jpg)
+            # Extract date from filename supporting both formats:
+            # 1) photo_YYYYMMDD_HHMMSS.jpg (current)
+            # 2) photoYYYYMMDDHHMMSS.jpg   (legacy)
+            date = None
+            display_str = "Unknown"
             try:
-                date_part = fname.lstrip("photo").split(".")[0]  # Remove "photo" and take numeric part
-                date_str = date_part[:8]  # First 8 digits represent YYYYMMDD
-                date = datetime.strptime(date_str, "%Y%m%d")
+                name_no_ext = os.path.splitext(fname)[0]
+                # Try current format first
+                m = re.match(r"^photo_(\d{8})_(\d{6})$", name_no_ext)
+                if m:
+                    ymd, hms = m.groups()
+                    date = datetime.strptime(ymd + hms, "%Y%m%d%H%M%S")
+                else:
+                    # Try legacy format (time optional)
+                    m2 = re.match(r"^photo(\d{8})(\d{6})?$", name_no_ext)
+                    if m2:
+                        ymd, hms = m2.groups()
+                        if hms:
+                            date = datetime.strptime(ymd + hms, "%Y%m%d%H%M%S")
+                        else:
+                            date = datetime.strptime(ymd, "%Y%m%d")
+                if date:
+                    display_str = date.strftime("%Y-%m-%d %H:%M:%S")
             except Exception:
                 date = None
+                display_str = "Unknown"
             files.append({
                 "name": fname,
-                "date": date_str if date else "Unknown",
+                "date": display_str,
                 "datetime": date.timestamp() if date else 0,
                 "url": f"/album/photo/{fname}"
             })
