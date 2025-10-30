@@ -45,6 +45,36 @@
             background: #444; color: #fff; border-radius: 3px; cursor: pointer;
         }
         #mag-context-menu button:hover { background: #555; }
+
+        /* Bottom-right star loading throbber */
+        #star-loading-indicator {
+            position: fixed;
+            right: 12px;
+            bottom: 12px;
+            z-index: 1001;
+            display: none; /* shown via JS when fetching/processing stars */
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            border-radius: 6px;
+            font-family: sans-serif;
+            font-size: 0.95em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px);
+        }
+        .star-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.25);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -132,9 +162,29 @@
         <button id="mag-cancel">Cancel</button>
     </div>
 </div>
+<!-- Small bottom-right throbber for star loading/processing -->
+<div id="star-loading-indicator" aria-live="polite" aria-atomic="true">
+    <div class="star-spinner" role="status" aria-hidden="true"></div>
+    <div>Loading stars…</div>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+</div>
 <script type="application/json" id="stars-data">[]</script>
 <script src="{{ url_for('static', filename='js/csrf-protection.js') }}" defer></script>
 <!-- Cache-busting query param to ensure latest JS is fetched -->
-<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-27-1" defer></script>
+<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-30-2" defer></script>
 </body>
 </html>

@@ -82,6 +82,21 @@ const helpBtn = document.getElementById('help-btn');
 const helpModal = document.getElementById('help-modal');
 const closeHelp = document.getElementById('close-help');
 const loading = document.getElementById('loading');
+// Small bottom-right throbber for star loading/processing
+const starLoadingIndicator = document.getElementById('star-loading-indicator');
+let starLoadingCounter = 0;
+function starLoadingBegin() {
+    starLoadingCounter++;
+    if (starLoadingIndicator && starLoadingCounter > 0) {
+        starLoadingIndicator.style.display = 'flex';
+    }
+}
+function starLoadingEnd() {
+    starLoadingCounter = Math.max(0, starLoadingCounter - 1);
+    if (starLoadingIndicator && starLoadingCounter === 0) {
+        starLoadingIndicator.style.display = 'none';
+    }
+}
 // Debug orientation toggle
 const flipVerticalCheckbox = document.getElementById('flip-vertical');
 
@@ -1240,11 +1255,13 @@ function preloadPlanetImages() {
     });
 }
 
-// Fetch a small initial set of bright stars for fast first paint
+// Fetch a small initial set of very bright stars for fastest first paint
 async function fetchInitialStars() {
     try {
-    // Fetch all bright stars first (up to mag 6) with negatives included, no limit to avoid missing famous stars
-    const res = await fetch(`/api/stars?minMag=-2&maxMag=6&include_planets=false`);
+    // First load only the very bright stars (mag <= 4), include negatives for very bright objects
+    // No limit here to avoid missing prominent catalog entries
+    starLoadingBegin();
+    const res = await fetch(`/api/stars?minMag=-2&maxMag=4&include_planets=false`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         // Merge into stars array in-place
@@ -1259,26 +1276,47 @@ async function fetchInitialStars() {
             if (s && typeof s.mag === 'number' && !isNaN(s.mag)) fetchedMaxMag = Math.max(fetchedMaxMag, s.mag);
         }
         // Precompute in chunks and update visible list as we go
-        precomputeStarsChunked(data, 1000, () => {
-            // Ensure visibleStars is rebuilt with new arrivals
-            const magLimit = parseFloat(magFilter.value);
-            rebuildVisibleStars(magLimit);
-        }, () => {
-            const magLimit = parseFloat(magFilter.value);
-            rebuildVisibleStars(magLimit);
-        });
+        if (data && data.length > 0) {
+            precomputeStarsChunked(data, 1000, () => {
+                // Ensure visibleStars is rebuilt with new arrivals
+                const magLimit = parseFloat(magFilter.value);
+                rebuildVisibleStars(magLimit);
+            }, () => {
+                const magLimit = parseFloat(magFilter.value);
+                rebuildVisibleStars(magLimit);
+                starLoadingEnd();
+            });
+        } else {
+            // nothing to precompute
+            starLoadingEnd();
+        }
     } catch (e) {
         console.error('Initial stars fetch failed:', e);
+        starLoadingEnd();
     }
 }
 
 // Fetch more stars if user extends the magnitude beyond what we've fetched so far
-async function fetchMoreStarsIfNeeded(newMagLimit) {
+// Options: { limit?: number|null } — pass null or undefined for no limit
+async function fetchMoreStarsIfNeeded(newMagLimit, options = {}) {
     if (!isFinite(newMagLimit)) return;
     if (newMagLimit <= fetchedMaxMag + 1e-6) return; // already have up to this mag
     try {
     const capped = Math.min(newMagLimit, 20);
-    const res = await fetch(`/api/stars?minMag=-2&maxMag=${encodeURIComponent(capped)}&limit=10000&include_planets=false`);
+    const url = new URL(`/api/stars`, window.location.origin);
+    url.searchParams.set('minMag', '-2');
+    url.searchParams.set('maxMag', String(capped));
+    url.searchParams.set('include_planets', 'false');
+    if (options && Object.prototype.hasOwnProperty.call(options, 'limit')) {
+        const lim = options.limit;
+        if (lim !== null && lim !== undefined) url.searchParams.set('limit', String(lim));
+        // if null/undefined, omit limit to get all up to maxMag
+    } else {
+        // default safety cap
+        url.searchParams.set('limit', '10000');
+    }
+    starLoadingBegin();
+    const res = await fetch(url.toString());
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const newlyAdded = [];
@@ -1297,10 +1335,31 @@ async function fetchMoreStarsIfNeeded(newMagLimit) {
             }, () => {
                 const magLimit = parseFloat(magFilter.value);
                 rebuildVisibleStars(magLimit);
+                starLoadingEnd();
             });
+        } else {
+            // nothing to precompute; end loading now
+            starLoadingEnd();
         }
     } catch (e) {
         console.error('Additional stars fetch failed:', e);
+        starLoadingEnd();
+    }
+}
+
+// After the scene draws the first time, progressively prefetch more stars (<=8, then <=20)
+async function stagedPrefetchAfterFirstDraw() {
+    try {
+        // Yield to the browser to ensure the initial scene is painted
+        await new Promise(requestAnimationFrame);
+        // Prefetch to magnitude 8 (keep a reasonable cap to avoid huge burst)
+        await fetchMoreStarsIfNeeded(8, { limit: 30000 });
+        // Yield again to keep UI responsive
+        await new Promise(resolve => setTimeout(resolve, 50));
+        // Prefetch to magnitude 20 (no explicit limit: let backend stream all; may still be constrained by DB)
+        await fetchMoreStarsIfNeeded(20, { limit: null });
+    } catch (e) {
+        console.warn('Staged prefetch encountered an issue:', e);
     }
 }
 
@@ -1720,6 +1779,8 @@ window.addEventListener('DOMContentLoaded', () => {
         preloadPlanetImages().then(() => {
             draw();
             setTimeout(hideLoading, 200);
+            // Begin background staged prefetch so data is ready before user requests it
+            stagedPrefetchAfterFirstDraw();
             // Start animation loop for search highlighting
             function animate() {
                 if (searchedObject) {
