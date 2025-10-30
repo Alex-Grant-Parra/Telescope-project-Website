@@ -150,6 +150,39 @@ register_security_error_handlers(app)
 
 print("Security middleware initialized - IP blacklist active")
 
+# Log CSRF failures with useful diagnostics for headless clients
+try:
+    from flask_wtf.csrf import CSRFError
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        try:
+            details = {
+                "path": request.path,
+                "method": request.method,
+                "origin": request.headers.get('Origin'),
+                "referer": request.headers.get('Referer'),
+                "content_type": request.headers.get('Content-Type'),
+                "has_csrf_header": bool(request.headers.get('X-CSRFToken') or request.headers.get('X-CSRF-Token')),
+                "cookies": list(request.cookies.keys()),
+            }
+            print(f"[CSRF ERROR] {e.description} :: {details}")
+        except Exception as log_e:
+            print(f"[CSRF ERROR] {e.description} (failed to log details: {log_e})")
+
+        # Prefer JSON response for API-like requests
+        wants_json = 'application/json' in (request.headers.get('Accept') or '') or request.path.startswith('/upload')
+        if wants_json:
+            return jsonify({
+                "status": "error",
+                "message": "CSRF validation failed",
+                "detail": e.description
+            }), 400
+        # Fallback: simple text
+        return ("CSRF validation failed", 400, {"Content-Type": "text/plain"})
+except Exception as e:
+    print(f"Failed to register CSRF error handler: {e}")
+
 # HTTPS Enforcement Middleware
 @app.before_request
 def force_https():
@@ -210,6 +243,37 @@ register_blueprints()
 from models.user import user_bp
 app.register_blueprint(user_bp)
 print(f"Registered Blueprint: {user_bp.name}")
+
+# CSRF configuration for API/headless clients
+app.config['WTF_CSRF_TIME_LIMIT'] = int(os.getenv('WTF_CSRF_TIME_LIMIT', '3600'))  # 1 hour default
+app.config['WTF_CSRF_HEADERS'] = ['X-CSRFToken', 'X-CSRF-Token']
+
+try:
+    from flask_wtf.csrf import generate_csrf
+
+    @app.route('/security/csrf-token', methods=['GET'])
+    def get_csrf_token():
+        """Issue a CSRF token for headless/API clients.
+
+        Client flow:
+        1) GET /security/csrf-token -> receive JSON {csrfToken} and session cookie
+        2) POST to protected endpoint with:
+           - Cookies from step 1
+           - Header 'X-CSRFToken': csrfToken
+        """
+        token = generate_csrf()
+        resp = jsonify({"csrfToken": token})
+        # Double-submit cookie pattern: mirror token in a readable cookie for diagnostics/tools
+        resp.set_cookie(
+            'csrf_token', token,
+            secure=request.is_secure,
+            httponly=False,
+            samesite='Lax',
+            path='/'
+        )
+        return resp
+except Exception as e:
+    print(f"CSRF token endpoint not available: {e}")
 
 # Debugging - Print all registered routes
 print("\nRegistered Routes:")

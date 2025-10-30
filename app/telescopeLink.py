@@ -3,6 +3,8 @@ import ujson
 import asyncio
 import websockets
 import subprocess
+import os
+from flask import session, has_request_context
 from app.WebsocketServer import clients
 from time import sleep
 from PIL import Image
@@ -26,8 +28,6 @@ url = f"https://telescopes.dev/sendCommand" # Url for sending flask server comma
 #     else:
 #         print("No clients to update with")
 
-client_id = "pi-001"
-
 def load_api_token():
     """Load API token from api_tokens.json file"""
     try:
@@ -47,8 +47,24 @@ class Cameralink:
 
     @staticmethod
     def _effective_client_id(provided_id=None):
-        """Return provided client_id if given, else fall back to module default."""
-        return provided_id or client_id
+        """Resolve the client_id to use for commands.
+
+        Priority:
+        1) Explicit provided_id argument
+        2) Telescope selected in the web interface (from Flask session)
+        """
+        if provided_id:
+            return provided_id
+        try:
+            if has_request_context():
+                selected = session.get('selected_telescope') or {}
+                sel_id = (selected or {}).get('telescopeId')
+                if sel_id:
+                    return sel_id
+        except Exception:
+            # If session is unavailable for any reason, fall back to default
+            pass
+        return None
 
     # @staticmethod
     def getSettings(client_id_override=None):
