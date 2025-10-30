@@ -29,6 +29,209 @@ html, body {
     flex: 1; /* Pushes footer down when content is short */
 }
 
+/* Profile dropdown styling */
+.dropdown-menu {
+    border: none;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    border-radius: 0.5rem;
+    min-width: 200px;
+    background-color: white;
+    position: absolute;
+    z-index: 1000;
+    top: 100%;
+    left: auto;
+    right: 0;
+    margin-top: 0.25rem;
+}
+
+.dropdown-item {
+    transition: all 0.2s ease;
+    border-radius: 0.25rem;
+    margin: 0.1rem 0.5rem;
+    padding: 0.5rem 0.75rem;
+    color: #212529;
+    text-decoration: none;
+    display: block;
+    clear: both;
+    font-weight: 400;
+    line-height: 1.5;
+    white-space: nowrap;
+    background-color: transparent;
+    border: 0;
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+    background-color: #f8f9fa;
+    transform: translateX(2px);
+    color: #1e2125;
+}
+
+.dropdown-item.text-danger:hover {
+    background-color: #f8d7da;
+    color: #721c24 !important;
+}
+
+.dropdown-item.text-warning:hover {
+    background-color: #fff3cd;
+    color: #856404 !important;
+}
+
+/* Badge styling in dropdown */
+.dropdown-item .badge {
+    font-size: 0.7em;
+}
+
+/* Ensure dropdown toggle works */
+.navbar-nav .dropdown-toggle {
+    cursor: pointer !important;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+.navbar-nav .dropdown-toggle::after {
+    margin-left: 0.5em;
+    display: inline-block;
+    width: 0;
+    height: 0;
+    vertical-align: middle;
+    content: "";
+    border-top: 0.3em solid;
+    border-right: 0.3em solid transparent;
+    border-bottom: 0;
+    border-left: 0.3em solid transparent;
+}
+
+/* Dropdown show/hide functionality */
+.dropdown-menu {
+    display: none !important;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.dropdown-menu.show {
+    display: block !important;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Force positioning */
+.dropdown {
+    position: relative;
+}
+
+/* Dropdown divider */
+.dropdown-divider {
+    height: 0;
+    margin: 0.5rem 0;
+    overflow: hidden;
+    border-top: 1px solid #dee2e6;
+}
+
+/* Ensure navbar dropdown works */
+.navbar-nav .dropdown {
+    position: relative;
+}
+
+.navbar-nav .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: auto;
+}
+
+/* Mobile responsive dropdown */
+@media (max-width: 768px) {
+    .dropdown-menu {
+        position: static !important;
+        transform: none !important;
+        width: 100%;
+        box-shadow: none;
+        border: 1px solid #dee2e6;
+        margin-top: 0.5rem;
+        right: auto;
+        left: auto;
+    }
+    
+    .navbar-nav .dropdown-menu {
+        position: static !important;
+    }
+}
+
+/* Night mode dropdown styling */
+.night-mode .dropdown-menu {
+    background-color: #2d3748 !important;
+    border: 1px solid #4a5568 !important;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.3) !important;
+}
+
+.night-mode .dropdown-item {
+    color: #e2e8f0 !important;
+    background-color: transparent !important;
+}
+
+.night-mode .dropdown-item:hover,
+.night-mode .dropdown-item:focus {
+    background-color: #4a5568 !important;
+    color: #f7fafc !important;
+}
+
+.night-mode .dropdown-item.text-danger {
+    color: #fc8181 !important;
+}
+
+.night-mode .dropdown-item.text-danger:hover {
+    background-color: #742a2a !important;
+    color: #fed7d7 !important;
+}
+
+.night-mode .dropdown-item.text-warning {
+    color: #f6e05e !important;
+}
+
+.night-mode .dropdown-item.text-warning:hover {
+    background-color: #744210 !important;
+    color: #fefcbf !important;
+}
+
+.night-mode .dropdown-divider {
+    border-top-color: #4a5568 !important;
+}
+
+/* Night mode badge colors in dropdown */
+.night-mode .dropdown-item .badge.bg-success {
+    background-color: #38a169 !important;
+    color: #f0fff4 !important;
+}
+
+/* Ensure icons are visible in night mode */
+.night-mode .dropdown-item i {
+    color: inherit !important;
+}
+
+/* Night mode mobile dropdown */
+@media (max-width: 768px) {
+    .night-mode .dropdown-menu {
+        border-color: #4a5568 !important;
+        background-color: #2d3748 !important;
+    }
+}
+
+/* Profile cards */
+.card {
+    transition: all 0.3s ease;
+    border: none;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
 .footer {
     width: 100%;
     background: #343a40; /* Dark Bootstrap background */
@@ -53,6 +256,339 @@ body {
     color: #f8f9fa;
 }
 
+/* Make night mode almost fully black for a SpaceX-like look */
+body.night-mode {
+    background-color: #000 !important;
+    color: #e6e6e6;
+}
+
+body.night-mode .navbar,
+body.night-mode .footer,
+body.night-mode .panel-header,
+body.night-mode .draggable-panel {
+    background-color: #111a2a !important;
+    color: #ffb !important;
+    border-color: #233 !important;
+}
+
+body.night-mode .btn,
+body.night-mode .form-control,
+body.night-mode .form-select {
+    background-color: #0b0b0b !important;
+    color: #e6e6e6 !important;
+    border-color: #111 !important;
+}
+
+/* Global: improve placeholder contrast across the app (applies to inputs and textareas) */
+::-webkit-input-placeholder { /* Chrome/Opera/Safari */
+    color: rgba(230,230,230,0.65);
+}
+::-moz-placeholder { /* Firefox 19+ */
+    color: rgba(230,230,230,0.65);
+    opacity: 1;
+}
+:-ms-input-placeholder { /* IE 10+ */
+    color: rgba(230,230,230,0.65);
+}
+::-ms-input-placeholder { /* Microsoft Edge Legacy */
+    color: rgba(230,230,230,0.65);
+}
+::placeholder { /* Standard */
+    color: rgba(230,230,230,0.65);
+}
+
+/* Improve placeholder contrast in dark mode */
+body.night-mode ::-webkit-input-placeholder { /* Chrome/Opera/Safari */
+    color: rgba(230,230,230,0.65) !important;
+}
+body.night-mode ::-moz-placeholder { /* Firefox 19+ */
+    color: rgba(230,230,230,0.65) !important;
+    opacity: 1;
+}
+body.night-mode :-ms-input-placeholder { /* IE 10+ */
+    color: rgba(230,230,230,0.65) !important;
+}
+body.night-mode ::-ms-input-placeholder { /* Microsoft Edge */
+    color: rgba(230,230,230,0.65) !important;
+}
+body.night-mode ::placeholder { /* Standard */
+    color: rgba(230,230,230,0.65) !important;
+}
+
+body.night-mode .btn-outline-light {
+    color: #ffb !important;
+    border-color: #ffb !important;
+}
+
+body.night-mode .btn-outline-light:hover {
+    background-color: #233 !important;
+    color: #fff !important;
+}
+
+body.night-mode a,
+body.night-mode a.text-white {
+    color: #e6e6e6 !important;
+}
+
+/* Make links inside tables inherit surrounding text color so things like
+    mailto: links in admin tables remain readable. Do this for both normal
+    and night modes, but DO NOT override Bootstrap button links (which use
+    .btn) so the 'Open' buttons keep their visible button styling. */
+table a:not(.btn),
+table a:link:not(.btn),
+table a:visited:not(.btn),
+.table a:not(.btn),
+.table a:link:not(.btn),
+.table a:visited:not(.btn) {
+    color: inherit !important;
+    text-decoration: underline; /* keep them clearly links while matching color */
+}
+/* Keep hover/focus consistent too */
+table a:not(.btn):hover,
+table a:not(.btn):focus,
+.table a:not(.btn):hover,
+.table a:not(.btn):focus {
+    color: inherit !important;
+    text-decoration: underline; /* maintain underline on interaction */
+}
+
+/* Night-mode specific table link selector kept for clarity/compat, but the
+    general rules above already ensure correct behavior in night-mode too. */
+body.night-mode table a:not(.btn),
+body.night-mode table a:link:not(.btn),
+body.night-mode table a:visited:not(.btn),
+.night-mode .table a:not(.btn),
+.night-mode .table a:link:not(.btn),
+.night-mode .table a:visited:not(.btn) {
+    color: inherit !important;
+    text-decoration: underline; /* keep them clearly links while matching color */
+}
+body.night-mode table a:not(.btn):hover,
+body.night-mode table a:not(.btn):focus,
+.night-mode .table a:not(.btn):hover,
+.night-mode .table a:not(.btn):focus {
+    color: inherit !important;
+    text-decoration: underline; /* maintain underline on interaction */
+}
+
+/* --- Video hero / stacked videos (SpaceX-like) --- */
+.video-hero {
+    position: relative;
+    overflow: hidden;
+    padding: 0;
+    /* enable scroll snapping container */
+    scroll-snap-type: y mandatory;
+}
+
+/* Make the hero full-bleed even when it's rendered inside a centered .container
+   by expanding to the viewport width and recentring. This avoids editing base.html. */
+.video-hero {
+    box-sizing: border-box;
+    width: 100vw;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-left: 0;
+    margin-right: 0;
+    z-index: 0;
+}
+
+.video-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.video-section,
+.video-item {
+    position: relative;
+    width: 100%;
+    /* will be overwritten by video-section to fill viewport */
+    overflow: hidden;
+}
+
+/* Allow sections to fill viewport under the navbar. If your navbar height differs, adjust --nav-height */
+:root { --nav-height: 56px; }
+
+.video-section {
+    height: calc(100vh - var(--nav-height));
+    min-height: 420px;
+    scroll-snap-align: start;
+}
+
+.hero-video {
+    position: absolute;
+    inset: 0; /* top:0; right:0; bottom:0; left:0 */
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: none;
+    filter: brightness(0.75) contrast(1.03);
+    transition: transform 0.6s ease, filter 0.4s ease;
+}
+
+/* Per-video scale tweaks to even out perceived sizes */
+/* Slightly reduce Jupiter and CrabNebula which appear oversized */
+.hero-video.jupiter-video { transform: scale(0.92); }
+.video-item.small .hero-video { transform: scale(0.90); }
+.video-item.milky .hero-video { transform: scale(1.00); }
+
+/* Ensure scaling anchors from center */
+.hero-video { transform-origin: center center; }
+
+.section-overlay,
+.hero-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* allow clicks to pass through unless on buttons */
+}
+
+.section-overlay .overlay-content,
+.hero-inner {
+    position: absolute; /* absolute so it can sit over the right-middle */
+    right: 6vw;
+    top: 50%;
+    transform: translateY(-50%);
+    max-width: 520px;
+    margin: 0;
+    text-align: left;
+    padding: 2rem 1.25rem;
+    pointer-events: auto; /* allow interactions with buttons/links */
+    background: linear-gradient(90deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.55) 30%, rgba(0,0,0,0.85) 100%);
+    border-radius: 8px;
+}
+
+.hero-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 8px 30px rgba(0,0,0,0.7);
+}
+
+.hero-desc {
+    font-size: 1.125rem;
+    color: rgba(255,255,255,0.9);
+    margin-bottom: 1rem;
+}
+
+.hero-inner .btn {
+    pointer-events: auto;
+}
+
+/* Slight dark gradient between stacked videos so the text remains readable */
+.video-item::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.18), rgba(0,0,0,0.45));
+    pointer-events: none;
+}
+
+/* Per-video size tweaks */
+.video-item.milky {
+    height: 75vh;
+    min-height: 360px;
+}
+.video-item.small {
+    height: 40vh;
+}
+.hero-video.jupiter-video {
+    /* slightly zoom-in for jupiter to keep subject visible */
+    height: 120%;
+}
+
+/* Ensure hero videos fill their section containers */
+.video-section .hero-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Quarter-sized videos: center and make them occupy approx 25% area (50% both dimensions) */
+.hero-video.quarter {
+    position: absolute;
+    width: 50%;
+    height: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) !important;
+    object-fit: cover;
+    border-radius: 6px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+}
+
+/* Slightly dim background behind quarter videos for contrast */
+.video-section#section-album::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.15);
+    pointer-events: none;
+}
+
+/* Persistent fade for the Jupiter section: a bottom-to-black gradient that covers
+   the lower portion of the section so the planet blends into the page background */
+.video-section#section-starmap {
+    position: relative;
+    /* allow the fade pseudo-elements to extend beyond the section bounds */
+    overflow: visible;
+    /* raise stacking so fades overlay neighboring sections */
+    z-index: 10;
+}
+
+/* Bottom fade that extends beyond the section into the next one */
+.video-section#section-starmap::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -20vh; /* extend 20vh into the next section */
+    height: 20vh; /* size of the extension */
+    /* flip: black at the top (touching Jupiter) -> transparent downward into the next section */
+    background: linear-gradient(to bottom, rgba(0,0,0,1), rgba(0,0,0,0));
+    pointer-events: none;
+    z-index: 11;
+}
+
+/* Top fade that extends above into the previous section */
+.video-section#section-starmap::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -20vh; /* extend 20vh into the previous section */
+    height: 20vh;
+    /* flip: black at the bottom (touching Jupiter) -> transparent upward into the previous section */
+    background: linear-gradient(to top, rgba(0,0,0,1), rgba(0,0,0,0));
+    pointer-events: none;
+    z-index: 11;
+}
+
+/* Ensure the video itself is behind the fade and overlay content is above */
+.video-section#section-starmap .hero-video { z-index: 0; }
+.video-section#section-starmap .section-overlay { z-index: 3; }
+
+/* Stronger, per-video mask to fade the bottom of the Jupiter video into black
+   across its entire visible area. Uses CSS mask for a consistent result. */
+.video-section#section-starmap {
+    background: #000; /* ensure the section behind the fades is black */
+}
+
+/* Make sure videos stack compactly on small screens */
+@media (max-width: 768px) {
+    .video-item { height: 45vh; }
+    .hero-title { font-size: 1.6rem; }
+    .hero-inner { top: 12vh; padding: 1.25rem; }
+}
+
+@media (max-width: 480px) {
+    .video-item { height: 35vh; }
+    .hero-title { font-size: 1.25rem; }
+}
+
+
 .navbar-brand {
     font-weight: bold;
     letter-spacing: 1px;
@@ -65,4 +601,140 @@ body {
 .star-map-canvas {
     border-radius: 12px;
     box-shadow: 0 0 16px #000a;
+}
+
+body.night-mode .star-map-canvas {
+    box-shadow: 0 0 16px #162040aa;
+}
+
+.nightmode-icon {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    position: relative;
+    vertical-align: middle;
+    transition: transform 0.5s cubic-bezier(.4,2,.6,1);
+}
+
+.sun {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    transition: opacity 0.5s;
+}
+
+.sun-core {
+    width: 14px;
+    height: 14px;
+    background: #ffe066;
+    border-radius: 50%;
+    box-shadow: 0 0 8px 2px #ffe06699;
+    position: absolute;
+    left: 7px; top: 7px;
+    z-index: 2;
+}
+.sun-ray {
+    position: absolute;
+    width: 4px; height: 14px;
+    background: #ffe066;
+    border-radius: 2px;
+    left: 12px; top: 0;
+    transform-origin: 2px 12px;
+    opacity: 0.7;
+    animation: sunray-spin 2s linear infinite;
+}
+.sun-ray.ray1 { transform: rotate(0deg); animation-delay: 0s; }
+.sun-ray.ray2 { transform: rotate(90deg); animation-delay: 0.5s; }
+.sun-ray.ray3 { transform: rotate(45deg); animation-delay: 1s; }
+.sun-ray.ray4 { transform: rotate(-45deg); animation-delay: 1.5s; }
+
+@keyframes sunray-spin {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
+}
+
+.moon-stars {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.5s;
+}
+.moon {
+    width: 16px;
+    height: 16px;
+    background: #e0eaff;
+    border-radius: 50%;
+    position: absolute;
+    left: 6px; top: 6px;
+    box-shadow: -4px 0 0 0 #0a1020;
+}
+.star {
+    position: absolute;
+    width: 3px; height: 3px;
+    background: #fffbe6;
+    border-radius: 50%;
+    opacity: 0.7;
+    animation: star-twinkle 2s infinite;
+}
+.star1 { left: 3px; top: 5px; animation-delay: 0s; }
+.star2 { left: 18px; top: 8px; animation-delay: 1s; }
+.star3 { left: 12px; top: 2px; animation-delay: 1.5s; }
+
+@keyframes star-twinkle {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+body.night-mode .sun {
+    opacity: 0;
+}
+body.night-mode .moon-stars {
+    opacity: 1;
+}
+body.night-mode .nightmode-icon {
+    transform: rotateY(180deg);
+}
+
+.grin-face {
+    position: absolute;
+    left: 4px; top: 4px;
+    width: 20px; height: 20px;
+    background: #222;
+    border-radius: 50%;
+    border: 2px solid #ffe066;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    box-shadow: 0 0 8px 2px #ffe06699;
+    transition: background 0.3s;
+}
+.grin-eyes {
+    position: absolute;
+    top: 7px; left: 5px;
+    width: 10px; height: 4px;
+    display: flex;
+    justify-content: space-between;
+}
+.grin-eyes::before, .grin-eyes::after {
+    content: '';
+    display: block;
+    width: 3px; height: 3px;
+    background: #fff;
+    border-radius: 50%;
+}
+.grin-mouth {
+    position: absolute;
+    left: 5px; top: 13px;
+    width: 10px; height: 5px;
+    border-bottom: 2px solid #fff;
+    border-radius: 0 0 10px 10px;
 }

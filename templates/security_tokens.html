@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}API Tokens - Security{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>API Tokens</h2>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} mt-2">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="post" action="{{ url_for('admin.admin_generate_token') }}" class="row g-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <div class="col-sm-5">
+                    <input name="name" class="form-control" placeholder="Client name" />
+                </div>
+                <div class="col-sm-3">
+                    <select name="client_type" class="form-select">
+                        <option value="observer">Observer</option>
+                        <option value="telescope">Telescope</option>
+                    </select>
+                </div>
+                <div class="col-sm-2">
+                    <button class="btn btn-primary">Generate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-dark text-white">Existing Tokens</div>
+        <div class="card-body">
+            {% if tokens %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr><th>Token</th><th>Name</th><th>Type</th><th>Created</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for t in tokens %}
+                            <tr>
+                                <td>
+                                    <code id="token-{{ loop.index }}">{{ t.truncated }}</code>
+                                    <button class="btn btn-sm btn-outline-secondary ms-2" data-token-id="{{ t.id }}" data-index="{{ loop.index }}" onclick="showToken(this)">Show Full</button>
+                                </td>
+                                <td>{{ t.name }}</td>
+                                <td>{{ t.client_type }}</td>
+                                <td>{{ t.created }}</td>
+                                <td>
+                                    <form method="post" action="{{ url_for('admin.admin_revoke_token') }}" style="display:inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                        <input type="hidden" name="token" value="{{ t.id }}" />
+                                        <button class="btn btn-sm btn-outline-danger">Revoke</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <p class="text-muted">No tokens found.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function showToken(button) {
+    const tokenId = button.getAttribute('data-token-id');
+    const index = button.getAttribute('data-index');
+    
+    fetch('/admin/security/tokens/show', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({token_id: tokenId})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.token) {
+            document.getElementById('token-' + index).innerHTML = data.token;
+            button.style.display = 'none'; // Hide the button after showing token
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to show token');
+    });
+}
+</script>
+{% endblock %}

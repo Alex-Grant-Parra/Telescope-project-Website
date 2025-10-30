@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Contact Messages{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="mb-0">Contact Messages</h1>
+  <a href="{{ url_for('admin.admin') }}" class="btn btn-outline-secondary">Back to Admin</a>
+  </div>
+
+<div class="table-responsive">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Created</th>
+        <th>Status</th>
+        <th>Type</th>
+        <th>Title</th>
+        <th>Email</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in messages %}
+      <tr>
+        <td>#{{ m.id }}</td>
+        <td>{{ m.created_at.strftime('%Y-%m-%d %H:%M:%S') if m.created_at else '' }} UTC</td>
+        <td>
+          <span class="badge {% if m.status == 'new' %}bg-primary{% elif m.status == 'resolved' %}bg-success{% elif m.status == 'closed' %}bg-secondary{% else %}bg-warning{% endif %}">{{ m.status }}</span>
+        </td>
+        <td>{{ m.message_type }}</td>
+  <td>{{ m.meta.get('title') if m.meta and m.meta.get('title') else '' }}</td>
+        <td><a href="mailto:{{ m.email }}">{{ m.email }}</a></td>
+        <td>
+          <a href="{{ url_for('contact.admin_contact_detail', message_id=m.id) }}" class="btn btn-sm btn-outline-primary">Open</a>
+          <form method="post" action="{{ url_for('contact.admin_contact_delete', message_id=m.id) }}" class="d-inline" onsubmit="return confirm('Delete ticket #{{ m.id }} permanently? This cannot be undone.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted">No messages yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

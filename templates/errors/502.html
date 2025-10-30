@@ -1,12 +1,35 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>502 Bad Gateway</title>
-</head>
-<body>
-    <h1>502 Bad Gateway</h1>
-    <p>There was a problem with the server. Please try again later.</p>
-    <a href="/">Go to Homepage</a>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}502 Bad Gateway - Telescope Control{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="card shadow">
+                <div class="card-body">
+                    <h1 class="display-1 text-danger">502</h1>
+                    <h2 class="card-title">Bad Gateway</h2>
+                    <p class="card-text lead">There was a problem connecting to the server.</p>
+                    <p class="card-text text-muted">
+                        The server received an invalid response from an upstream server.
+                    </p>
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-info-circle"></i>
+                        This is usually a temporary issue. Please try again in a few moments.
+                    </div>
+                    
+                    <div class="mt-4">
+                        <a href="{{ url_for('home.home') }}" class="btn btn-primary me-2">
+                            <i class="fas fa-home"></i> Go to Homepage
+                        </a>
+                        <button class="btn btn-outline-secondary" onclick="location.reload()">
+                            <i class="fas fa-redo"></i> Refresh Page
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

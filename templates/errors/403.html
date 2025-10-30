@@ -1,12 +1,37 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>403 Forbidden</title>
-</head>
-<body>
-    <h1>403 Forbidden</h1>
-    <p>Sorry, you don't have permission to access this page.</p>
-    <a href="/">Go to Homepage</a>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}403 Forbidden - Telescope Control{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="card shadow">
+                <div class="card-body">
+                    <h1 class="display-1 text-danger">403</h1>
+                    <h2 class="card-title">Access Forbidden</h2>
+                    <p class="card-text lead">Sorry, you don't have permission to access this page.</p>
+                    <p class="card-text text-muted">
+                        This could be because:
+                    </p>
+                    <ul class="list-unstyled text-muted">
+                        <li>• You need to log in with appropriate permissions</li>
+                        <li>• Your account doesn't have the required access level</li>
+                        <li>• This page requires administrator privileges</li>
+                    </ul>
+                    <div class="mt-4">
+                        <a href="{{ url_for('home.home') }}" class="btn btn-primary me-2">
+                            <i class="fas fa-home"></i> Go to Homepage
+                        </a>
+                        {% if not current_user.is_authenticated %}
+                        <a href="{{ url_for('auth.login') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

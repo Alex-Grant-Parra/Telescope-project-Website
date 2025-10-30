@@ -1,12 +1,36 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>400 Bad Request</title>
-</head>
-<body>
-    <h1>400 Bad Request</h1>
-    <p>The server couldn't understand your request. Please check the request and try again.</p>
-    <a href="/">Go to Homepage</a>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}400 Bad Request - Telescope Control{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="card shadow">
+                <div class="card-body">
+                    <h1 class="display-1 text-warning">400</h1>
+                    <h2 class="card-title">Bad Request</h2>
+                    <p class="card-text lead">The server couldn't understand your request.</p>
+                    <p class="card-text text-muted">
+                        This could be because:
+                    </p>
+                    <ul class="list-unstyled text-muted">
+                        <li>• Invalid data was sent to the server</li>
+                        <li>• Required fields were missing</li>
+                        <li>• The request format was incorrect</li>
+                    </ul>
+                    
+                    <div class="mt-4">
+                        <a href="{{ url_for('home.home') }}" class="btn btn-primary me-2">
+                            <i class="fas fa-home"></i> Go to Homepage
+                        </a>
+                        <button class="btn btn-outline-secondary" onclick="history.back()">
+                            <i class="fas fa-arrow-left"></i> Go Back
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

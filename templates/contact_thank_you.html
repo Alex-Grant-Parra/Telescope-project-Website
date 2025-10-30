@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Message sent{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8 text-center">
+    <div class="card p-5 shadow-sm">
+      <h1 class="mb-3">Thank you!</h1>
+      <p class="lead">Your message has been sent. We'll get back to you via email soon.</p>
+      {% if title %}
+      <p class="mb-1"><strong>Title:</strong> {{ title }}</p>
+      {% endif %}
+      {% if ticket_id %}
+      <p class="text-muted">Ticket ID: <strong>#{{ ticket_id }}</strong></p>
+      {% endif %}
+      <a href="{{ url_for('home.home') }}" class="btn btn-primary mt-3">Back to Home</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

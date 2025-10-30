@@ -6,32 +6,61 @@
     <title>Admin Dashboard - Telescope Control</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
 </head>
-<body>
-    <div class="container mt-5">
-        <h1 class="text-center">Admin Dashboard</h1>
-        <p class="text-center">Welcome, Admin! You can manage users and system settings here.</p>
+{% extends "base.html" %}
 
-        <div class="row">
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">User Management</h5>
-                        <p class="card-text">Manage users, view their activity, and assign roles.</p>
-                        <a href="#" class="btn btn-primary">Manage Users</a>
-                    </div>
+{% block title %}Admin Panel - Telescope Control{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="text-center">Admin Dashboard</h1>
+    <p class="text-center">Welcome, Admin! Use these tools to manage the system.</p>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">User Management</h5>
+                    <p class="card-text">View and manage users: promote/demote, review trusted devices, or remove accounts.</p>
+                    <a href="{{ url_for('profile.admin_users') }}" class="btn btn-primary">Manage Users</a>
                 </div>
             </div>
+        </div>
 
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">Settings</h5>
-                        <p class="card-text">Adjust system settings and preferences.</p>
-                        <a href="#" class="btn btn-secondary">Settings</a>
-                    </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">System Settings</h5>
+                    <p class="card-text">Quick links to system configuration and logs.</p>
+                    <a href="{{ url_for('error.error_list') }}" class="btn btn-outline-warning">Test Error Pages</a>
                 </div>
             </div>
+        </div>
 
-            <div class="col-md-4">
-                <div class="card">
-                
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Security</h5>
+                    <p class="card-text">Manage API tokens, blacklist, and other security features.</p>
+                    <a href="{{ url_for('admin.admin_security_tokens') }}" class="btn btn-outline-danger">Manage Tokens</a>
+                    <a href="{{ url_for('admin.admin_security_page') }}" class="btn btn-outline-primary ms-2">Security Dashboard</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Contact Messages</h5>
+                    <p class="card-text">Review, track, and respond to user contact requests.</p>
+                    <a href="{{ url_for('contact.admin_contact_list') }}" class="btn btn-outline-success">Open Contact Inbox</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Removed Quick Actions card -->
+</div>
+{% endblock %}
+

@@ -1,389 +1,190 @@
-{% extends "base.html" %}
-{% block title %}Star Map - Telescope Control{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>3D Planetarium</title>
+    <style>
+        html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
+        #planetarium { display: block; width: 100vw; height: 100vh; background: #000; }
+        #info { position: absolute; top: 10px; left: 10px; color: #fff; background: rgba(0,0,0,0.6); padding: 8px; border-radius: 4px; font-family: sans-serif; z-index: 10; }
+        #controls {
+            position: absolute; top: 10px; right: 10px; z-index: 20; background: rgba(0,0,0,0.7);
+            color: #fff; padding: 12px 16px; border-radius: 6px; font-family: sans-serif;
+            display: flex; flex-direction: column; gap: 8px; min-width: 220px;
+        }
+        #controls label { font-size: 0.95em; }
+        #controls input[type="range"] { width: 100px; }
+        #controls input[type="number"] { width: 60px; }
+        #controls button { margin-top: 4px; }
+        #loading {
+            position: fixed; left: 0; top: 0; width: 100vw; height: 100vh;
+            background: #111; color: #fff; display: flex; align-items: center; justify-content: center;
+            font-size: 2em; z-index: 100;
+        }
+        #help-modal {
+            display: none; position: fixed; left: 0; top: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center;
+        }
+        #help-content {
+            background: #222; color: #fff; padding: 24px; border-radius: 8px; max-width: 400px;
+            font-family: sans-serif;
+        }
+        #help-content button { margin-top: 12px; }
+        #mag-context-menu {
+            display: none; position: fixed; background: #333; color: #fff; padding: 12px;
+            border-radius: 6px; box-shadow: 0 4px 8px rgba(0,0,0,0.6); z-index: 1000;
+            min-width: 180px; font-family: sans-serif;
+        }
+        #mag-context-menu input[type="number"] {
+            width: 80px; padding: 4px; margin: 4px 0; border: 1px solid #555;
+            background: #222; color: #fff; border-radius: 3px;
+        }
+        #mag-context-menu button {
+            padding: 4px 8px; margin: 2px; border: 1px solid #555;
+            background: #444; color: #fff; border-radius: 3px; cursor: pointer;
+        }
+        #mag-context-menu button:hover { background: #555; }
 
-{% block content %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-
-<style>
-/* Ensure the star map container does not block the navbar/header */
-#starMapPanelContainer {
-    pointer-events: none;
-}
-#starMapPanel, #magnitudePanel, #starLabel, #fullscreenButton {
-    pointer-events: auto;
-}
-</style>
-
-<div id="starMapPanelContainer" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw;">
-    <div id="starMapPanel" style="width: 80%; height: 80%; position: relative; background-color: black;">
-        <button id="fullscreenButton" style="position: absolute; top: 10px; right: 10px; padding: 10px; background: rgba(0, 0, 0, 0.7); color: white; border: none; cursor: pointer;">⛶ Full Screen</button>
-        <div id="starLabel" style="position: absolute; color: white; background: rgba(0, 0, 0, 0.7); padding: 5px; font-size: 14px; border-radius: 5px; display: none;"></div>
+        /* Bottom-right star loading throbber */
+        #star-loading-indicator {
+            position: fixed;
+            right: 12px;
+            bottom: 12px;
+            z-index: 1001;
+            display: none; /* shown via JS when fetching/processing stars */
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            border-radius: 6px;
+            font-family: sans-serif;
+            font-size: 0.95em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px);
+        }
+        .star-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.25);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+<div id="loading">Loading planetarium...</div>
+<canvas id="planetarium"></canvas>
+<div id="info">Drag to rotate. Click a star/planet for info.</div>
+<div id="controls">
+    <label>
+        Mag ≤ <span id="mag-value">6</span>
+        <input type="range" id="mag-filter">
+    </label>
+    <label>
+        Latitude:
+        <input type="number" id="latitude" min="-90" max="90" step="0.1" value="0">
+    </label>
+    <label>
+        Longitude:
+        <input type="number" id="longitude" min="-180" max="180" step="0.1" value="0">
+    </label>
+    <div>
+        <label for="time-control" style="display:block; margin-top: 4px;">Time (local):</label>
+        <div style="display:flex; gap: 6px; align-items:center;">
+            <input type="datetime-local" id="time-control" style="flex:1; padding: 4px; background:#222; color:#fff; border:1px solid #555; border-radius:3px;">
+            <button id="time-now" title="Set to current time" style="padding:4px 8px;">Now</button>
+        </div>
+        <div style="font-size: 0.85em; color:#bbb; margin-top:4px;">
+            Grid shows Hour Angle (HA) using your longitude and the selected time.
+            <span id="time-segment-indicator" style="display:none; color:#4CAF50; font-weight:bold; margin-left:8px;"></span>
+        </div>
     </div>
-    <!-- Magnitude filter panel -->
-    <div id="magnitudePanel" style="width: 220px; height: 80%; margin-left: 16px; background: #181818; color: #fff; border-radius: 8px; box-shadow: 0 0 8px #000a; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 18px;">
-        <h4 style="margin-bottom: 12px;">Magnitude Cut off</h4>
-        <label for="magnitudeSlider" style="margin-bottom: 8px;">Show stars brighter than:</label>
-        <input type="range" id="magnitudeSlider" min="0" max="10" step="0.1" value="10" style="width: 90%;">
-        <span id="magnitudeValue" style="margin-top: 8px; font-size: 1.2em;">Mag ≤ 10</span>
+    <div>
+        <label for="show-stars" style="margin-right: 8px;">
+            <input type="checkbox" id="show-stars" checked> Stars
+        </label>
+        <label for="show-planets">
+            <input type="checkbox" id="show-planets" checked> Planets
+        </label>
+    </div>
+    <label>
+        <input type="checkbox" id="show-horizon-grid"> Horizon Grid
+        <input type="checkbox" id="show-equatorial-grid"> Equatorial Grid
+        <input type="checkbox" id="show-ecliptic"> Ecliptic
+        <input type="checkbox" id="show-below-horizon" checked> Below-horizon tint
+    </label>
+    <label>
+        <input type="checkbox" id="flip-vertical"> Invert controls
+    </label>
+    <div style="margin-top: 8px;">
+        <label>Search Object:</label>
+        <input type="text" id="search-object" placeholder="HD, NGC, IC, M, or planet name" style="width: 100%; padding: 4px; margin: 4px 0; border: 1px solid #555; background: #222; color: #fff; border-radius: 3px;">
+        <div style="display: flex; gap: 4px;">
+            <button id="search-btn" style="flex: 1; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Search</button>
+            <button id="clear-search-btn" style="flex: 1; padding: 4px 8px; background: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer;">Clear</button>
+        </div>
+    </div>
+    <button id="reset-view">Reset View</button>
+    <button id="help-btn">Help</button>
+</div>
+<div id="help-modal">
+    <div id="help-content">
+        <b>3D Planetarium Controls</b><br><br>
+        <ul>
+            <li>Drag mouse to rotate the sky</li>
+            <li>Scroll wheel to zoom in/out</li>
+            <li>Click a star/planet for info</li>
+            <li>Right-click magnitude slider for custom values</li>
+            <li>Adjust magnitude filter to show/hide faint stars</li>
+            <li>Set your latitude/longitude for local sky orientation</li>
+            <li>Toggle stars/planets visibility</li>
+            <li>Toggle horizon grid (altitude/azimuth with N/E/S/W)</li>
+            <li>Toggle equatorial grid (HA/DEC: Hour Angle and Declination)</li>
+            <li>Toggle the ecliptic line</li>
+            <li>Reset view to default orientation and zoom</li>
+            <li>Use the Time control to preview the sky at any date/time; the grid labels show Hour Angle (HA).</li>
+            <li>Tip: Focus the Time box and press Arrow Up/Down to adjust with rollover. Move the caret over year/month/day/hour/minute to change that unit. If caret isn't available, use Shift (hour), Ctrl (day), Alt (month), or Ctrl+Shift (year).</li>
+        </ul>
+        <button id="close-help">Close</button>
     </div>
 </div>
-
-<script id="stars-data" type="application/json">{{ stars | tojson }}</script>
-
-<script>
-console.log("Script loaded");
-
-document.addEventListener("DOMContentLoaded", function () {
-    console.log("DOM fully loaded and parsed");
-    
-    const container = document.getElementById("starMapPanel");
-    const mouse = new THREE.Vector2();
-
-    function updateMouseCoords(event) {
-        const rect = container.getBoundingClientRect();
-        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    }
+<div id="mag-context-menu">
+    <div style="margin-bottom: 8px; font-size: 0.9em;">Set Magnitude Limit:</div>
+    <input type="number" id="mag-custom-input" step="0.1" min="-2" max="15" placeholder="e.g. 6.5">
+    <div style="margin-top: 8px;">
+        <button id="mag-apply">Apply</button>
+        <button id="mag-cancel">Cancel</button>
+    </div>
+</div>
+<!-- Small bottom-right throbber for star loading/processing -->
+<div id="star-loading-indicator" aria-live="polite" aria-atomic="true">
+    <div class="star-spinner" role="status" aria-hidden="true"></div>
+    <div>Loading stars…</div>
     
     
-    const label = document.getElementById("starLabel");
-    const fullscreenButton = document.getElementById("fullscreenButton");
-
-    fullscreenButton.addEventListener("click", function () {
-        console.log("Fullscreen button clicked");
-        if (!document.fullscreenElement) {
-            container.requestFullscreen().catch(err => {
-                console.error(`Error enabling full-screen: ${err.message}`);
-            });
-        } else {
-            document.exitFullscreen();
-        }
-    });
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, container.offsetWidth / container.offsetHeight, 0.1, 1000);
-    camera.position.set(0, 0, 10);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(container.offsetWidth, container.offsetHeight);
-    container.appendChild(renderer.domElement);
-    const controls = new THREE.OrbitControls(camera, renderer.domElement); 
-    const raycaster = new THREE.Raycaster();
-    console.log("Renderer initialized");
-
-    const radius = 500; // arbitrary number
-
-    const starGroup = new THREE.Group();
-    scene.add(starGroup);
-
-
-    // Parse stars + celestial objects from Flask data
-    const starsData = JSON.parse(document.getElementById('stars-data').textContent);
-    console.log("Parsed starsData:", starsData.length);
-
-    // --- Magnitude filter setup ---
-    const magnitudeSlider = document.getElementById("magnitudeSlider");
-    const magnitudeValue = document.getElementById("magnitudeValue");
-
-    // Compute min/max magnitude safely (avoid stack overflow)
-    const magStars = starsData.filter(s => typeof s.mag === "number" && !isNaN(s.mag));
-    let minMag = Infinity;
-    let maxMag = -Infinity;
-    for (const s of magStars) {
-        if (s.mag < minMag) minMag = s.mag;
-        if (s.mag > maxMag) maxMag = s.mag;
-    }
-    console.log(`Min magnitude: ${minMag}, Max magnitude: ${maxMag}`);
-
-    // Set slider bounds
-    magnitudeSlider.min = minMag;
-    magnitudeSlider.max = maxMag;
-    magnitudeSlider.value = maxMag;
-    magnitudeValue.textContent = `Mag ≤ ${maxMag}`;
-
-
-    magnitudeSlider.min = minMag;
-    magnitudeSlider.max = maxMag;
-    magnitudeSlider.value = maxMag;
-    magnitudeValue.textContent = `Mag ≤ ${maxMag}`;
-
-    const starObjects = [];
-    const pointsIndexToStarIndex = [];
-
-    const geometry = new THREE.BufferGeometry();
-    const positions = [];
-    const sizes = [];
-
-    const loader = new THREE.TextureLoader();
-
-    let spritesAdded = 0;
-    let starsWithIconsCount = 0;
-
-    starsData.forEach((star, i) => {
-        const raRad = (star.ra / 360) * Math.PI * 2;
-        const decRad = (star.dec / 180) * Math.PI;
-        const x = radius * Math.cos(decRad) * Math.cos(raRad);
-        const y = radius * Math.sin(decRad);
-        const z = radius * Math.cos(decRad) * Math.sin(raRad);
-
-        if (star.icon) {
-            starsWithIconsCount++;
-            loader.load(star.icon, texture => {
-                const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
-                const sprite = new THREE.Sprite(material);
-                sprite.position.set(x, y, z);
-                sprite.scale.set(20, 20, 1);
-                sprite.userData = { name: star.name, mag: star.mag };
-                sprite.renderOrder = 999;
-
-                starGroup.add(sprite);
-                if (typeof star.mag === "number") {
-                    starObjects.push({ type: "sprite", obj: sprite, mag: star.mag, index: null });
-                }
-                spritesAdded++;
-                console.log(`Sprite added: ${star.name}`);
-            }, undefined, err => {
-                console.warn("Icon failed to load for", star.name, err);
-            });
-        } else {
-            positions.push(x, y, z);
-            const size = Math.max(0.1, 1.5 - (star.mag * 0.1));
-            sizes.push(size);
-            if (typeof star.mag === "number") {
-                starObjects.push({ type: "point", obj: null, mag: star.mag, index: pointsIndexToStarIndex.length });
-            }
-            pointsIndexToStarIndex.push(i);
-        }
-    });
-
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    const material = new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: true });
-    const starsMesh = new THREE.Points(geometry, material);
-    starGroup.add(starsMesh);
-
-    let visiblePointIndices = [];
-    let allPositions = [];
-    let allPointsIndexToStarIndex = [];
-
-    function buildAllPositions() {
-        allPositions = [];
-        allPointsIndexToStarIndex = [];
-        starsData.forEach((star, i) => {
-            if (!star.icon) {
-                const raRad = (star.ra / 360) * Math.PI * 2;
-                const decRad = (star.dec / 180) * Math.PI;
-                const x = radius * Math.cos(decRad) * Math.cos(raRad);
-                const y = radius * Math.sin(decRad);
-                
-                const z = radius * Math.cos(decRad) * Math.sin(raRad);
-                allPositions.push(x, y, z);
-                allPointsIndexToStarIndex.push(i);
-            }
-        });
-        console.log("Built allPositions:", allPositions.length);
-    }
-
-    buildAllPositions();
-
     
-    let filteredPointsToStarIndex = [];
-
-    function updateStarVisibility(maxMag) {
-        // Sprites: set visible based on mag
-        starObjects.forEach(starObj => {
-            if (starObj.type === "sprite") {
-                starObj.obj.visible = starObj.mag <= maxMag;
-            }
-        });
-
-        // Points: filter and rebuild geometry and mapping
-        let filteredPositions = [];
-        filteredPointsToStarIndex = [];
-        allPointsIndexToStarIndex.forEach((starIdx, i) => {
-            const star = starsData[starIdx];
-            if (typeof star.mag === "number" && !isNaN(star.mag) && star.mag <= maxMag && !star.icon) {
-                filteredPointsToStarIndex.push(starIdx);
-                filteredPositions.push(
-                    allPositions[i * 3],
-                    allPositions[i * 3 + 1],
-                    allPositions[i * 3 + 2]
-                );
-            }
-        });
-
-        if (filteredPositions.length === 0) {
-            starsMesh.visible = false;
-        } else {
-            starsMesh.visible = true;
-            starsMesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(filteredPositions, 3));
-            starsMesh.geometry.attributes.position.needsUpdate = true;
-            starsMesh.geometry.setDrawRange(0, filteredPositions.length / 3);
-        }
-    }
-
-    // --- Slider event ---
-    magnitudeSlider.addEventListener("input", function () {
-        const val = parseFloat(magnitudeSlider.value);
-        magnitudeValue.textContent = `Mag ≤ ${val}`;
-        updateStarVisibility(val);
-    });
-
-    // --- Right-click to enter value ---
-    magnitudeSlider.addEventListener("contextmenu", function (e) {
-        e.preventDefault();
-        const min = parseFloat(magnitudeSlider.min);
-        const max = parseFloat(magnitudeSlider.max);
-        let val = prompt(`Enter a magnitude value (${min} to ${max}):`, magnitudeSlider.value);
-        if (val !== null) {
-            val = parseFloat(val);
-            if (!isNaN(val) && val >= min && val <= max) {
-                magnitudeSlider.value = val;
-                magnitudeValue.textContent = `Mag ≤ ${val}`;
-                updateStarVisibility(val);
-            } else {
-                alert(`Please enter a number between ${min} and ${max}.`);
-            }
-        }
-    });
-
-// --- Initial filter (show all) ---
-magnitudeValue.textContent = `Mag ≤ ${magnitudeSlider.value}`;
-updateStarVisibility(parseFloat(magnitudeSlider.value));
-
-
-    function onMouseMove(event) {
-        updateMouseCoords(event);
-        raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObjects(starGroup.children, true);
-        if (intersects.length > 0) {
-            const intersect = intersects[0];
-            let starName = "Unknown";
-            if (intersect.object.type === "Sprite") {
-                starName = intersect.object.userData.name;
-            } else if (intersect.object.type === "Points" && intersect.index !== undefined) {
-                const filteredIdx = intersect.index;
-                const starIdx = filteredPointsToStarIndex[filteredIdx];
-                starName = starsData[starIdx]?.name || starName;
-            }
-            label.innerText = starName;
-            label.style.left = event.clientX + 10 + "px";
-            label.style.top = event.clientY + 10 + "px";
-            label.style.display = "block";
-        } else {
-            label.style.display = "none";
-        }
-    }
-
-    function onMouseDoubleClick(event) {
-        updateMouseCoords(event);
-        raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObjects(starGroup.children, true);
-        if (intersects.length > 0) {
-            const intersect = intersects[0];
-            let star;
-            if (intersect.object.type === "Sprite") {
-                const name = intersect.object.userData.name;
-                star = starsData.find(s => s.name === name);
-            } else if (intersect.object.type === "Points" && intersect.index !== undefined) {
-                const filteredIdx = intersect.index;
-                const starIdx = filteredPointsToStarIndex[filteredIdx];
-                star = starsData[starIdx];
-            }
-            if (star) {
-                fetchStarInfo(star.name);
-            }
-        }
-    }
-
-    function fetchStarInfo(starName) {
-        console.log("Fetching info for star:", starName);
-        fetch(`/star_info/${encodeURIComponent(starName)}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert("No info found for " + starName);
-                    return;
-                }
-                showStarInfo(data);
-            })
-            .catch(error => console.error("Error fetching star info:", error));
-    }
-
-    function showStarInfo(star) {
-        console.log("Showing modal for:", star.name);
-        const existingModal = document.getElementById("starInfoModal");
-        if (existingModal) existingModal.remove();
-
-        const modal = document.createElement("div");
-        modal.id = "starInfoModal";
-        modal.style.position = "fixed";
-        modal.style.top = "50%";
-        modal.style.left = "50%";
-        modal.style.transform = "translate(-50%, -50%)";
-        modal.style.background = "black";
-        modal.style.color = "white";
-        modal.style.padding = "15px";
-        modal.style.borderRadius = "8px";
-        modal.style.zIndex = 1000;
-        modal.style.maxWidth = "300px";
-        modal.style.boxShadow = "0 0 10px #fff";
-
-        modal.innerHTML = `
-            <h2>${star.name}</h2>
-            <p><b>RA:</b> ${star.ra}°</p>
-            <p><b>DEC:</b> ${star.dec}°</p>
-            <p><b>Magnitude:</b> ${star.mag}</p>
-            <p>${star.description || ''}</p>
-            <button id="trackStarBtn" class="btn btn-success" style="margin-right: 8px;">Track</button>
-            <button id="closeStarInfo" class="btn btn-secondary">Close</button>
-        `;
-
-        document.body.appendChild(modal);
-
-        document.getElementById("closeStarInfo").addEventListener("click", () => {
-            modal.remove();
-        });
-
-        document.getElementById("trackStarBtn").addEventListener("click", () => {
-            fetch("/track_star", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    name: star.name,
-                    ra: star.ra,
-                    dec: star.dec,
-                    mag: star.mag
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                modal.remove();
-            })
-            .catch(error => {
-                console.error(error);
-            });
-        });
-    }
-
-    function onWindowResize() {
-        console.log("Resizing...");
-        camera.aspect = container.offsetWidth / container.offsetHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(container.offsetWidth, container.offsetHeight);
-    }
-
-    window.addEventListener("resize", onWindowResize);
-    container.addEventListener("mousemove", onMouseMove);
-    container.addEventListener("dblclick", onMouseDoubleClick);
-
-    function animate() {
-        requestAnimationFrame(animate);
-        controls.update();
-        renderer.render(scene, camera);
-    }
-
-    animate();
-});
-</script>
-
-{% endblock %}
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+</div>
+<script type="application/json" id="stars-data">[]</script>
+<script src="{{ url_for('static', filename='js/csrf-protection.js') }}" defer></script>
+<!-- Cache-busting query param to ensure latest JS is fetched -->
+<script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-30-2" defer></script>
+</body>
+</html>

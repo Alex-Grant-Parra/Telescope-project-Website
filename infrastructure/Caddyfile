@@ -1,0 +1,27 @@
+# Redirect HTTP for the domain to HTTPS
+http://telescopes.dev {
+    redir https://telescopes.dev{uri} permanent
+}
+
+# HTTPS site, bound to Wi-Fi IP
+telescopes.dev {
+    bind 192.168.0.60
+    reverse_proxy 127.0.0.1:8080
+
+    # Security headers (same as domain site) BUT do not set HSTS for a raw
+    # intranet IP. Setting Strict-Transport-Security for an IP can cause
+    # browsers to permanently (until expiry) force HTTPS for that IP which
+    # complicates local development when you sometimes connect directly to
+    # the Flask server on a different port. We therefore omit HSTS here.
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+    }
+
+    # Block access to sensitive files
+    @blockedFiles {
+        path *.env *.env.* *.yml *.json *.aws/credentials client_secrets.json pinfo.php phpinfo.php
+    }
+    respond @blockedFiles "403 Forbidden" 403
+}

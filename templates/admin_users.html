@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block title %}User Management - Admin{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-lg-12">
+            <h1 class="text-center mb-4">
+                <i class="fas fa-users-cog text-danger"></i> User Management
+                <small class="text-muted">(Admin Only)</small>
+            </h1>
+            
+            <!-- Flash messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                  <div class="alert alert-{{ category }} mt-3">{{ message }}</div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+
+            <!-- Breadcrumb -->
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('profile.profile') }}">Profile</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">User Management</li>
+                </ol>
+            </nav>
+
+            <!-- Summary Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <h3>{{ user_stats|length }}</h3>
+                            <small>Total Users</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h3>{{ user_stats | selectattr('user.is_admin') | list | length }}</h3>
+                            <small>Administrators</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h3>{{ user_stats | selectattr('user.is_standard') | list | length }}</h3>
+                            <small>Standard Users</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-warning text-dark">
+                        <div class="card-body text-center">
+                            <h3>{{ user_stats | sum(attribute='trusted_devices_count') }}</h3>
+                            <small>Total Trusted Devices</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Users Table -->
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">All Users</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Username</th>
+                                    <th>Email</th>
+                                    <th>Account Type</th>
+                                    <th>Trusted Devices</th>
+                                    <th>Security</th>
+                                    <th>Settings</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stats in user_stats %}
+                                {% set user = stats.user %}
+                                <tr {% if user.id == current_user.id %}class="table-primary"{% endif %}>
+                                    <td>{{ user.id }}</td>
+                                    <td>
+                                        <strong>{{ user.username }}</strong>
+                                        {% if user.id == current_user.id %}
+                                            <span class="badge bg-info">You</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="text-muted">{{ user.get_email() }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if user.is_admin %}bg-danger{% elif user.is_standard %}bg-success{% elif user.is_limited %}bg-warning{% else %}bg-secondary{% endif %}">
+                                            {{ user.AccountType }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ stats.trusted_devices_count }}</span>
+                                        {% if stats.trusted_devices_count > 0 %}
+                                            <button class="btn btn-sm btn-outline-info ms-1" 
+                                                    type="button" 
+                                                    data-bs-toggle="collapse" 
+                                                    data-bs-target="#devices{{ user.id }}" 
+                                                    aria-expanded="false">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small>
+                                            <i class="fas fa-shield-alt text-success" title="2FA Enabled"></i>
+                                            {% if user.totp_secret %}
+                                                <i class="fas fa-key text-info" title="TOTP Configured"></i>
+                                            {% endif %}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex gap-2 align-items-center">
+                                            <form method="post" action="{{ url_for('admin.set_role', user_id=user.id) }}" class="admin-action-form">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                                <div class="input-group input-group-sm">
+                                                    <select name="role" class="form-select">
+                                                        <option value="Administrator" {% if user.is_admin %}selected{% endif %}>Administrator</option>
+                                                        <option value="Standard" {% if user.is_standard %}selected{% endif %}>Standard</option>
+                                                        <option value="Limited" {% if user.is_limited %}selected{% endif %}>Limited</option>
+                                                    </select>
+                                                    <button class="btn btn-sm btn-outline-primary" type="submit">Set</button>
+                                                </div>
+                                            </form>
+
+                                            <form method="post" action="{{ url_for('admin.toggle_enabled', user_id=user.id) }}" class="admin-action-form">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                                {% set enabled = stats.is_enabled %}
+                                                <button type="submit" class="btn btn-sm {% if enabled %}btn-outline-secondary{% else %}btn-outline-success{% endif %}" title="Toggle Enabled">
+                                                    {% if enabled %}
+                                                        <i class="fas fa-user-slash"></i> Disable
+                                                    {% else %}
+                                                        <i class="fas fa-user-check"></i> Enable
+                                                    {% endif %}
+                                                </button>
+                                            </form>
+
+                                            <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}" style="display:inline" class="delete-user-form admin-action-form">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger ms-1" title="Delete User">
+                                                    <i class="fas fa-trash"></i> Delete
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% if stats.trusted_devices_count > 0 %}
+                                <tr>
+                                    <td colspan="7" class="p-0">
+                                        <div class="collapse" id="devices{{ user.id }}">
+                                            <div class="card card-body bg-light">
+                                                <h6>Trusted Devices for {{ user.username }}:</h6>
+                                                <div class="row">
+                                                    {% for device in stats.trusted_devices %}
+                                                    <div class="col-md-4 mb-2">
+                                                        <div class="card border-info">
+                                                            <div class="card-body p-2">
+                                                                <small>
+                                                                    <i class="fas fa-desktop"></i> <strong>{{ device.device_name }}</strong><br>
+                                                                    <span class="text-muted">Added: {{ device.created_at.strftime('%m/%d/%Y') }}</span><br>
+                                                                    <span class="text-muted">Expires: {{ device.expires_at.strftime('%m/%d/%Y') }}</span>
+                                                                </small>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <div class="text-center mt-4">
+                <a href="{{ url_for('profile.profile') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Profile
+                </a>
+                <a href="{{ url_for('admin.admin') }}" class="btn btn-danger">
+                    <i class="fas fa-cogs"></i> Admin Panel
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.delete-user-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            var username = form.closest('tr').querySelector('td:nth-child(2) strong').textContent;
+            if (!confirm('Are you sure you want to delete user "' + username + '"? This action cannot be undone.')) {
+                e.preventDefault();
+            }
+        });
+    });
+    
+    // AJAX handling for admin actions
+    const adminForms = document.querySelectorAll('.admin-action-form');
+    adminForms.forEach(form => {
+        form.addEventListener('submit', async function(e) {
+            // Allow normal submit for non-AJAX (e.g., if JS disabled)
+            e.preventDefault();
+
+            const url = form.action;
+            const formData = new FormData(form);
+            const jsonBody = {};
+            formData.forEach((v, k) => { jsonBody[k] = v; });
+
+            // Obtain CSRF token from form or from cookie
+            const csrfToken = formData.get('csrf_token') || (document.cookie.match(/csrf_token=([^;]+)/) || [])[1];
+
+            // Disable submit buttons to prevent duplicate requests
+            const submitButtons = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+            submitButtons.forEach(b => b.disabled = true);
+
+            try {
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify(jsonBody)
+                });
+                let data = null;
+                try {
+                    data = await resp.json();
+                } catch (parseErr) {
+                    // If the response isn't JSON (e.g., redirect HTML), surface status
+                    const text = await resp.text();
+                    data = { status: resp.ok ? 'success' : 'error', message: text || resp.statusText };
+                }
+                // show feedback
+                const container = document.querySelector('.container');
+                const alert = document.createElement('div');
+                alert.className = 'alert mt-2';
+                if (resp.ok && data.status === 'success') {
+                    alert.classList.add('alert-success');
+                    alert.textContent = data.message || 'Success';
+
+                    // Update UI inline based on action
+                    const tr = form.closest('tr');
+
+                    // Toggle enabled response contains `enabled` boolean
+                    if (typeof data.enabled !== 'undefined' && tr) {
+                        const enabled = !!data.enabled;
+                        // Find toggle button in the form
+                        const toggleBtn = form.querySelector('button[type="submit"]');
+                        if (toggleBtn) {
+                            if (enabled) {
+                                toggleBtn.classList.remove('btn-outline-success');
+                                toggleBtn.classList.add('btn-outline-secondary');
+                                toggleBtn.innerHTML = '<i class="fas fa-user-slash"></i> Disable';
+                            } else {
+                                toggleBtn.classList.remove('btn-outline-secondary');
+                                toggleBtn.classList.add('btn-outline-success');
+                                toggleBtn.innerHTML = '<i class="fas fa-user-check"></i> Enable';
+                            }
+                        }
+                        // update row highlight if desired
+                        if (enabled) {
+                            tr.classList.remove('table-danger');
+                        } else {
+                            tr.classList.add('table-danger');
+                        }
+                    }
+
+                    // If role was changed, update the Account Type badge
+                    if (jsonBody.role && tr) {
+                        const badge = tr.querySelector('td:nth-child(4) .badge');
+                        if (badge) {
+                            const role = jsonBody.role;
+                            badge.textContent = role;
+                            badge.classList.remove('bg-danger','bg-success','bg-warning','bg-secondary');
+                            if (role === 'Administrator') badge.classList.add('bg-danger');
+                            else if (role === 'Standard') badge.classList.add('bg-success');
+                            else if (role === 'Limited') badge.classList.add('bg-warning');
+                            else badge.classList.add('bg-secondary');
+                        }
+                    }
+
+                } else {
+                    alert.classList.add('alert-danger');
+                    alert.textContent = (data && data.message) ? data.message : 'Error';
+                }
+                container.prepend(alert);
+                setTimeout(()=> alert.remove(), 5000);
+
+            } catch (err) {
+                const container = document.querySelector('.container');
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-danger mt-2';
+                alert.textContent = (err && err.message) ? ('Network error: ' + err.message) : 'Network error';
+                container.prepend(alert);
+                setTimeout(()=> alert.remove(), 5000);
+            } finally {
+                // Re-enable submit buttons
+                submitButtons.forEach(b => b.disabled = false);
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

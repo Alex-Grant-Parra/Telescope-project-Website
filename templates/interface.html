@@ -5,18 +5,18 @@
 {% block content %}
 <div class="container-fluid">
     <!-- Main Panel and Take Photo Button Row -->
-    <div class="d-flex align-items-start" style="position: relative;">
+    <div class="d-flex align-items-start" style="position: relative; height: 80vh;">
         <!-- Main Panel -->
-        <div class="main-panel border rounded p-3 position-relative" id="mainPanel">
+        <div class="main-panel border rounded p-3 position-relative flex-grow-1" id="mainPanel" style="min-width: 0; width: 75vw; height: 100%;">
             <button class="fullscreen-toggle btn btn-danger btn-sm position-absolute top-0 end-0 m-2" onclick="toggleFullscreen()">⛶</button>
-            <h2 class="text-center">Main Panel</h2>
+            <div class="d-flex justify-content-center align-items-center h-100">
+                <img id="liveViewImage" src="about:blank" alt="Live Feed" class="img-fluid" style="max-height: 100%; max-width: 100%;" />
+            </div>
         </div>
-        <!-- Take Photo Button just to the right of the main panel -->
-        <button id="takePhotoBtn" class="btn btn-primary btn-sm ms-3 mt-2" style="height: 40px;" onclick="takePhoto()">📷 Take Photo</button>
     </div>
 
     <!-- Draggable Camera Controls Panel -->
-    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="cameraPanel" style="top: 50px; left: 20px;">
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="cameraPanel" style="top: 100px; left: 20px;">
         <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Camera Controls</div>  <!-- non-selectable title -->
         <div class="control-row d-flex justify-content-between my-2">
             <span>Shutter Speed</span>
@@ -47,221 +47,50 @@
                 <option>RAW</option>
             </select>
         </div>
+        <button id="takePhotoBtn" class="btn btn-primary mt-3 w-100" style="height: 60px; font-size: 1.25rem;" onclick="takePhoto()">📷 Take Photo</button>
     </div>
 
     <!-- Draggable Telescope Controls Panel -->
-    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="telescopePanel" style="top: 300px; left: 20px;">
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="telescopePanel" style="top: 500px; left: 20px;">
         <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Telescope Controls</div>  <!-- non-selectable title -->
         <div class="control-row my-2">
             <label for="searchObject">Search Object</label>
-            <input type="text" class="form-control" id="searchObject" placeholder="Enter HD, NGC, or IC number">
+            <input type="text" class="form-control" id="searchObject" placeholder="Search for object">
             <button class="btn btn-primary mt-2" onclick="searchObject()">Search</button>
+        </div>
+    </div>
+
+    <!-- Draggable Live View Controls Panel -->
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="liveViewPanel" style="top: 100px; left: 80vw; min-width: 220px;">
+        <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Live View Controls</div>
+        <div class="control-row my-3 d-flex justify-content-between align-items-center">
+            <span>Live View</span>
+            <button id="liveViewToggleBtn" class="btn btn-outline-primary" onclick="toggleLiveView()">Start</button>
+        </div>
+    </div>
+
+    <!-- Draggable Telescope Selection Panel -->
+    <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="telescopeSelectionPanel" style="top: 300px; left: 80vw; min-width: 250px;">
+        <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Telescope Selection</div>
+        <div class="control-row my-2">
+            <label for="telescopeSelect">Connected Telescopes</label>
+            <select id="telescopeSelect" class="form-select" onchange="selectTelescope()">
+                <option value="">Select a telescope...</option>
+            </select>
+        </div>
+        <div class="control-row my-2" id="telescopeInfo" style="display: none;">
+            <div class="small text-muted">
+                <div><strong>ID:</strong> <span id="telescopeId"></span></div>
+                <div><strong>IP:</strong> <span id="telescopeIp"></span></div>
+                <div><strong>Version:</strong> <span id="telescopeVersion"></span></div>
+                <div><strong>Status:</strong> <span id="telescopeStatus"></span></div>
+            </div>
+        </div>
+        <div class="control-row my-2">
+            <button class="btn btn-info btn-sm w-100" onclick="refreshTelescopes()">🔄 Refresh</button>
         </div>
     </div>
 </div>
 
-<script>
-    // Toggle full screen mode
-    function toggleFullscreen() {
-        let panel = document.getElementById("mainPanel");
-        if (!document.fullscreenElement) {
-            panel.requestFullscreen().catch(err => {
-                alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
-            });
-        } else {
-            document.exitFullscreen();
-        }
-    }
-
-    // Make the panels draggable
-    document.querySelectorAll(".draggable-panel").forEach(panel => {
-        let header = panel.querySelector(".panel-header");
-        header.addEventListener("mousedown", (event) => {
-            let shiftX = event.clientX - panel.getBoundingClientRect().left;
-            let shiftY = event.clientY - panel.getBoundingClientRect().top;
-
-            function moveAt(pageX, pageY) {
-                panel.style.left = pageX - shiftX + "px";
-                panel.style.top = pageY - shiftY + "px";
-            }
-
-            function onMouseMove(event) {
-                moveAt(event.pageX, event.pageY);
-            }
-
-            document.addEventListener("mousemove", onMouseMove);
-            document.addEventListener("mouseup", () => {
-                document.removeEventListener("mousemove", onMouseMove);
-            }, { once: true });
-        });
-    });
-
-    // Fetch camera choices and populate dropdowns
-    function populateCameraChoices() {
-        fetch("{{ url_for('interface.get_camera_choices') }}")
-            .then(response => response.json())
-            .then(data => {
-                // Populate shutter speed
-                let shutterSelect = document.getElementById("shutterSpeedSelect");
-                shutterSelect.innerHTML = "";
-                (data.shutterSpeed || []).forEach(choice => {
-                    let opt = document.createElement("option");
-                    opt.value = choice;
-                    opt.text = choice;
-                    shutterSelect.appendChild(opt);
-                });
-
-                // Populate ISO
-                let isoSelect = document.getElementById("isoSelect");
-                isoSelect.innerHTML = "";
-                (data.iso || []).forEach(choice => {
-                    let opt = document.createElement("option");
-                    opt.value = choice;
-                    opt.text = choice;
-                    isoSelect.appendChild(opt);
-                });
-            })
-            .catch(error => {
-                console.error("Failed to fetch camera choices:", error);
-            });
-    }
-
-    // Call on page load
-    document.addEventListener("DOMContentLoaded", function() {
-        populateCameraChoices();
-    });
-
-    // Update settings to backend
-    function updateSetting() {
-        let data = {
-            shutterSpeed: document.getElementById("shutterSpeedSelect").value,
-            iso: document.getElementById("isoSelect").value,
-            aperture: document.getElementById("apertureValue").innerText,
-            whiteBalance: document.getElementById("whiteBalance").value,
-            photoFormat: document.getElementById("photoFormat").value
-        };
-        fetch("{{ url_for('interface.update_camera') }}", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data)
-        }).then(response => response.json())
-        .then(data => console.log("Response from server:", data))
-        .catch(error => console.error("Fetch error:", error));
-    }
-
-    function takePhoto() {
-        fetch("{{ url_for('interface.take_photo') }}", {
-            method: "POST"
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === "success") {
-                alert("Photo taken and saved!");
-            } else {
-                alert("Failed to take photo: " + (data.message || "Unknown error"));
-            }
-        })
-        .catch(error => {
-            alert("Error taking photo: " + error);
-        });
-    }
-
-    // // Function to search for an object
-    // function searchObject() {
-    //     let searchValue = document.getElementById("searchObject").value;
-    //     if (searchValue) {
-    //         console.log("Searching for object:", searchValue);
-    //         fetch("{{ url_for('interface.search_object') }}", {
-    //             method: "POST",
-    //             headers: { "Content-Type": "application/json" },
-    //             body: JSON.stringify({ searchValue: searchValue })
-    //         }).then(response => response.json())
-    //         .then(data => console.log("Response from server:", data))
-    //         .catch(error => console.error("Fetch error:", error));
-    //     } else {
-    //         alert("Please enter a valid HD, NGC, or IC number.");
-    //     }
-    // }
-
-
-function showStarInfo(star) {
-    const existingModal = document.getElementById("starInfoModal");
-    if (existingModal) existingModal.remove();
-
-    const modal = document.createElement("div");
-    modal.id = "starInfoModal";
-    modal.style.position = "fixed";
-    modal.style.top = "50%";
-    modal.style.left = "50%";
-    modal.style.transform = "translate(-50%, -50%)";
-    modal.style.background = "black";
-    modal.style.color = "white";
-    modal.style.padding = "15px";
-    modal.style.borderRadius = "8px";
-    modal.style.zIndex = 1000;
-    modal.style.maxWidth = "300px";
-    modal.style.boxShadow = "0 0 10px #fff";
-
-    modal.innerHTML = `
-        <h2>${star.name || star.Name}</h2>
-        <p><b>RA:</b> ${star.ra !== undefined ? star.ra : star.RA}°</p>
-        <p><b>DEC:</b> ${star.dec !== undefined ? star.dec : star.DEC}°</p>
-        <p><b>Magnitude:</b> ${star.mag !== undefined ? star.mag : star["V-Mag"]}</p>
-        <button id="trackStarBtn" class="btn btn-success">Track</button>
-        <button id="closeStarInfo" class="btn btn-secondary ms-2">Close</button>
-    `;
-
-    document.body.appendChild(modal);
-
-    document.getElementById("closeStarInfo").addEventListener("click", () => {
-        modal.remove();
-    });
-
-    document.getElementById("trackStarBtn").addEventListener("click", () => {
-        // Send tracking request to backend
-        fetch("/track_star", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                name: star.name || star.Name,
-                ra: star.ra !== undefined ? star.ra : star.RA,
-                dec: star.dec !== undefined ? star.dec : star.DEC,
-                mag: star.mag !== undefined ? star.mag : star["V-Mag"]
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            // alert("Tracking started!");
-            modal.remove();
-        })
-        .catch(error => {
-            // alert("Failed to start tracking.");
-            console.error(error);
-        });
-    });
-}
-
-function searchObject() {
-    let searchValue = document.getElementById("searchObject").value;
-    if (searchValue) {
-        fetch("{{ url_for('interface.search_object') }}", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ searchValue: searchValue })
-        }).then(response => response.json())
-        .then(data => {
-            if (data.status === "success" && data.data) {
-                showStarInfo(data.data);
-            } else {
-                alert(data.message || "Object not found.");
-            }
-        })
-        .catch(error => console.error("Fetch error:", error));
-    } else {
-        alert("Please enter a valid HD, NGC, or IC number.");
-    }
-}
-
-
-</script>
+<script src="{{ url_for('static', filename='js/interface.js') }}?v=20251029-1"></script>
 {% endblock %}

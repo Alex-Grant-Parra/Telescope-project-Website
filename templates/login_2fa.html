@@ -15,7 +15,8 @@
       {% endif %}
     {% endwith %}
     
-    <form method="POST">
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <div class="mb-3">
             <label for="totp" class="form-label">2FA Code</label>
             <input type="text" name="totp" class="form-control" required>

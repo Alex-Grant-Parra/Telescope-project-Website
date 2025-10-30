@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Error Page Testing - Telescope Control{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-dark text-white">
+                    <h3 class="mb-0">Error Page Testing</h3>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">Click on any error code below to test the corresponding error page:</p>
+                    
+                    <div class="row">
+                        {% for code in error_codes %}
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-secondary">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">{{ code }}</h5>
+                                    <p class="card-text small text-muted">
+                                        {% if code == 400 %}Bad Request
+                                        {% elif code == 401 %}Unauthorized
+                                        {% elif code == 403 %}Forbidden
+                                        {% elif code == 404 %}Not Found
+                                        {% elif code == 500 %}Internal Server Error
+                                        {% elif code == 502 %}Bad Gateway
+                                        {% elif code == 503 %}Service Unavailable
+                                        {% elif code == 504 %}Gateway Timeout
+                                        {% endif %}
+                                    </p>
+                                    <a href="{{ url_for('error.test_error', code=code) }}" class="btn btn-outline-danger btn-sm">
+                                        Test {{ code }} Error
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="alert alert-info mt-4">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Note:</strong> These are test pages for development purposes. 
+                        The actual error handlers will still work for real errors.
+                    </div>
+                    
+                    <div class="text-center mt-3">
+                        <a href="{{ url_for('home.home') }}" class="btn btn-secondary">
+                            <i class="fas fa-home"></i> Back to Homepage
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

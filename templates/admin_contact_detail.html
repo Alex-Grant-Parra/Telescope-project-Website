@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Message #{{ msg.id }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <a href="{{ url_for('contact.admin_contact_list') }}" class="btn btn-outline-secondary">← Back to messages</a>
+  <form method="post" action="{{ url_for('contact.admin_contact_delete', message_id=msg.id) }}" onsubmit="return confirm('Delete ticket #{{ msg.id }} permanently? This cannot be undone.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <button type="submit" class="btn btn-outline-danger">
+      <i class="fas fa-trash-alt"></i> Delete Ticket
+    </button>
+  </form>
+  </div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h3 class="card-title mb-1">Ticket #{{ msg.id }}</h3>
+        <div class="text-muted mb-3">Created {{ msg.created_at.strftime('%Y-%m-%d %H:%M:%S') if msg.created_at else '' }} UTC</div>
+        <div class="mb-2"><strong>Status:</strong> <span class="badge bg-info text-dark">{{ msg.status }}</span></div>
+        <div class="mb-2"><strong>Type:</strong> {{ msg.message_type }}</div>
+        <div class="mb-2"><strong>Title:</strong> {{ msg.meta.get('title') if msg.meta and msg.meta.get('title') else '(No title)' }}</div>
+        <div class="mb-2"><strong>Email:</strong> <a href="mailto:{{ msg.email }}">{{ msg.email }}</a></div>
+        {% if msg.file_path %}
+        <div class="mb-2">
+          <strong>Attachment:</strong>
+          {% set ext = (msg.file_path.split('.')[-1] | lower) %}
+          {% if ext in ['png','jpg','jpeg'] %}
+            <div class="mt-2">
+              <img src="{{ url_for('contact.admin_contact_attachment', message_id=msg.id) }}" alt="attachment image" class="img-fluid rounded border" style="max-height: 480px; object-fit: contain;">
+            </div>
+          {% else %}
+            <a href="{{ url_for('contact.admin_contact_attachment', message_id=msg.id) }}" class="link-primary" target="_blank" rel="noopener">Download attachment</a>
+          {% endif %}
+        </div>
+        {% endif %}
+        <hr>
+        <h5 class="mb-3">Conversation</h5>
+        <div class="vstack gap-3">
+          {% for e in entries %}
+          <div class="p-3 rounded border" style="background: rgba(255,255,255,0.02);">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <div>
+                <span class="badge {% if e.author == 'admin' %}bg-primary{% else %}bg-secondary{% endif %}">{{ e.author }}</span>
+                {% if e.subject %}<strong class="ms-2">{{ e.subject }}</strong>{% endif %}
+              </div>
+              <small class="text-muted">{{ e.created_at.strftime('%Y-%m-%d %H:%M:%S') if e.created_at else '' }} UTC</small>
+            </div>
+            <div style="white-space:pre-wrap">{{ e.body }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        <hr>
+        <h5 class="card-title">Respond to user</h5>
+        <form method="post" action="{{ url_for('contact.admin_contact_detail', message_id=msg.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+          <div class="row g-2">
+            <div class="col-md-4">
+              <label for="status" class="form-label">Status</label>
+              <select class="form-select" id="status" name="status">
+                {% set statuses = ['new','in_progress','resolved','closed'] %}
+                {% for st in statuses %}
+                <option value="{{ st }}" {% if st == msg.status %}selected{% endif %}>{{ st }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-8">
+              <label for="reply_subject" class="form-label">Subject</label>
+              <input type="text" id="reply_subject" name="reply_subject" class="form-control" value="Re: Your contact request (Ticket #{{ msg.id }})">
+            </div>
+          </div>
+
+          <div class="mb-3 mt-2">
+            <label for="reply_body" class="form-label">Message</label>
+            <textarea id="reply_body" name="reply_body" class="form-control" rows="8" placeholder="Write your response..."></textarea>
+          </div>
+
+          <div class="d-flex justify-content-end gap-2">
+            <a class="btn btn-outline-secondary" href="mailto:{{ msg.email }}">Open in email client</a>
+            <button type="submit" name="action" value="send_reply" class="btn btn-primary">Send reply</button>
+          </div>
+        </form>
+        {% if msg.admin_response %}
+        <hr>
+        <div class="small text-muted">Last response sent {{ msg.responded_at.strftime('%Y-%m-%d %H:%M:%S') if msg.responded_at else '' }} UTC</div>
+        <pre class="small" style="white-space:pre-wrap">{{ msg.admin_response }}</pre>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
+      <div class="card-body">
+        <h5>Collected Metadata</h5>
+        <pre class="small text-muted" style="white-space:pre-wrap">{{ msg.meta|tojson(indent=2) }}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
