@@ -176,6 +176,22 @@ void handleCommand(JsonDocument& cmd) {
 		bool forward = cmd["forward"].as<bool>();
 		setDirection(forward);
 		StaticJsonDocument<64> d; d["dirForward"] = dirForward; sendOk(d);
+	} else if (strcmp(action, "start") == 0) {
+		// Start continuous rotation at a given speed; optional direction
+		// Payload: { cmd: "start", sps: <float>, forward?: <bool> }
+		if (cmd["forward"].is<bool>()) {
+			setDirection(cmd["forward"].as<bool>());
+		}
+		float sps = cmd["sps"].as<float>();
+		applySpeed(sps);
+		runContinuous = true;
+		setEnable(true);
+		StaticJsonDocument<128> d;
+		d["enabled"] = enabled;
+		d["continuous"] = runContinuous;
+		d["dirForward"] = dirForward;
+		d["target_sps"] = targetSpeed;
+		sendOk(d);
 	} else if (strcmp(action, "set_speed") == 0) {
 		float sps = cmd["sps"].as<float>();
 		applySpeed(sps);

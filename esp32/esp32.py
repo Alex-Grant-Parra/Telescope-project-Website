@@ -23,6 +23,10 @@ class ESP32Config:
 
 class ESP32Motor:
 	def __init__(self, cfg: ESP32Config | None = None) -> None:
+		"""Open the serial port and prepare the controller.
+
+		- cfg: serial connection settings (port, baudrate, timeout)
+		"""
 		self.cfg = cfg or ESP32Config()
 		self.ser = serial.Serial(self.cfg.port, self.cfg.baudrate, timeout=self.cfg.timeout)
 		self._lock = threading.Lock()
@@ -31,6 +35,7 @@ class ESP32Motor:
 		self._drain()
 
 	def close(self) -> None:
+		"""Close the underlying serial port (safe to call multiple times)."""
 		try:
 			self.ser.close()
 		except Exception:
@@ -38,6 +43,10 @@ class ESP32Motor:
 
 	# Core send/receive
 	def _send(self, obj: Dict[str, Any]) -> Dict[str, Any]:
+		"""Send a JSON command and return the 'data' object from the response.
+
+		Raises TimeoutError on no reply, RuntimeError on error status or bad JSON.
+		"""
 		line = json.dumps(obj, separators=(",", ":")) + "\n"
 		with self._lock:
 			self.ser.write(line.encode("utf-8"))
@@ -54,7 +63,7 @@ class ESP32Motor:
 		return data.get("data", {})
 
 	def _drain(self) -> None:
-		# Clear any boot messages
+		"""Clear any boot messages remaining in the input buffer."""
 		try:
 			self.ser.reset_input_buffer()
 		except Exception:
@@ -62,15 +71,29 @@ class ESP32Motor:
 
 	# High-level API
 	def enable(self, on: bool) -> Dict[str, Any]:
+		"""Enable or disable the stepper driver (power stage)."""
 		return self._send({"cmd": "enable", "value": bool(on)})
 
 	def set_direction(self, forward: bool) -> Dict[str, Any]:
+		"""Set motor direction: True=forward, False=reverse (DIR pin)."""
 		return self._send({"cmd": "set_dir", "forward": bool(forward)})
 
 	def set_speed(self, steps_per_sec: float) -> Dict[str, Any]:
+		"""Set target speed in steps/second and enter continuous mode (does not auto-enable)."""
 		return self._send({"cmd": "set_speed", "sps": float(steps_per_sec)})
 
+	def start(self, steps_per_sec: float, forward: Optional[bool] = None) -> Dict[str, Any]:
+		"""Start continuous rotation at the given speed; optionally set direction.
+
+		This enables the driver automatically and begins stepping until `stop()` is called.
+		"""
+		payload: Dict[str, Any] = {"cmd": "start", "sps": float(steps_per_sec)}
+		if forward is not None:
+			payload["forward"] = bool(forward)
+		return self._send(payload)
+
 	def move_steps(self, steps: int, sps: Optional[float] = None, forward: Optional[bool] = None) -> Dict[str, Any]:
+		"""Queue a finite move by number of steps; optional speed and direction override."""
 		payload: Dict[str, Any] = {"cmd": "move_steps", "steps": int(steps)}
 		if sps is not None:
 			payload["sps"] = float(sps)
@@ -79,16 +102,20 @@ class ESP32Motor:
 		return self._send(payload)
 
 	def stop(self) -> Dict[str, Any]:
+		"""Stop motion, clear pending steps, and disable the driver."""
 		return self._send({"cmd": "stop"})
 
 	def set_microsteps(self, microsteps: int) -> Dict[str, Any]:
+		"""Set TMC2209 microstepping factor (e.g., 16, 32, 64)."""
 		return self._send({"cmd": "set_microsteps", "value": int(microsteps)})
 
 	def set_current(self, mA: int) -> Dict[str, Any]:
+		"""Set RMS motor current in milliamps (driver.rms_current)."""
 		return self._send({"cmd": "set_current", "mA": int(mA)})
 
 	def set_mode(self, mode: str) -> Dict[str, Any]:
 		# mode: "stealth" (stealthChop2) or "spread" (SpreadCycle)
+		"""Switch chopper mode: 'stealth' for stealthChop2 or 'spread' for SpreadCycle."""
 		m = mode.lower()
 		if m.startswith("stealth"):
 			val = "stealth"
@@ -99,9 +126,11 @@ class ESP32Motor:
 		return self._send({"cmd": "set_mode", "mode": val})
 
 	def set_accel(self, steps_per_sec2: float) -> Dict[str, Any]:
+		"""Set max acceleration in steps/second^2 used by the speed ramp."""
 		return self._send({"cmd": "set_accel", "sps2": float(steps_per_sec2)})
 
 	def status(self) -> Dict[str, Any]:
+		"""Query current firmware status and configuration snapshot."""
 		return self._send({"cmd": "status"})
 
 

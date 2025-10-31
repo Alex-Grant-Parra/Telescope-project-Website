@@ -8,7 +8,8 @@ import re
 import signal
 import os
 from datetime import datetime
-from function_handlers import function_map, is_liveview_enabled
+from function_handlers import function_map
+from liveview_state import is_liveview_enabled
 
 # Configuration values are provided via `client_config.json` at runtime.
 # No hard-coded defaults are kept here.
