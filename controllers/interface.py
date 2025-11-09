@@ -4,12 +4,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from flask import Blueprint, render_template, request, jsonify, session
 from algorithms.convert import convert
-# from camera.cameraController import Camera # Redundant import, using Cameralink instead
-
 from datetime import datetime
 import time
 
-from app.telescopeLink import Cameralink
+from app.telescopeLink import Telescope, current_telescope  # Updated import
 
 interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
@@ -19,14 +17,15 @@ def interface():
 
 @interface_bp.route("/update_camera", methods=["POST"])
 def update_camera():
-    data = request.json
-    # print("Received Camera Settings:", data)
+    data = request.json or {}
     response = {"status": "success", "message": "Settings updated"}
 
     # Determine target telescope
-    telescope_id = (data or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+    telescope_id = data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
     if not telescope_id:
         return jsonify({"status": "error", "message": "No telescope selected"}), 400
+
+    t = Telescope(telescope_id)
 
     # Set shutter speed if provided
     shutter_speed = data.get("shutterSpeed")
@@ -37,7 +36,7 @@ def update_camera():
         try:
             # Set the shutter speed using Camera class
             print("Changing shutterspeed")
-            Cameralink.setSettings(["/main/capturesettings/shutterspeed", shutter_speed], client_id_override=telescope_id)
+            t.camera.set_settings(["/main/capturesettings/shutterspeed", shutter_speed])
         except Exception as e:
             response = {"status": "error", "message": f"Failed to set shutter speed: {e}"}
             print(response)
@@ -47,7 +46,7 @@ def update_camera():
     if iso:
         try:
             print("Changing iso")
-            Cameralink.setSettings(["/main/imgsettings/iso", iso], client_id_override=telescope_id)
+            t.camera.set_settings(["/main/imgsettings/iso", iso])
         except Exception as e:
             response = {"status": "error", "message": f"Failed to set ISO: {e}"}
             print(response)
@@ -186,40 +185,31 @@ def format_celestial_data(name, data):
 @interface_bp.route("/get_camera_choices")
 def get_camera_choices():
     try:
-        selected = session.get('selected_telescope')
-        if not selected or not selected.get('telescopeId'):
+        selected = session.get('selected_telescope') or {}
+        cid = selected.get('telescopeId')
+        if not cid:
             return jsonify({"status": "error", "message": "No telescope selected"}), 400
-        choices = Cameralink.getSettings(client_id_override=selected.get('telescopeId'))
-        # print(choices)
+        t = Telescope(cid)
+        choices = t.camera.get_settings()
         return jsonify(choices)
-    except (KeyError, TypeError) as e:
-        print(f"{e}. Maybe camera is not connected?")
+    except Exception as e:
+        print(e)
         return jsonify({"status": "error", "message": str(e)})
     
 
 @interface_bp.route("/take_photo", methods=["POST"])
 def take_photo():
-    # Set your camera photos folder path here
-    # photos_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "camera_photos")
-    # os.makedirs(photos_folder, exist_ok=True)
     try:
         from flask_login import current_user
-        if current_user.is_authenticated:
-            currentId = current_user.get_id()
-            print(f"User ID: {currentId}")
-
-            try:
-                telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
-                if not telescope_id:
-                    return jsonify({"status": "error", "message": "No telescope selected"}), 400
-                print(Cameralink.capturePhoto(currentId, client_id_override=telescope_id))
-
-                return jsonify({"status": "success"})
-            except Exception as e:
-                return jsonify({"status": "error", "message": str(e)})
-        else:
+        if not current_user.is_authenticated:
             return jsonify({"status": "error", "message": "Must be logged in to take photos"})
-
+        current_id = current_user.get_id()
+        telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+        if not telescope_id:
+            return jsonify({"status": "error", "message": "No telescope selected"}), 400
+        t = Telescope(telescope_id)
+        print(t.camera.capture_photo(current_id))
+        return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
     
@@ -371,7 +361,8 @@ def start_live_view():
         telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
         if not telescope_id:
             return jsonify({"status": "error", "message": "No telescope selected"}), 400
-        result = Cameralink.startLiveView(client_id_override=telescope_id)
+        t = Telescope(telescope_id)
+        result = t.camera.start_live_view()
         return jsonify({"status": "success", "message": "Live view started", "result": result})
     except Exception as e:
         return jsonify({"status": "error", "message": f"Failed to start live view: {str(e)}"})
@@ -384,7 +375,8 @@ def stop_live_view():
         telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
         if not telescope_id:
             return jsonify({"status": "error", "message": "No telescope selected"}), 400
-        result = Cameralink.stopLiveView(client_id_override=telescope_id)
+        t = Telescope(telescope_id)
+        result = t.camera.stop_live_view()
         return jsonify({"status": "success", "message": "Live view stopped", "result": result})
     except Exception as e:
         return jsonify({"status": "error", "message": f"Failed to stop live view: {str(e)}"})
