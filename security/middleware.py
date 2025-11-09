@@ -246,24 +246,27 @@ class SecurityMiddleware:
     
     def _before_request(self):
         """Handle request before processing"""
-        # Log all requests with true client IP
-        self._log_request()
-        
+        # Get client IP early so we can short-circuit processing for blacklisted
+        # clients and avoid doing extra work (like heavy request logging).
         client_ip = self._get_client_ip()
-        
+
         # Skip security checks for localhost in development
         if client_ip in ['127.0.0.1', '::1', 'localhost'] and self.app.debug:
             return
-        
-        # Check if IP is blacklisted
+
+        # Check if IP is blacklisted and immediately abort to reduce load
         if self.blacklist.is_ip_blacklisted(client_ip):
             self._log_security_event('blocked_request', {
                 'reason': 'ip_blacklisted',
                 'blocked_ip': client_ip
             })
-            
+
             # Return 403 Forbidden
             abort(403)
+
+        # Only log requests after we've cleared the blacklist check so that
+        # blocked IPs do not generate full request logs.
+        self._log_request()
         
         # Check for suspicious activity
         suspicious_indicators = self._is_suspicious_request()

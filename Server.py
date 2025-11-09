@@ -19,6 +19,7 @@ import subprocess
 import atexit
 from waitress import serve  
 from datetime import datetime
+import ipaddress
 # Import security components
 from security import SecurityMiddleware, register_security_error_handlers
 
@@ -186,28 +187,48 @@ except Exception as e:
 # HTTPS Enforcement Middleware
 @app.before_request
 def force_https():
-    # Only force HTTPS when the request is not already secure and no reverse proxy
-    # has indicated the original protocol. However, if the client is connecting
-    # using a raw IP address (e.g. 192.168.x.x) we assume this is a direct
-    # HTTP connection to the Flask dev server and should not be redirected to
-    # HTTPS (which would cause browsers to attempt a TLS handshake against a
-    # non-TLS server and trigger ERR_SSL_PROTOCOL_ERROR).
-    if not request.is_secure and request.headers.get('X-Forwarded-Proto') != 'https':
-        # Allow localhost for development/testing
-        host = (request.host or '')
-        # Extract hostname portion if a port is present
-        if ':' in host:
-            host = host.split(':', 1)[0]
+    """Redirect HTTP->HTTPS appropriately.
 
-        if host.startswith('127.0.0.1') or host.startswith('localhost'):
+    Rules:
+    - If already secure or a reverse proxy says original was HTTPS, do nothing.
+    - Always allow localhost/127.0.0.1 without redirect (handy for local dev/tools).
+    - If request targets a private LAN IP on the Flask HTTP port (e.g., 8080),
+      redirect to the same host over HTTPS on the default port (handled by Caddy).
+    - For domains (non-IP hosts), redirect http:// -> https://.
+    """
+    if request.is_secure or (request.headers.get('X-Forwarded-Proto') or '').lower() == 'https':
+        return None
+
+    raw_host = request.host or ''
+    host_only, port = raw_host, ''
+    if ':' in raw_host:
+        host_only, port = raw_host.rsplit(':', 1)
+
+    # Allow localhost explicitly
+    if host_only.startswith('127.0.0.1') or host_only.startswith('localhost'):
+        return None
+
+    # If the host is an IP address, decide based on private/public and port
+    try:
+        ip_obj = ipaddress.ip_address(host_only)
+        if ip_obj.is_private:
+            # If hitting the Flask server directly on its HTTP port, upgrade to HTTPS on the same host
+            try:
+                flask_port_str = str(FlaskServerPort)
+            except Exception:
+                flask_port_str = '8080'
+
+            if port == flask_port_str:
+                # Build HTTPS URL without the explicit HTTP port
+                target = f"https://{host_only}{request.full_path if request.query_string else request.path}"
+                return redirect(target, code=301)
+            # Otherwise (private IP but different port), do not force to avoid surprises
             return None
-
-        # Log the decision for diagnostics
-        try:
-            print(f"force_https: host={host}, secure={request.is_secure}, x-forwarded-proto={request.headers.get('X-Forwarded-Proto')}; redirecting to HTTPS")
-        except Exception:
-            pass
-
+        else:
+            # Public IPs: upgrade to HTTPS
+            return redirect(request.url.replace('http://', 'https://'), code=301)
+    except ValueError:
+        # Not an IP literal (likely a domain): upgrade to HTTPS
         return redirect(request.url.replace('http://', 'https://'), code=301)
 
 # Register Blueprints
