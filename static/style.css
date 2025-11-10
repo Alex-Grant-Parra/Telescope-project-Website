@@ -738,3 +738,353 @@ body.night-mode .nightmode-icon {
     border-bottom: 2px solid #fff;
     border-radius: 0 0 10px 10px;
 }
+
+/* Advanced Motor Controls Modal Styling */
+#advancedControlsModal .modal-content {
+    border: none;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.3);
+    border-radius: 0.75rem;
+}
+
+#advancedControlsModal .modal-header {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    border-radius: 0.75rem 0.75rem 0 0;
+    border-bottom: none;
+}
+
+#advancedControlsModal .modal-title {
+    font-weight: 600;
+    font-size: 1.25rem;
+}
+
+#advancedControlsModal .btn-close {
+    filter: invert(1);
+}
+
+#advancedControlsModal .control-group {
+    padding: 0.75rem;
+    border: 1px solid #e9ecef;
+    border-radius: 0.5rem;
+    background-color: #f8f9fa;
+    transition: all 0.2s ease;
+}
+
+#advancedControlsModal .control-group:hover {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.1rem rgba(0, 123, 255, 0.1);
+}
+
+#advancedControlsModal .form-label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #495057;
+}
+
+#advancedControlsModal .btn-group .btn.active {
+    background-color: #007bff !important;
+    border-color: #007bff !important;
+    color: white !important;
+    transform: scale(1.02);
+}
+
+#advancedControlsModal .input-group .btn {
+    min-width: 50px;
+}
+
+.status-display {
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    line-height: 1.3;
+    white-space: pre-line;
+    word-wrap: break-word;
+}
+
+/* Night mode styling for modal */
+body.night-mode #advancedControlsModal .modal-content {
+    background-color: #1a1a1a !important;
+    color: #e6e6e6 !important;
+    border: 1px solid #333 !important;
+}
+
+body.night-mode #advancedControlsModal .modal-header {
+    background: linear-gradient(135deg, #0056b3, #003d82);
+}
+
+body.night-mode #advancedControlsModal .control-group {
+    background-color: #2a2a2a !important;
+    border-color: #444 !important;
+    color: #e6e6e6 !important;
+}
+
+body.night-mode #advancedControlsModal .control-group:hover {
+    border-color: #0056b3 !important;
+    box-shadow: 0 0 0 0.1rem rgba(0, 86, 179, 0.2) !important;
+}
+
+body.night-mode #advancedControlsModal .form-label {
+    color: #e6e6e6 !important;
+}
+
+body.night-mode #advancedControlsModal .form-control,
+body.night-mode #advancedControlsModal .form-select {
+    background-color: #333 !important;
+    border-color: #555 !important;
+    color: #e6e6e6 !important;
+}
+
+body.night-mode #advancedControlsModal .status-display {
+    background-color: #2a2a2a !important;
+    border-color: #444 !important;
+    color: #e6e6e6 !important;
+}
+
+body.night-mode #advancedControlsModal .btn {
+    border-color: #555 !important;
+}
+
+/* Motor enable/disable button states */
+.btn-outline-success.motor-enabled {
+    background-color: #28a745;
+    border-color: #28a745;
+    color: white;
+}
+
+.btn-outline-danger.motor-disabled {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+}
+
+/* Draggable panel improvements for advanced controls */
+.draggable-panel {
+    min-width: 280px;
+    max-width: 350px;
+}
+
+.draggable-panel .panel-header {
+    cursor: move;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Motor enable/disable button states */
+.btn-outline-success.motor-enabled {
+    background-color: #28a745;
+    border-color: #28a745;
+    color: white;
+}
+
+.btn-outline-danger.motor-disabled {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+}
+
+/* Direction button active state */
+.advanced-controls .btn-group .btn.active {
+    background-color: #007bff !important;
+    border-color: #007bff !important;
+    color: white !important;
+}
+
+body.night-mode .advanced-controls .btn-group .btn.active {
+    background-color: #0056b3 !important;
+    border-color: #0056b3 !important;
+}
+
+/* Enhanced Star Info Modal Styling */
+.star-info-modal {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.star-info-modal .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.star-info-modal .btn-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.star-info-modal .btn-close:hover {
+    opacity: 1;
+}
+
+.star-info-modal .info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.star-info-modal .info-item:last-child {
+    border-bottom: none;
+}
+
+.star-info-modal .info-item strong {
+    min-width: 120px;
+    color: #495057;
+}
+
+.star-info-modal .advanced-info {
+    animation: fadeIn 0.3s ease-in-out;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.star-info-modal .table {
+    margin-bottom: 0;
+    font-size: 0.95rem;
+}
+
+.star-info-modal .table th {
+    background-color: #e9ecef;
+    font-weight: 600;
+    border-top: none;
+    padding: 0.6rem 0.5rem;
+    color: #2c3e50;
+}
+
+.star-info-modal .table td {
+    padding: 0.5rem 0.6rem;
+    vertical-align: middle;
+    color: #495057;
+    border-color: #dee2e6;
+}
+
+.star-info-modal .table-hover tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+.star-info-modal .modal-footer {
+    border-top: 1px solid #dee2e6;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Night mode styling for star info modal */
+body.night-mode .star-info-modal {
+    background-color: #1a1a1a !important;
+    color: #e6e6e6 !important;
+}
+
+body.night-mode .star-info-modal .info-item {
+    border-bottom-color: #444 !important;
+}
+
+body.night-mode .star-info-modal .info-item strong {
+    color: #e6e6e6 !important;
+}
+
+body.night-mode .star-info-modal .advanced-info {
+    background-color: #2a2a2a !important;
+    color: #ffffff !important;
+}
+
+body.night-mode .star-info-modal .advanced-info h6 {
+    color: #66b3ff !important;
+}
+
+body.night-mode .star-info-modal .table th {
+    background-color: #343a40 !important;
+    color: #000000 !important;
+    border-color: #555 !important;
+}
+
+body.night-mode .star-info-modal .table td {
+    color: #000000 !important;
+    border-color: #555 !important;
+}
+
+body.night-mode .star-info-modal .table td strong {
+    color: #000000 !important;
+}
+
+body.night-mode .star-info-modal .table-hover tbody tr:hover {
+    background-color: rgba(0, 86, 179, 0.2) !important;
+}
+
+body.night-mode .star-info-modal .modal-footer {
+    background-color: #2a2a2a !important;
+    border-top-color: #444 !important;
+}
+
+/* Responsive design for smaller screens */
+@media (max-width: 768px) {
+    .star-info-modal {
+        min-width: 90vw;
+        max-width: 95vw;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    .star-info-modal .modal-body {
+        padding: 1rem;
+    }
+    
+    .star-info-modal .info-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+    
+    .star-info-modal .info-item strong {
+        min-width: auto;
+    }
+}
+
+/* Manual coordinates section styling */
+.draggable-panel .manual-coordinates {
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    padding: 0.5rem;
+    border-left: 3px solid #28a745;
+}
+
+.draggable-panel .manual-coordinates .form-label {
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+    font-weight: 500;
+}
+
+.draggable-panel .manual-coordinates .form-control-sm {
+    font-size: 0.8rem;
+}
+
+/* Night mode adjustments for manual coordinates */
+body.night-mode .draggable-panel .manual-coordinates {
+    background-color: #2a2a2a;
+    border-left-color: #28a745;
+}
+
+body.night-mode .draggable-panel .manual-coordinates .form-label {
+    color: #e9ecef;
+}
+
+body.night-mode .draggable-panel .manual-coordinates .form-control-sm {
+    background-color: #343a40;
+    border-color: #495057;
+    color: #ffffff;
+}
+
+body.night-mode .draggable-panel .manual-coordinates .form-control-sm:focus {
+    background-color: #495057;
+    border-color: #28a745;
+    color: #ffffff;
+}

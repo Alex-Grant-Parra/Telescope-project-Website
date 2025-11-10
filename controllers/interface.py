@@ -56,17 +56,24 @@ def update_camera():
 
 def extract_friendly_common_name(common_names_field: str) -> str:
     """
-    Extract the first non-HD name from commonNames field.
-    commonNames format: 'Sirius, HD 48915, HD48915'
-    Returns: 'Sirius' or '' if no friendly name found.
+    Extract the first friendly name from commonNames field.
+    commonNames format: 'Sirius, HD 48915, HD48915' or 'Andromeda Galaxy, M31, NGC 224'
+    Returns: 'Sirius' or 'Andromeda Galaxy' or '' if no friendly name found.
+    Skips catalog designations like HD, NGC, IC, M (Messier).
     """
     if not common_names_field:
         return ''
     parts = [p.strip() for p in common_names_field.split(',')]
     for name in parts:
-        # Skip HD variants (with or without space)
-        if not name.upper().startswith('HD'):
-            return name
+        name_upper = name.upper()
+        # Skip catalog designations (HD, NGC, IC, M followed by number)
+        if (name_upper.startswith('HD') or 
+            name_upper.startswith('NGC') or 
+            name_upper.startswith('IC') or 
+            (name_upper.startswith('M') and len(name) > 1 and name[1:].strip().replace(' ', '').isdigit())):
+            continue
+        # Found a friendly name
+        return name
     return ''
 
 @interface_bp.route("/search_object", methods=["POST"])
@@ -154,7 +161,8 @@ def search_object():
         mag = result_data.get('V-Mag', 0)  # Default to 0 if V-Mag is missing or None
 
         # Extract friendly common name (non-HD variant) if available
-        common_names_raw = result_data.get('commonNames', '')
+        # Try both 'commonNames' (HDSTARtable) and 'Common names' (NGCtable/IndexTable)
+        common_names_raw = result_data.get('commonNames', '') or result_data.get('Common names', '')
         friendly_name = extract_friendly_common_name(common_names_raw)
         if friendly_name:
             result_data['friendlyName'] = friendly_name
@@ -380,3 +388,54 @@ def stop_live_view():
         return jsonify({"status": "success", "message": "Live view stopped", "result": result})
     except Exception as e:
         return jsonify({"status": "error", "message": f"Failed to stop live view: {str(e)}"})
+
+@interface_bp.route("/motor_command", methods=["POST"])
+def motor_command():
+    """Execute motor commands on the telescope"""
+    try:
+        data = request.json or {}
+        telescope_id = data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+        command = data.get("command")
+        args = data.get("args")
+        
+        if not telescope_id:
+            return jsonify({"status": "error", "message": "No telescope selected"}), 400
+        
+        if not command:
+            return jsonify({"status": "error", "message": "No command specified"}), 400
+        
+        # Create telescope instance
+        t = Telescope(telescope_id)
+        
+        # Map command to motor controller method
+        motor_commands = {
+            "enable": t.motor.enable,
+            "set_direction": t.motor.set_direction,
+            "set_speed": t.motor.set_speed,
+            "start": t.motor.start,
+            "move_steps": t.motor.move_steps,
+            "stop": t.motor.stop,
+            "set_microsteps": t.motor.set_microsteps,
+            "set_current": t.motor.set_current,
+            "set_mode": t.motor.set_mode,
+            "set_accel": t.motor.set_accel,
+            "status": t.motor.status
+        }
+        
+        if command not in motor_commands:
+            return jsonify({"status": "error", "message": f"Unknown motor command: {command}"}), 400
+        
+        # Execute the command
+        method = motor_commands[command]
+        if args is not None:
+            result = method(*args) if isinstance(args, list) else method(args)
+        else:
+            result = method()
+        
+        print(f"Motor command '{command}' executed with args {args}, result: {result}")
+        return jsonify({"status": "success", "message": f"Motor command '{command}' executed successfully", "result": result})
+        
+    except Exception as e:
+        error_msg = f"Failed to execute motor command: {str(e)}"
+        print(error_msg)
+        return jsonify({"status": "error", "message": error_msg}), 500
