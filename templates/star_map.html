@@ -75,6 +75,25 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        #cursor-coords {
+            position: fixed;
+            pointer-events: none;
+            z-index: 999;
+            display: none;
+            background: rgba(0,0,0,0.75);
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px);
+            white-space: nowrap;
+        }
+        #cursor-coords div {
+            margin: 1px 0;
+        }
     </style>
 </head>
 <body>
@@ -120,6 +139,10 @@
         <input type="checkbox" id="show-below-horizon" checked> Below-horizon tint
     </label>
     <label>
+        <input type="checkbox" id="show-radec-cursor"> RA/DEC at cursor
+        <input type="checkbox" id="show-azel-cursor"> Az/Elv at cursor
+    </label>
+    <label>
         <input type="checkbox" id="flip-vertical"> Invert controls
     </label>
     <div style="margin-top: 8px;">
@@ -162,6 +185,8 @@
         <button id="mag-cancel">Cancel</button>
     </div>
 </div>
+<!-- Cursor coordinate labels -->
+<div id="cursor-coords"></div>
 <!-- Small bottom-right throbber for star loading/processing -->
 <div id="star-loading-indicator" aria-live="polite" aria-atomic="true">
     <div class="star-spinner" role="status" aria-hidden="true"></div>

@@ -36,6 +36,7 @@ document.querySelectorAll(".draggable-panel").forEach(panel => {
 
         // Selected telescope state
         let selectedTelescopeId = null;
+        let selectedMotorId = "motor1"; // Default motor
 
         // Enable/disable UI controls based on telescope selection
         function setControlsEnabled(enabled) {
@@ -50,6 +51,35 @@ document.querySelectorAll(".draggable-panel").forEach(panel => {
             ids.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.disabled = !enabled;
+            });
+            
+            // Also enable/disable advanced motor controls
+            setAdvancedControlsEnabled(enabled);
+        }
+        
+        function setAdvancedControlsEnabled(enabled) {
+            const advancedIds = [
+                "motorEnableBtn",
+                "speedControl",
+                "stepsControl",
+                "microstepsControl", 
+                "currentControl",
+                "accelControl",
+                "modeControl"
+            ];
+            
+            advancedIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = !enabled;
+            });
+            
+            // Also disable direction and movement buttons
+            const directionBtns = document.querySelectorAll('[onclick^="setDirection"]');
+            const movementBtns = document.querySelectorAll('[onclick="startMotor()"], [onclick="stopMotor()"], [onclick="moveSteps()"]');
+            const settingBtns = document.querySelectorAll('[onclick="setSpeed()"], [onclick="setCurrent()"], [onclick="setAcceleration()"], [onclick="getMotorStatus()"]');
+            
+            [...directionBtns, ...movementBtns, ...settingBtns].forEach(btn => {
+                btn.disabled = !enabled;
             });
         }
 
@@ -266,57 +296,247 @@ function showStarInfo(star) {
     const existingModal = document.getElementById("starInfoModal");
     if (existingModal) existingModal.remove();
 
+    // Extract basic information with proper fallbacks
+    const name = star.name || star.Name || "Unknown";
+    const commonName = star.friendlyName || extractCommonName(star.commonNames || star['Common names']) || "";
+    const ra = parseFloat(star.ra !== undefined ? star.ra : star.RA || 0).toFixed(4);
+    const dec = parseFloat(star.dec !== undefined ? star.dec : star.DEC || 0).toFixed(4);
+    const magnitude = star.mag !== undefined ? star.mag : star["V-Mag"] || "N/A";
+
+    // Create modal with enhanced styling
     const modal = document.createElement("div");
     modal.id = "starInfoModal";
-    modal.style.position = "fixed";
-    modal.style.top = "50%";
-    modal.style.left = "50%";
-    modal.style.transform = "translate(-50%, -50%)";
-    modal.style.background = "black";
-    modal.style.color = "white";
-    modal.style.padding = "15px";
-    modal.style.borderRadius = "8px";
-    modal.style.zIndex = 1000;
-    modal.style.maxWidth = "300px";
-    modal.style.boxShadow = "0 0 10px #fff";
+    modal.className = "star-info-modal";
+    modal.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #ffffff;
+        color: #333;
+        border-radius: 12px;
+        z-index: 1050;
+        min-width: 350px;
+        max-width: 500px;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.3);
+        border: none;
+        overflow: hidden;
+    `;
 
     modal.innerHTML = `
-        <h2>${star.name || star.Name}</h2>
-        <p><b>RA:</b> ${star.ra !== undefined ? star.ra : star.RA}°</p>
-        <p><b>DEC:</b> ${star.dec !== undefined ? star.dec : star.DEC}°</p>
-        <p><b>Magnitude:</b> ${star.mag !== undefined ? star.mag : star["V-Mag"]}</p>
-        <button id="trackStarBtn" class="btn btn-success">Track</button>
-        <button id="closeStarInfo" class="btn btn-secondary ms-2">Close</button>
+        <div class="modal-header" style="background: linear-gradient(135deg, #007bff, #0056b3); color: white; padding: 1rem; border-bottom: none;">
+            <h5 class="modal-title" style="margin: 0; font-weight: 600;">🌟 Object Information</h5>
+            <button type="button" class="btn-close" id="closeStarInfo" style="filter: invert(1); background: none; border: none; font-size: 1.2rem; cursor: pointer;">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 1.5rem;">
+            <!-- Basic Information -->
+            <div class="basic-info">
+                <div class="info-item" style="margin-bottom: 1rem;">
+                    <strong>Identifier:</strong> <span class="text-primary">${name}</span>${commonName ? `  <span class="text-success">(${commonName})</span>` : ''}
+                </div>
+                <div class="info-item" style="margin-bottom: 1rem;">
+                    <strong>RA:</strong> <span class="text-info">${ra}°</span>
+                </div>
+                <div class="info-item" style="margin-bottom: 1rem;">
+                    <strong>DEC:</strong> <span class="text-info">${dec}°</span>
+                </div>
+            </div>
+            
+            <!-- Advanced Info Toggle -->
+            <div class="advanced-toggle" style="margin: 1.5rem 0;">
+                <button id="toggleAdvancedInfo" class="btn btn-outline-secondary btn-sm w-100" onclick="toggleAdvancedObjectInfo()">
+                    📊 Show Advanced Information
+                </button>
+            </div>
+            
+            <!-- Advanced Information (Initially Hidden) -->
+            <div id="advancedObjectInfo" class="advanced-info" style="display: none; padding: 1rem; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #007bff;">
+                ${generateAdvancedInfo(star)}
+            </div>
+        </div>
+        <div class="modal-footer" style="padding: 1rem; background-color: #f8f9fa; border-top: 1px solid #dee2e6; display: flex; justify-content: space-between;">
+            <button id="trackObjectBtn" class="btn btn-success">🎯 Track Object</button>
+            <button id="closeStarInfoFooter" class="btn btn-secondary">Close</button>
+        </div>
     `;
+
+    // Apply night mode styling if active
+    if (document.body.classList.contains('night-mode')) {
+        modal.style.background = '#1a1a1a';
+        modal.style.color = '#e6e6e6';
+        const modalBody = modal.querySelector('.modal-body');
+        if (modalBody) modalBody.style.color = '#e6e6e6';
+        const modalFooter = modal.querySelector('.modal-footer');
+        if (modalFooter) {
+            modalFooter.style.backgroundColor = '#2a2a2a';
+            modalFooter.style.borderTopColor = '#444';
+        }
+        const advancedInfo = modal.querySelector('.advanced-info');
+        if (advancedInfo) {
+            advancedInfo.style.backgroundColor = '#2a2a2a';
+            advancedInfo.style.color = '#e6e6e6';
+        }
+    }
 
     document.body.appendChild(modal);
 
-    document.getElementById("closeStarInfo").addEventListener("click", () => {
+    // Event listeners
+    document.getElementById("closeStarInfo").addEventListener("click", () => modal.remove());
+    document.getElementById("closeStarInfoFooter").addEventListener("click", () => modal.remove());
+    
+    document.getElementById("trackObjectBtn").addEventListener("click", () => {
+        trackObject(star);
         modal.remove();
     });
 
-    document.getElementById("trackStarBtn").addEventListener("click", () => {
-        // Send tracking request to backend
-        fetch("/track_star", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                name: star.name || star.Name,
-                ra: star.ra !== undefined ? star.ra : star.RA,
-                dec: star.dec !== undefined ? star.dec : star.DEC,
-                mag: star.mag !== undefined ? star.mag : star["V-Mag"]
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            // alert("Tracking started!");
-            modal.remove();
-        })
-        .catch(error => {
-            // alert("Failed to start tracking.");
-            console.error(error);
-        });
+    // Make modal draggable by header
+    makeDraggable(modal, modal.querySelector('.modal-header'));
+}
+
+function extractCommonName(commonNames) {
+    if (!commonNames) return "";
+    const parts = commonNames.split(',').map(p => p.trim());
+    for (const name of parts) {
+        const nameUpper = name.toUpperCase();
+        // Skip catalog designations (HD, NGC, IC, M followed by number)
+        if (nameUpper.startsWith('HD') || 
+            nameUpper.startsWith('NGC') || 
+            nameUpper.startsWith('IC') || 
+            (nameUpper.startsWith('M') && name.length > 1 && name.slice(1).trim().replace(/\s/g, '').match(/^\d+$/))) {
+            continue;
+        }
+        // Found a friendly name
+        return name;
+    }
+    return "";
+}
+
+function generateAdvancedInfo(star) {
+    let advancedHtml = "<h6 style='margin-bottom: 1rem; color: #007bff;'>📋 Detailed Information</h6>";
+    
+    // Create a table of all available properties
+    const excludeKeys = ['name', 'Name', 'ra', 'RA', 'dec', 'DEC', 'friendlyName'];
+    const propertyMappings = {
+        'mag': 'Visual Magnitude',
+        'V-Mag': 'Visual Magnitude', 
+        'B-Mag': 'Blue Magnitude',
+        'U-Mag': 'Ultraviolet Magnitude',
+        'R-Mag': 'Red Magnitude',
+        'I-Mag': 'Infrared Magnitude',
+        'J-Mag': 'J-band Magnitude',
+        'H-Mag': 'H-band Magnitude',
+        'K-Mag': 'K-band Magnitude',
+        'commonNames': 'All Names',
+        'SpectralType': 'Spectral Type',
+        'spectralType': 'Spectral Type',
+        'Parallax': 'Parallax (mas)',
+        'parallax': 'Parallax (mas)',
+        'ProperMotionRA': 'Proper Motion RA (mas/yr)',
+        'ProperMotionDec': 'Proper Motion DEC (mas/yr)',
+        'RadialVelocity': 'Radial Velocity (km/s)',
+        'Distance': 'Distance (pc)',
+        'Luminosity': 'Luminosity',
+        'Temperature': 'Temperature (K)',
+        'Mass': 'Mass (Solar masses)',
+        'Radius': 'Radius (Solar radii)',
+        'Age': 'Age (Gyr)',
+        'Metallicity': 'Metallicity [Fe/H]'
+    };
+    
+    advancedHtml += '<div class="table-responsive"><table class="table table-sm table-hover">';
+    advancedHtml += '<thead><tr><th>Property</th><th>Value</th></tr></thead><tbody>';
+    
+    for (const [key, value] of Object.entries(star)) {
+        if (excludeKeys.includes(key) || value === null || value === undefined || value === "") continue;
+        
+        const displayName = propertyMappings[key] || key.replace(/([A-Z])/g, ' $1').trim();
+        let displayValue = value;
+        
+        // Format numeric values
+        if (typeof value === 'number' && !Number.isInteger(value)) {
+            displayValue = value.toFixed(4);
+        }
+        
+        advancedHtml += `<tr><td><strong>${displayName}:</strong></td><td>${displayValue}</td></tr>`;
+    }
+    
+    advancedHtml += '</tbody></table></div>';
+    
+    if (Object.keys(star).filter(key => !excludeKeys.includes(key)).length === 0) {
+        advancedHtml = "<p class='text-muted'>No additional information available for this object.</p>";
+    }
+    
+    return advancedHtml;
+}
+
+function toggleAdvancedObjectInfo() {
+    const advancedInfo = document.getElementById("advancedObjectInfo");
+    const toggleBtn = document.getElementById("toggleAdvancedInfo");
+    
+    if (advancedInfo.style.display === "none") {
+        advancedInfo.style.display = "block";
+        toggleBtn.innerHTML = "📊 Hide Advanced Information";
+        toggleBtn.classList.remove("btn-outline-secondary");
+        toggleBtn.classList.add("btn-outline-primary");
+    } else {
+        advancedInfo.style.display = "none";
+        toggleBtn.innerHTML = "📊 Show Advanced Information";
+        toggleBtn.classList.remove("btn-outline-primary");
+        toggleBtn.classList.add("btn-outline-secondary");
+    }
+}
+
+function trackObject(star) {
+    const name = star.name || star.Name;
+    const ra = star.ra !== undefined ? star.ra : star.RA;
+    const dec = star.dec !== undefined ? star.dec : star.DEC;
+    const mag = star.mag !== undefined ? star.mag : star["V-Mag"];
+    
+    fetch("/track_star", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, ra, dec, mag })
+    })
+    .then(response => response.json())
+    .then(data => {
+        updateMotorStatusDisplay(`🎯 Tracking started for ${name}`, 'success');
+    })
+    .catch(error => {
+        updateMotorStatusDisplay(`❌ Failed to start tracking: ${error}`, 'error');
+        console.error(error);
     });
+}
+
+function makeDraggable(element, handle) {
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+    handle.style.cursor = "move";
+    
+    handle.onmousedown = dragMouseDown;
+    
+    function dragMouseDown(e) {
+        e = e || window.event;
+        e.preventDefault();
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        document.onmouseup = closeDragElement;
+        document.onmousemove = elementDrag;
+    }
+    
+    function elementDrag(e) {
+        e = e || window.event;
+        e.preventDefault();
+        pos1 = pos3 - e.clientX;
+        pos2 = pos4 - e.clientY;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        element.style.top = (element.offsetTop - pos2) + "px";
+        element.style.left = (element.offsetLeft - pos1) + "px";
+    }
+    
+    function closeDragElement() {
+        document.onmouseup = null;
+        document.onmousemove = null;
+    }
 }
 
 function searchObject() {
@@ -473,4 +693,402 @@ function updateLiveViewSrcForTelescope(telescopeId) {
     if (wasRefreshing) {
         startImageRefresh();
     }
+}
+
+// Advanced Manual Controls Functions
+let motorEnabled = false;
+
+function openAdvancedControlsModal() {
+    if (!selectedTelescopeId) {
+        alert("Please select a telescope first.");
+        return;
+    }
+    
+    // Wait for Bootstrap to be available
+    if (typeof bootstrap === 'undefined') {
+        console.error('Bootstrap is not loaded');
+        return;
+    }
+    
+    // Initialize modal with Bootstrap
+    const modalElement = document.getElementById('advancedControlsModal');
+    if (!modalElement) {
+        console.error('Modal element not found');
+        return;
+    }
+    
+    const modal = new bootstrap.Modal(modalElement);
+    modal.show();
+    
+    // Load available motors
+    loadAvailableMotors();
+    
+    // Update motor status when modal opens
+    updateMotorStatusDisplay("Advanced controls opened - Ready for commands", 'info');
+    
+    // Reset motor state display
+    updateMotorEnableButton();
+}
+
+function loadAvailableMotors() {
+    if (!selectedTelescopeId) return;
+    
+    fetch("/interface/get_motors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telescopeId: selectedTelescopeId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === "success" && data.motors) {
+            const motorSelect = document.getElementById("motorSelect");
+            if (motorSelect) {
+                motorSelect.innerHTML = "";
+                data.motors.forEach(motorId => {
+                    const option = document.createElement("option");
+                    option.value = motorId;
+                    option.text = motorId === "motor1" ? "Motor 1 (Azimuth)" : 
+                                 motorId === "motor2" ? "Motor 2 (Altitude)" : 
+                                 motorId.charAt(0).toUpperCase() + motorId.slice(1);
+                    if (motorId === selectedMotorId) {
+                        option.selected = true;
+                    }
+                    motorSelect.appendChild(option);
+                });
+                console.log(`Loaded ${data.motors.length} motors:`, data.motors);
+            }
+        }
+    })
+    .catch(error => {
+        console.error("Failed to load motors:", error);
+    });
+}
+
+function updateSelectedMotor() {
+    const motorSelect = document.getElementById("motorSelect");
+    if (motorSelect) {
+        selectedMotorId = motorSelect.value;
+        console.log(`Selected motor: ${selectedMotorId}`);
+        updateMotorStatusDisplay(`Switched to ${selectedMotorId}`, 'info');
+        
+        // Get status of newly selected motor
+        getMotorStatus();
+    }
+}
+
+function emergencyStop() {
+    if (confirm("Are you sure you want to execute an emergency stop? This will immediately stop all motor movement.")) {
+        sendMotorCommand("stop")
+        .then(() => {
+            updateMotorStatusDisplay("🚨 EMERGENCY STOP EXECUTED", 'error');
+        });
+    }
+}
+
+function updateMotorEnableButton() {
+    const btn = document.getElementById("motorEnableBtn");
+    if (!btn) return;
+    
+    btn.textContent = motorEnabled ? "Disable" : "Enable";
+    if (motorEnabled) {
+        btn.className = "btn btn-outline-danger btn-sm motor-enabled";
+    } else {
+        btn.className = "btn btn-outline-success btn-sm motor-disabled";
+    }
+}
+
+function sendMotorCommand(command, args = null) {
+    if (!selectedTelescopeId) {
+        alert("Please select a telescope first.");
+        return Promise.reject("No telescope selected");
+    }
+    
+    // Show loading state
+    updateMotorStatusDisplay(`Executing ${command} on ${selectedMotorId}...`, 'info');
+    
+    return fetch("/interface/motor_command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+            telescopeId: selectedTelescopeId,
+            command: command,
+            args: args,
+            motor_id: selectedMotorId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === "success") {
+            console.log(`Motor command ${command} executed successfully on ${selectedMotorId}:`, data.result);
+            updateMotorStatusDisplay(`${command} executed successfully on ${selectedMotorId}`, 'success');
+            return data.result;
+        } else {
+            throw new Error(data.message || "Motor command failed");
+        }
+    })
+    .catch(error => {
+        console.error(`Motor command ${command} failed on ${selectedMotorId}:`, error);
+        updateMotorStatusDisplay(`${command} failed on ${selectedMotorId}: ${error}`, 'error');
+        alert(`Motor command failed: ${error}`);
+        throw error;
+    });
+}
+
+function updateMotorStatusDisplay(message, type = 'info') {
+    const statusDiv = document.getElementById("motorStatus");
+    if (!statusDiv) return;
+    
+    const timestamp = new Date().toLocaleTimeString();
+    let className = '';
+    let icon = '';
+    
+    switch(type) {
+        case 'success':
+            className = 'text-success';
+            icon = '✅ ';
+            break;
+        case 'error':
+            className = 'text-danger';
+            icon = '❌ ';
+            break;
+        case 'warning':
+            className = 'text-warning';
+            icon = '⚠️ ';
+            break;
+        case 'info':
+        default:
+            className = 'text-info';
+            icon = 'ℹ️ ';
+            break;
+    }
+    
+    // Append new messages instead of replacing (keep history)
+    const newMessage = `<div class="${className}">[${timestamp}] ${icon}${message}</div>`;
+    
+    // If statusDiv is getting too full, keep only last 10 messages
+    const messages = statusDiv.querySelectorAll('div');
+    if (messages.length >= 10) {
+        statusDiv.removeChild(messages[0]);
+    }
+    
+    statusDiv.innerHTML += newMessage;
+    
+    // Auto-scroll to bottom
+    statusDiv.scrollTop = statusDiv.scrollHeight;
+}
+
+function toggleMotorEnable() {
+    const newState = !motorEnabled;
+    
+    sendMotorCommand("enable", [newState])
+    .then(() => {
+        motorEnabled = newState;
+        updateMotorEnableButton();
+    });
+}
+
+function setDirection(forward) {
+    sendMotorCommand("set_direction", [forward])
+    .then(() => {
+        // Update UI to show which direction is selected
+        const buttons = document.querySelectorAll('[onclick^="setDirection"]');
+        buttons.forEach(btn => btn.classList.remove('active'));
+        
+        // Find the clicked button and mark it active
+        const clickedBtn = event ? event.target : null;
+        if (clickedBtn) {
+            clickedBtn.classList.add('active');
+        } else {
+            // Fallback: find by forward/reverse text
+            buttons.forEach(btn => {
+                if ((forward && btn.textContent.includes('Forward')) || 
+                    (!forward && btn.textContent.includes('Reverse'))) {
+                    btn.classList.add('active');
+                }
+            });
+        }
+    });
+}
+
+function setSpeed() {
+    const speed = parseFloat(document.getElementById("speedControl").value);
+    if (isNaN(speed) || speed < 0) {
+        alert("Please enter a valid speed value");
+        return;
+    }
+    
+    sendMotorCommand("set_speed", [speed]);
+}
+
+function startMotor() {
+    if (!motorEnabled) {
+        alert("Motor must be enabled before starting. Please enable the motor first.");
+        return;
+    }
+    
+    const speed = parseFloat(document.getElementById("speedControl").value);
+    if (isNaN(speed) || speed < 0) {
+        alert("Please enter a valid speed value");
+        return;
+    }
+    
+    if (speed > 1000) {
+        if (!confirm(`Warning: Speed ${speed} steps/sec is quite high. Are you sure you want to proceed?`)) {
+            return;
+        }
+    }
+    
+    sendMotorCommand("start", [speed]);
+}
+
+function stopMotor() {
+    sendMotorCommand("stop");
+}
+
+function moveSteps() {
+    if (!motorEnabled) {
+        alert("Motor must be enabled before moving. Please enable the motor first.");
+        return;
+    }
+    
+    const steps = parseInt(document.getElementById("stepsControl").value);
+    const speed = parseFloat(document.getElementById("speedControl").value);
+    
+    if (isNaN(steps) || steps <= 0) {
+        alert("Please enter a valid number of steps");
+        return;
+    }
+    
+    if (isNaN(speed) || speed <= 0) {
+        alert("Please enter a valid speed value");
+        return;
+    }
+    
+    if (steps > 10000) {
+        if (!confirm(`Warning: Moving ${steps} steps is a large movement. Are you sure you want to proceed?`)) {
+            return;
+        }
+    }
+    
+    sendMotorCommand("move_steps", [steps, speed]);
+}
+
+function setMicrosteps() {
+    const microsteps = parseInt(document.getElementById("microstepsControl").value);
+    sendMotorCommand("set_microsteps", [microsteps]);
+}
+
+function setCurrent() {
+    const current = parseInt(document.getElementById("currentControl").value);
+    if (isNaN(current) || current < 0) {
+        alert("Please enter a valid current value");
+        return;
+    }
+    
+    sendMotorCommand("set_current", [current]);
+}
+
+function setAcceleration() {
+    const accel = parseFloat(document.getElementById("accelControl").value);
+    if (isNaN(accel) || accel < 0) {
+        alert("Please enter a valid acceleration value");
+        return;
+    }
+    
+    sendMotorCommand("set_accel", [accel]);
+}
+
+function setMode() {
+    const mode = document.getElementById("modeControl").value;
+    sendMotorCommand("set_mode", [mode]);
+}
+
+function getMotorStatus() {
+    sendMotorCommand("status")
+    .then(result => {
+        if (result && typeof result === 'object') {
+            let statusText = `<strong>Motor Status (${selectedMotorId}):</strong><br>`;
+            for (const [key, value] of Object.entries(result)) {
+                statusText += `<span class="text-muted">${key}:</span> ${JSON.stringify(value)}<br>`;
+            }
+            document.getElementById("motorStatus").innerHTML = statusText;
+        } else {
+            updateMotorStatusDisplay(`Status: ${result || 'Unknown'}`, 'success');
+        }
+    })
+    .catch(error => {
+        // Error handling is already done in sendMotorCommand
+    });
+}
+
+function getAllMotorStatus() {
+    if (!selectedTelescopeId) {
+        alert("Please select a telescope first.");
+        return;
+    }
+    
+    fetch("/interface/motor_command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+            telescopeId: selectedTelescopeId,
+            command: "status_all"
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === "success" && data.result) {
+            let statusText = "<strong>All Motors Status:</strong><br>";
+            for (const [motorId, motorStatus] of Object.entries(data.result)) {
+                statusText += `<div class="mb-2"><strong class="text-primary">${motorId}:</strong><br>`;
+                for (const [key, value] of Object.entries(motorStatus)) {
+                    statusText += `&nbsp;&nbsp;<span class="text-muted">${key}:</span> ${JSON.stringify(value)}<br>`;
+                }
+                statusText += `</div>`;
+            }
+            document.getElementById("motorStatus").innerHTML = statusText;
+        }
+    })
+    .catch(error => {
+        console.error("Failed to get all motor status:", error);
+    });
+}
+
+function trackManualCoordinates() {
+    const raInput = document.getElementById("manualRA");
+    const decInput = document.getElementById("manualDEC");
+    
+    const ra = parseFloat(raInput.value);
+    const dec = parseFloat(decInput.value);
+    
+    // Validation
+    if (isNaN(ra) || isNaN(dec)) {
+        alert("Please enter valid RA and DEC coordinates");
+        return;
+    }
+    
+    if (ra < 0 || ra > 360) {
+        alert("RA must be between 0 and 360 degrees");
+        return;
+    }
+    
+    if (dec < -90 || dec > 90) {
+        alert("DEC must be between -90 and 90 degrees");
+        return;
+    }
+    
+    // Create a manual object for tracking
+    const manualObject = {
+        name: `Manual: RA ${ra.toFixed(4)}°, DEC ${dec.toFixed(4)}°`,
+        ra: ra,
+        dec: dec,
+        mag: 0
+    };
+    
+    // Use the existing trackObject function
+    trackObject(manualObject);
+    
+    // Clear the input fields after tracking
+    raInput.value = "";
+    decInput.value = "";
 }

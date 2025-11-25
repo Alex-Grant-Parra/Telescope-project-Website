@@ -11,3 +11,4 @@ websockets
 ujson
 requests
 waitress
+pillow

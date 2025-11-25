@@ -58,6 +58,26 @@
             <input type="text" class="form-control" id="searchObject" placeholder="Search for object">
             <button class="btn btn-primary mt-2" onclick="searchObject()">Search</button>
         </div>
+        <div class="control-row my-2">
+            <hr class="my-2">
+            <div class="manual-coordinates">
+                <label class="form-label text-muted small">Manual Coordinates</label>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label for="manualRA" class="form-label small">RA (degrees)</label>
+                        <input type="number" class="form-control form-control-sm" id="manualRA" placeholder="101.28" step="0.0001" min="0" max="360" title="Right Ascension in decimal degrees (0-360)">
+                    </div>
+                    <div class="col-6">
+                        <label for="manualDEC" class="form-label small">DEC (degrees)</label>
+                        <input type="number" class="form-control form-control-sm" id="manualDEC" placeholder="-16.72" step="0.0001" min="-90" max="90" title="Declination in decimal degrees (-90 to +90)">
+                    </div>
+                </div>
+                <button class="btn btn-success btn-sm mt-2 w-100" onclick="trackManualCoordinates()">🎯 Track Coordinates</button>
+            </div>
+        </div>
+        <div class="control-row my-2">
+            <button class="btn btn-warning w-100" onclick="openAdvancedControlsModal()">Advanced (Manual)</button>
+        </div>
     </div>
 
     <!-- Draggable Live View Controls Panel -->
@@ -88,6 +108,150 @@
         </div>
         <div class="control-row my-2">
             <button class="btn btn-info btn-sm w-100" onclick="refreshTelescopes()">🔄 Refresh</button>
+        </div>
+    </div>
+</div>
+
+<!-- Advanced Motor Controls Modal -->
+<div class="modal fade" id="advancedControlsModal" tabindex="-1" aria-labelledby="advancedControlsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="advancedControlsModalLabel">🔧 Advanced Motor Controls</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <!-- Left Column: Basic Controls -->
+                    <div class="col-md-6">
+                        <h6 class="text-primary mb-3">🎛️ Basic Controls</h6>
+                        
+                        <!-- Motor Selection -->
+                        <div class="control-group mb-3">
+                            <label for="motorSelect" class="form-label">Select Motor</label>
+                            <select class="form-select form-select-sm" id="motorSelect" onchange="updateSelectedMotor()">
+                                <option value="motor1" selected>Motor 1 (Default)</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Motor Enable/Disable -->
+                        <div class="control-group mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-medium">Motor Enable</span>
+                                <button id="motorEnableBtn" class="btn btn-outline-success btn-sm" onclick="toggleMotorEnable()">Enable</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Direction Control -->
+                        <div class="control-group mb-3">
+                            <label class="form-label">Direction</label>
+                            <div class="btn-group w-100" role="group">
+                                <button type="button" class="btn btn-outline-primary" onclick="setDirection(true)">⬆️ Forward</button>
+                                <button type="button" class="btn btn-outline-primary" onclick="setDirection(false)">⬇️ Reverse</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Speed Control -->
+                        <div class="control-group mb-3">
+                            <label for="speedControl" class="form-label">Speed (steps/sec)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" class="form-control" id="speedControl" min="0" max="10000" step="0.1" value="100">
+                                <button class="btn btn-info" onclick="setSpeed()">Set</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Movement Controls -->
+                        <div class="control-group mb-3">
+                            <label class="form-label">Movement</label>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <button class="btn btn-success w-100" onclick="startMotor()">▶️ Start</button>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-danger w-100" onclick="stopMotor()">⏹️ Stop</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Step Movement -->
+                        <div class="control-group mb-3">
+                            <label for="stepsControl" class="form-label">Move Steps</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" class="form-control" id="stepsControl" min="1" max="100000" step="1" value="200">
+                                <button class="btn btn-primary" onclick="moveSteps()">Move</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Right Column: Advanced Settings -->
+                    <div class="col-md-6">
+                        <h6 class="text-warning mb-3">⚙️ Advanced Settings</h6>
+                        
+                        <!-- Microsteps -->
+                        <div class="control-group mb-3">
+                            <label for="microstepsControl" class="form-label">Microsteps</label>
+                            <select class="form-select form-select-sm" id="microstepsControl" onchange="setMicrosteps()">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="4">4</option>
+                                <option value="8">8</option>
+                                <option value="16" selected>16</option>
+                                <option value="32">32</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Current Control -->
+                        <div class="control-group mb-3">
+                            <label for="currentControl" class="form-label">Current (mA)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" class="form-control" id="currentControl" min="0" max="2000" step="50" value="800">
+                                <button class="btn btn-info" onclick="setCurrent()">Set</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Acceleration Control -->
+                        <div class="control-group mb-3">
+                            <label for="accelControl" class="form-label">Acceleration (steps/sec²)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" class="form-control" id="accelControl" min="0" max="10000" step="0.1" value="500">
+                                <button class="btn btn-info" onclick="setAcceleration()">Set</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Motor Mode -->
+                        <div class="control-group mb-3">
+                            <label for="modeControl" class="form-label">Motor Mode</label>
+                            <select class="form-select form-select-sm" id="modeControl" onchange="setMode()">
+                                <option value="stealth" selected>Stealth (Quiet)</option>
+                                <option value="spread">Spread (Performance)</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Quick Actions -->
+                        <div class="control-group mb-3">
+                            <label class="form-label">Quick Actions</label>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-info btn-sm" onclick="getMotorStatus()">📊 Get Status</button>
+                                <button class="btn btn-outline-info btn-sm" onclick="getAllMotorStatus()">📊 All Motors Status</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Status Display (Full Width) -->
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6 class="text-info mb-2">📋 Status & Logs</h6>
+                        <div id="motorStatus" class="status-display p-2 border rounded bg-light text-dark" style="min-height: 60px; max-height: 120px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.8rem;">
+                            Ready to execute motor commands...
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-danger" onclick="emergencyStop()">🚨 Emergency Stop</button>
+            </div>
         </div>
     </div>
 </div>
