@@ -1,8 +1,3 @@
-"""
-Flask Security Middleware for IP Blacklisting
-Provides request filtering and security logging for the Telescope project
-"""
-
 from flask import Flask, request, jsonify, abort
 import logging
 from datetime import datetime
@@ -71,7 +66,6 @@ class SecurityMiddleware:
         self.security_logger.info("Security middleware initialized")
     
     def _setup_request_logger(self):
-        """Setup comprehensive request logging"""
         request_log_file = Path(__file__).parent / 'logs' / 'requests.log'
         request_log_file.parent.mkdir(parents=True, exist_ok=True)
         
@@ -246,7 +240,7 @@ class SecurityMiddleware:
     
     def _before_request(self):
         """Handle request before processing"""
-        # Get client IP early so we can short-circuit processing for blacklisted
+        # Get client IP early so can remove some processing for blacklisted
         # clients and avoid doing extra work (like heavy request logging).
         client_ip = self._get_client_ip()
 

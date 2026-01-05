@@ -52,10 +52,12 @@ class Telescope:
         self.camera = CameraController(self)
         self.motor = MotorController(self)
 
-    def send_command(self, command: str, args=None):
+    def send_command(self, command: str, args=None, kwargs=None):
         payload = {"client_id": self.client_id, "command": command}
         if args is not None:
             payload["args"] = args
+        if kwargs is not None:
+            payload["kwargs"] = kwargs
         try:
             resp_text = requests.post(url, json=payload, timeout=8).text
             data = ujson.loads(resp_text)
@@ -162,46 +164,61 @@ class MotorController:
     def __init__(self, telescope: 'Telescope'):
         self.telescope = telescope
 
-    def enable(self, on):
-        return self.telescope.send_command("espEnable", [bool(on)])
+    def enable(self, on, motor_id="motor1"):
+        """Enable/disable the stepper driver for a specific motor."""
+        return self.telescope.send_command("espEnable", args=[bool(on)], kwargs={"motor_id": motor_id})
 
-    def set_direction(self, forward):
-        return self.telescope.send_command("espSetDirection", [bool(forward)])
+    def set_direction(self, forward, motor_id="motor1"):
+        """Set motor direction: True=forward, False=reverse."""
+        return self.telescope.send_command("espSetDirection", args=[bool(forward)], kwargs={"motor_id": motor_id})
 
-    def set_speed(self, sps):
-        return self.telescope.send_command("espSetSpeed", [float(sps)])
+    def set_speed(self, sps, motor_id="motor1"):
+        """Set continuous target speed in steps/sec (does not auto-enable)."""
+        return self.telescope.send_command("espSetSpeed", args=[float(sps)], kwargs={"motor_id": motor_id})
 
-    def start(self, sps, forward=None):
+    def start(self, sps, forward=None, motor_id="motor1"):
+        """Start continuous rotation at speed; optional direction; auto-enables."""
         args = [float(sps)]
         if forward is not None:
             args.append(bool(forward))
-        return self.telescope.send_command("espStart", args)
+        return self.telescope.send_command("espStart", args=args, kwargs={"motor_id": motor_id})
 
-    def move_steps(self, steps, sps=None, forward=None):
+    def move_steps(self, steps, sps=None, forward=None, motor_id="motor1"):
+        """Move a finite number of steps; optional speed and direction override."""
         args = [int(steps)]
         if sps is not None:
             args.append(float(sps))
         if forward is not None:
             args.append(bool(forward))
-        return self.telescope.send_command("espMoveSteps", args)
+        return self.telescope.send_command("espMoveSteps", args=args, kwargs={"motor_id": motor_id})
 
-    def stop(self):
-        return self.telescope.send_command("espStop", [])
+    def stop(self, motor_id="motor1"):
+        """Stop motion and disable driver for a specific motor."""
+        return self.telescope.send_command("espStop", args=[], kwargs={"motor_id": motor_id})
 
-    def set_microsteps(self, value):
-        return self.telescope.send_command("espSetMicrosteps", [int(value)])
+    def set_microsteps(self, value, motor_id="motor1"):
+        """Set TMC2209 microstepping value (e.g., 16, 32) for a specific motor."""
+        return self.telescope.send_command("espSetMicrosteps", args=[int(value)], kwargs={"motor_id": motor_id})
 
-    def set_current(self, mA):
-        return self.telescope.send_command("espSetCurrent", [int(mA)])
+    def set_current(self, mA, motor_id="motor1"):
+        """Set RMS motor current in milliamps for a specific motor."""
+        return self.telescope.send_command("espSetCurrent", args=[int(mA)], kwargs={"motor_id": motor_id})
 
-    def set_mode(self, mode):
-        return self.telescope.send_command("espSetMode", [str(mode)])
+    def set_mode(self, mode, motor_id="motor1"):
+        """Set chopper mode: 'stealth' or 'spread' for a specific motor."""
+        return self.telescope.send_command("espSetMode", args=[str(mode)], kwargs={"motor_id": motor_id})
 
-    def set_accel(self, sps2):
-        return self.telescope.send_command("espSetAccel", [float(sps2)])
+    def set_accel(self, sps2, motor_id="motor1"):
+        """Set acceleration in steps/sec^2 for ramping for a specific motor."""
+        return self.telescope.send_command("espSetAccel", args=[float(sps2)], kwargs={"motor_id": motor_id})
 
-    def status(self):
-        return self.telescope.send_command("espStatus", [])
+    def status(self, motor_id="motor1"):
+        """Query ESP32 firmware status for a specific motor."""
+        return self.telescope.send_command("espStatus", args=[], kwargs={"motor_id": motor_id})
+
+    def status_all(self):
+        """Query status of all motors on the ESP32."""
+        return self.telescope.send_command("espStatusAll", args=[])
 
 
 # Convenience helper
