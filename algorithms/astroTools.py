@@ -8,6 +8,7 @@ from algorithms.convert import convert
 from models.tables import PlanetsTable
 
 from utility.timer_utils import timer
+from algorithms.ephemeris.test2_clean import get_positions as ephem_get_positions
 
 # Overriding trig functions to use degrees
 sin = lambda x: math_sin(radians(x))
@@ -286,29 +287,77 @@ def get_vmag_for_object(name, phaseDeg=None):
 
 @timer
 def getAllCelestialData(year, month, day, hour: int = 0, minute: int = 0, second: float = 0.0):
+    """Primary implementation now delegates to ephemeris.get_positions.
+    Old algorithmic implementation is preserved below (commented out) for reference.
+    Returns data in the form expected by controllers: ra as [H,M,S], dec as [D,M,S], vmag.
+    """
     results = {}
 
-    # Exclude sun and moon from planets loop
-    for planet_name in planets.keys():
-        if planet_name.lower() in ["sun", "moon"]:
-            continue
-        ra, dec = findPlanet(year, month, day, planet_name, hour=hour, minute=minute, second=second)
-        vmag = get_vmag_for_object(planet_name)
-        results[planet_name] = {"ra": ra, "dec": dec, "vmag": vmag}
+    try:
+        pos = ephem_get_positions(year, month, day, hour, minute, second)
+    except Exception as e:
+        print(f"ephem_get_positions failed: {e}")
+        pos = {}
 
-    # Calculate Sun separately
-    ra_sun, dec_sun = findSun(year, month, day, hour=hour, minute=minute, second=second)
-    vmag = get_vmag_for_object("sun")
-    results["sun"] = {"ra": ra_sun, "dec": dec_sun, "vmag": vmag}
+    # Helper to convert degrees -> H:M:S and D:M:S (int seconds) with rollover
+    def deg_to_hms_int(ra_deg):
+        hours = (ra_deg / 15.0) % 24.0
+        h = int(hours)
+        min_f = (hours - h) * 60.0
+        m = int(min_f)
+        sec = round((min_f - m) * 60.0, 2)
+        if sec >= 60:
+            sec = 0
+            m += 1
+        if m >= 60:
+            m = 0
+            h = (h + 1) % 24
+        return [h, m, sec]
 
-    # Calculate Moon separately
-    ra_moon, dec_moon = findMoon(year, month, day, hour=hour, minute=minute, second=second)
+    def deg_to_dms_int(dec_deg):
+        sign = -1 if dec_deg < 0 else 1
+        a = abs(dec_deg)
+        d = int(a)
+        min_f = (a - d) * 60.0
+        m = int(min_f)
+        sec = round((min_f - m) * 60.0, 2)
+        if sec >= 60:
+            sec = 0
+            m += 1
+        if m >= 60:
+            m = 0
+            d += 1
+        d *= sign
+        return [d, m, sec]
 
-    ra_moon_deg, dec_moon_deg = convert.HrMinSecToDegrees(ra_moon[0], ra_moon[1], ra_moon[2]), convert.HrMinSecToDegrees(dec_moon[0], dec_moon[1], dec_moon[2])
-    ra_sun_deg, dec_sun_deg = convert.HrMinSecToDegrees(ra_sun[0], ra_sun[1], ra_sun[2]), convert.HrMinSecToDegrees(dec_sun[0], dec_sun[1], dec_sun[2])
+    # Map ephem output into expected shape
+    for key, val in pos.items():
+        try:
+            ra = val.get('ra_deg')
+            dec = val.get('dec_deg')
+            v = val.get('distance_km')
+            if ra is None or dec is None:
+                continue
+            ra_hms = deg_to_hms_int(ra)
+            dec_dms = deg_to_dms_int(dec)
+            vmag = get_vmag_for_object(key) if key in planets else None
+            results[key.lower()] = {"ra": ra_hms, "dec": dec_dms, "vmag": vmag}
+        except Exception as e:
+            print(f"mapping ephem position failed for {key}: {e}")
 
-    phase = phase_angle(ra_moon_deg, dec_moon_deg, ra_sun_deg, dec_sun_deg) # works
-    vmag = get_vmag_for_object("moon", phaseDeg=phase)
-    results["moon"] = {"ra": ra_moon, "dec": dec_moon, "vmag": vmag}
+    # If ephemeris didn't provide some bodies (fallback to previous implementation), keep old code commented
+    # --- begin legacy (commented) ---
+    # for planet_name in planets.keys():
+    #     if planet_name.lower() in ["sun", "moon"]:
+    #         continue
+    #     ra, dec = findPlanet(year, month, day, planet_name, hour=hour, minute=minute, second=second)
+    #     vmag = get_vmag_for_object(planet_name)
+    #     results[planet_name] = {"ra": ra, "dec": dec, "vmag": vmag}
+    # ra_sun, dec_sun = findSun(year, month, day, hour=hour, minute=minute, second=second)
+    # vmag = get_vmag_for_object("sun")
+    # results["sun"] = {"ra": ra_sun, "dec": dec_sun, "vmag": vmag}
+    # ra_moon, dec_moon = findMoon(year, month, day, hour=hour, minute=minute, second=second)
+    # results["moon"] = {"ra": ra_moon, "dec": dec_moon, "vmag": get_vmag_for_object("moon")}
+    # --- end legacy ---
 
     return results

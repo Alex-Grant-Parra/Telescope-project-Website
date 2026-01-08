@@ -11,17 +11,11 @@ from algorithms.convert import convert
 from algorithms.ephemeris import utils
 
 planets, moon = load_all()
-<<<<<<< HEAD
 jd = 2460963.28744
-=======
-jd = 2460963.92002
->>>>>>> e544fe34d27fec99d7f146c2676bd5b4b385d46a
-
 # 1) Moon RA/Dec (handle either 3- or 4-value return from elp_to_position)
 if moon is None:
     print("Moon not available")
 else:
-<<<<<<< HEAD
     vals = utils.elp_to_position(moon.series, jd)   # returns ra, dec, ... (varies)
     # unpack defensively
     ra_moon = vals[0]
@@ -29,7 +23,6 @@ else:
     # optional distances if present:
     moon_rest = vals[2:]   # may be [R_km] or [R_km, R_au] or empty
     print("Moon (raw) RA (deg):", ra_moon, "Dec (deg):", dec_moon, "extra:", moon_rest)
-=======
     vals = utils.elp_to_position(moon.series, jd)
     moon_coords = [vals[0], vals[1]]  # [ra, dec] in degrees
     moon_extra = tuple(vals[2:])
@@ -83,8 +76,6 @@ else:
         f"Dec_dms=[{sign_str}{abs_deg:02d}, {dec_dms[1]:02d}, {dec_dms[2]:02d}] "
         + (f"Dist_km={moon_dist_km:,.1f}" if moon_dist_km is not None else "")
     )
->>>>>>> e544fe34d27fec99d7f146c2676bd5b4b385d46a
-
 # 2) Sun RA/Dec:
 # Approach: the Sun's heliocentric vector is (0,0,0); geocentric Sun vector = -Earth_heliocentric
 earth = planets.get("Earth")

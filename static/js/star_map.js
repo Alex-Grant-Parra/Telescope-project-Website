@@ -1826,13 +1826,22 @@ if (flipVerticalCheckbox) {
 resetBtn.addEventListener('click', () => {
     rotX = 0; rotY = 0;
     zoom = 1.0; // Reset zoom level
-    latInput.value = 0;
-    lonInput.value = 0;
-    magFilter.value = maxMag.toFixed(1); // Reset to show all objects
-    magValue.textContent = maxMag.toFixed(1);
+    magFilter.value = "4.0"; // Reset magnitude to 4
+    magValue.textContent = "4.0";
+    rebuildVisibleStars(4.0); // Rebuild visible stars with magnitude 4
     showStars.checked = true;
     showPlanets.checked = true;
     clearSearch(); // Clear search when resetting view
+    
+    // Reset to current time and user's location if available
+    if (window.resetToCurrentLocationAndTime) {
+        window.resetToCurrentLocationAndTime();
+    } else {
+        // Fallback: reset to 0,0 if location function not available
+        latInput.value = 0;
+        lonInput.value = 0;
+    }
+    
     draw();
 });
 // Search event listeners (guarded)

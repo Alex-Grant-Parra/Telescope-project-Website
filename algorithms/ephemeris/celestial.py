@@ -1,5 +1,4 @@
-from utils import series_to_position, elp_to_position
-from .utils import series_to_equatorial_xyz
+from .utils import series_to_position, elp_to_position, series_to_equatorial_xyz
 
 class CelestialBody:
     def __init__(self, name, series):
