@@ -10,7 +10,8 @@ from time import sleep
 from PIL import Image
 import io
 
-url = f"https://telescopes.dev/sendCommand" # Url for sending flask server commands
+domain = os.getenv("APP_DOMAIN", "telescopes.dev")
+url = f"https://{domain}/sendCommand"  # Endpoint for sending flask server commands
 
 # Example
 # payload = {"client_id": client_id, "command": "add", "args": [5, 7]}
@@ -131,7 +132,8 @@ class CameraController:
             if not api_token:
                 print("[LiveView] No API token found")
                 return
-            uri = "wss://liveview.telescopes.dev"
+            lv_domain = os.getenv("APP_DOMAIN", "telescopes.dev")
+            uri = f"wss://liveview.{lv_domain}"
             async with websockets.connect(uri, max_size=2*1024*1024) as ws:
                 await ws.send(ujson.dumps({"token": api_token, "client_id": self.telescope.client_id}))
                 proc = subprocess.Popen(["gphoto2", "--capture-movie", "--stdout"], stdout=subprocess.PIPE)

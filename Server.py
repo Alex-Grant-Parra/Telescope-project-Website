@@ -102,7 +102,7 @@ app.config["ENCRYPTION_KEY"] = os.getenv("ENCRYPTION_KEY")
 db.init_app(app)
 
 # Email Configuration
-app.config["MAIL_SERVER"] = "smtp.zoho.eu"
+app.config["MAIL_SERVER"] = os.getenv("MAIL_SERVER", "smtp.zoho.eu")
 app.config["MAIL_PORT"] = 587
 app.config["MAIL_USE_TLS"] = True
 app.config["MAIL_USE_SSL"] = not(app.config["MAIL_USE_TLS"])
@@ -137,6 +137,9 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 
 mail = Mail(app)
+
+# Site domain
+app.config["APP_DOMAIN"] = os.getenv("APP_DOMAIN", "telescopes.dev")
 
 # Initialize CSRF protection
 csrf = CSRFProtect()
@@ -204,8 +207,10 @@ def force_https():
     if ':' in raw_host:
         host_only, port = raw_host.rsplit(':', 1)
 
-    # Allow localhost explicitly
-    if host_only.startswith('127.0.0.1') or host_only.startswith('localhost') or host_only.startswith("192.168.0"):
+    # Allow localhost/private prefixes explicitly via env config
+    local_hosts = os.getenv('LOCAL_IP_ADDRESSES', '127.0.0.1,localhost,192.168.0').split(',')
+    local_hosts = [h.strip() for h in local_hosts if h.strip()]
+    if any(host_only.startswith(h) for h in local_hosts):
         return None
 
     # If the host is an IP address, decide based on private/public and port
@@ -452,7 +457,9 @@ if __name__ == '__main__':
     # handshakes. Otherwise, run plain HTTP. This makes explicit the behavior
     # and prevents ERR_SSL_PROTOCOL_ERROR when clients attempt HTTPS against a
     # plain HTTP server.
-    print(f"Starting Flask server on {gethostname()} at http://127.0.0.1:{FlaskServerPort}")
+    flask_host = os.getenv("FLASK_SERVER_HOST", "127.0.0.1")
+    flask_port = os.getenv("FLASK_SERVER_PORT", FlaskServerPort)
+    print(f"Starting Flask server on {gethostname()} at http://{flask_host}:{flask_port}")
 
     # Environment-driven SSL toggle
     use_ssl = os.getenv('FLASK_USE_SSL', 'False').lower() in ('1', 'true', 'yes')

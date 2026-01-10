@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
+import os
 from flask_login import login_user, logout_user, current_user, login_required
 import logging
 sec_logger = logging.getLogger('security')
@@ -25,12 +26,16 @@ def is_local_connection():
         # Take the first IP from the comma-separated list
         client_ip = xff_header.split(',')[0].strip()
     
-    # Check for localhost variations
-    if client_ip in ['127.0.0.1', '::1', 'localhost']:
+    # Configurable local IPs/hosts
+    local_ips = os.getenv('LOCAL_IP_ADDRESSES', '127.0.0.1,localhost,192.168.0').split(',')
+    local_ips = [ip.strip() for ip in local_ips if ip.strip()]
+
+    # Check for localhost variations and configured local IPs
+    if client_ip in local_ips or client_ip in ['::1']:
         return True
     
-    # Check if the host starts with localhost (handles ports like localhost:8080)
-    if request.host.startswith('localhost') or request.host.startswith('127.0.0.1'):
+    # Check if the host starts with any configured local host/IP (handles ports like localhost:8080)
+    if any(request.host.startswith(h) for h in local_ips):
         return True
     
     # Check for private IP ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x)

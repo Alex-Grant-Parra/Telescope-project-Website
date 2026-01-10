@@ -684,7 +684,8 @@ function updateLiveViewSrcForTelescope(telescopeId) {
     }
     if (!liveViewImage) return;
 
-    const newSrc = `https://telescopes.dev/liveview/${telescopeId}`;
+    const domain = (window.APP_DOMAIN && typeof window.APP_DOMAIN === 'string') ? window.APP_DOMAIN : 'telescopes.dev';
+    const newSrc = `https://${domain}/liveview/${telescopeId}`;
     const wasRefreshing = !!refreshInterval;
     if (wasRefreshing) {
         stopImageRefresh();
