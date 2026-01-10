@@ -6,7 +6,7 @@ from typing import Optional, Any, Dict
 from cameraController import Camera # type: ignore
 from csrf import get_csrf_token, SESSION
 from liveview_state import load_liveview_state, save_liveview_state
-from esp32.esp32 import ESP32Motor, ESP32Config
+from esp32.esp32 import ESP32Motor, ESP32Config, ESP32MotorArray
 
 CONFIG_FILE = "client_config.json"
 
@@ -148,96 +148,322 @@ def stopLiveView():
     print("[liveview] Live view stopped.")
     return "Live view stopped"
 
-# -----------------------------
 # ESP32 motor control handlers
-# -----------------------------
 
-_ESP32_INSTANCE: Optional[ESP32Motor] = None
+# Global motor array instance
+_MOTOR_ARRAY: Optional[ESP32MotorArray] = None
 
-def _get_esp32() -> ESP32Motor:
-    global _ESP32_INSTANCE
-    if _ESP32_INSTANCE is None:
-        # Use defaults from ESP32Config; consider adding config override if needed
-        _ESP32_INSTANCE = ESP32Motor(ESP32Config())
-    return _ESP32_INSTANCE
+def _load_motor_config() -> list[dict]:
+    """Load motor configuration from client_config.json"""
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                config = json.load(f)
+                motor_configs = config.get('motors', [])
+                if motor_configs:
+                    print(f"[MOTORS] Loaded {len(motor_configs)} motor configurations from {CONFIG_FILE}")
+                    return motor_configs
+    except Exception as e:
+        print(f"[MOTORS] Warning: Could not load motor config: {e}")
+    
+    # Return default configuration if none found
+    print("[MOTORS] Using default single motor configuration")
+    return [{"motor_id": "motor1", "port": "/dev/ttyUSB0", "baudrate": 115200, "timeout": 0.2}]
 
-def espEnable(on: Any) -> Dict[str, Any]:
+def _get_motor_array() -> ESP32MotorArray:
+    global _MOTOR_ARRAY
+    if _MOTOR_ARRAY is None:
+        # Load motor configuration from file
+        motor_configs = _load_motor_config()
+        _MOTOR_ARRAY = ESP32MotorArray(motor_configs)
+        print(f"[MOTORS] Initialized ESP32MotorArray with {len(_MOTOR_ARRAY.motors)} motor(s)")
+        for motor in _MOTOR_ARRAY.motors:
+            print(f"[MOTORS] - {motor.motor_id} on {motor.cfg.port}")
+    return _MOTOR_ARRAY
+
+def _get_motor(motor_id: str = "motor1") -> ESP32Motor:
+    """Get a specific motor by ID"""
+    motor_array = _get_motor_array()
+    try:
+        return motor_array.get_by_id(motor_id)
+    except ValueError:
+        # Fall back to first motor if specified motor not found
+        if len(motor_array.motors) > 0:
+            print(f"[MOTORS] Warning: Motor '{motor_id}' not found, using first motor '{motor_array.motors[0].motor_id}'")
+            return motor_array.motors[0]
+        raise RuntimeError(f"No motors available and motor '{motor_id}' not found")
+
+def espEnable(on: Any, motor_id: str = "motor1") -> Dict[str, Any]:
     """Enable/disable the stepper driver."""
     try:
-        return _get_esp32().enable(bool(on))
+        motor = _get_motor(motor_id)
+        return motor.enable(bool(on))
     except Exception as e:
         return {"error": str(e)}
 
-def espSetDirection(forward: Any) -> Dict[str, Any]:
+def espSetDirection(forward: Any, motor_id: str = "motor1") -> Dict[str, Any]:
     """Set motor direction: True=forward, False=reverse."""
     try:
-        return _get_esp32().set_direction(bool(forward))
+        motor = _get_motor(motor_id)
+        return motor.set_direction(bool(forward))
     except Exception as e:
         return {"error": str(e)}
 
-def espSetSpeed(sps: Any) -> Dict[str, Any]:
+def espSetSpeed(sps: Any, motor_id: str = "motor1") -> Dict[str, Any]:
     """Set continuous target speed in steps/sec (does not auto-enable)."""
     try:
-        return _get_esp32().set_speed(float(sps))
+        motor = _get_motor(motor_id)
+        return motor.set_speed(float(sps))
     except Exception as e:
         return {"error": str(e)}
 
-def espStart(sps: Any, forward: Optional[Any] = None) -> Dict[str, Any]:
+def espStart(sps: Any, forward: Optional[Any] = None, motor_id: str = "motor1") -> Dict[str, Any]:
     """Start continuous rotation at speed; optional direction; auto-enables."""
     try:
+        motor = _get_motor(motor_id)
         fwd = None if forward is None else bool(forward)
-        return _get_esp32().start(float(sps), fwd)
+        return motor.start(float(sps), fwd)
     except Exception as e:
         return {"error": str(e)}
 
-def espMoveSteps(steps: Any, sps: Optional[Any] = None, forward: Optional[Any] = None) -> Dict[str, Any]:
+def espMoveSteps(steps: Any, sps: Optional[Any] = None, forward: Optional[Any] = None, motor_id: str = "motor1") -> Dict[str, Any]:
     """Move a finite number of steps; optional speed and direction override."""
     try:
+        motor = _get_motor(motor_id)
         spd = None if sps is None else float(sps)
         fwd = None if forward is None else bool(forward)
-        return _get_esp32().move_steps(int(steps), spd, fwd)
+        return motor.move_steps(int(steps), spd, fwd)
     except Exception as e:
         return {"error": str(e)}
 
-def espStop() -> Dict[str, Any]:
+def espStop(motor_id: str = "motor1") -> Dict[str, Any]:
     """Stop motion and disable driver."""
     try:
-        return _get_esp32().stop()
+        motor = _get_motor(motor_id)
+        return motor.stop()
     except Exception as e:
         return {"error": str(e)}
 
-def espSetMicrosteps(value: Any) -> Dict[str, Any]:
+def espSetMicrosteps(value: Any, motor_id: str = "motor1") -> Dict[str, Any]:
     """Set TMC2209 microstepping value (e.g., 16, 32)."""
     try:
-        return _get_esp32().set_microsteps(int(value))
+        motor = _get_motor(motor_id)
+        return motor.set_microsteps(int(value))
     except Exception as e:
         return {"error": str(e)}
 
-def espSetCurrent(mA: Any) -> Dict[str, Any]:
+def espSetCurrent(mA: Any, motor_id: str = "motor1") -> Dict[str, Any]:
     """Set RMS motor current in milliamps."""
     try:
-        return _get_esp32().set_current(int(mA))
+        motor = _get_motor(motor_id)
+        return motor.set_current(int(mA))
     except Exception as e:
         return {"error": str(e)}
 
-def espSetMode(mode: Any) -> Dict[str, Any]:
+def espSetMode(mode: Any, motor_id: str = "motor1") -> Dict[str, Any]:
     """Set chopper mode: 'stealth' or 'spread'."""
     try:
-        return _get_esp32().set_mode(str(mode))
+        motor = _get_motor(motor_id)
+        return motor.set_mode(str(mode))
     except Exception as e:
         return {"error": str(e)}
 
-def espSetAccel(sps2: Any) -> Dict[str, Any]:
+def espSetAccel(sps2: Any, motor_id: str = "motor1") -> Dict[str, Any]:
     """Set acceleration in steps/sec^2 for ramping."""
     try:
-        return _get_esp32().set_accel(float(sps2))
+        motor = _get_motor(motor_id)
+        return motor.set_accel(float(sps2))
     except Exception as e:
         return {"error": str(e)}
 
-def espStatus() -> Dict[str, Any]:
+def espStatus(motor_id: str = "motor1") -> Dict[str, Any]:
     """Query ESP32 firmware status."""
     try:
-        return _get_esp32().status()
+        motor = _get_motor(motor_id)
+        return motor.status()
+    except Exception as e:
+        return {"error": str(e)}
+
+def espStatusAll() -> Dict[str, Any]:
+    """Query status of all motors."""
+    try:
+        motor_array = _get_motor_array()
+        return motor_array.status_all()
+    except Exception as e:
+        return {"error": str(e)}
+
+# Enhanced functions that can unpack motor_id from JSON-style arguments
+def espEnableWithMotorId(*args, **kwargs) -> Dict[str, Any]:
+    """Enable/disable motor - can extract motor_id from JSON arguments"""
+    motor_id = "motor1"  # default
+    on = False
+    
+    # Handle different argument patterns
+    if args:
+        if len(args) >= 2 and isinstance(args[1], str):
+            # (on, motor_id) pattern
+            on, motor_id = args[0], args[1]
+        elif len(args) == 1:
+            if isinstance(args[0], dict) and 'motor_id' in args[0]:
+                # JSON-like dict with motor_id
+                data = args[0]
+                on = data.get('on', data.get('value', False))
+                motor_id = data.get('motor_id', 'motor1')
+            else:
+                # Single value
+                on = args[0]
+    
+    if 'motor_id' in kwargs:
+        motor_id = kwargs['motor_id']
+    if 'on' in kwargs:
+        on = kwargs['on']
+    elif 'value' in kwargs:
+        on = kwargs['value']
+    
+    return espEnable(on, motor_id)
+
+def espStartWithMotorId(*args, **kwargs) -> Dict[str, Any]:
+    """Start motor - can extract motor_id from JSON arguments"""
+    motor_id = "motor1"
+    sps = 0
+    forward = None
+    
+    # Handle different argument patterns
+    if args:
+        if len(args) >= 3:
+            sps, forward, motor_id = args[0], args[1], args[2]
+        elif len(args) == 2:
+            if isinstance(args[1], str):
+                # (sps, motor_id)
+                sps, motor_id = args[0], args[1]
+            else:
+                # (sps, forward)
+                sps, forward = args[0], args[1]
+        elif len(args) == 1:
+            if isinstance(args[0], dict):
+                # JSON-like dict
+                data = args[0]
+                sps = data.get('sps', 0)
+                forward = data.get('forward')
+                motor_id = data.get('motor_id', 'motor1')
+            else:
+                sps = args[0]
+    
+    # Override with kwargs
+    motor_id = kwargs.get('motor_id', motor_id)
+    sps = kwargs.get('sps', sps)
+    if 'forward' in kwargs:
+        forward = kwargs['forward']
+    
+    return espStart(sps, forward, motor_id)
+
+def espMoveStepsWithMotorId(*args, **kwargs) -> Dict[str, Any]:
+    """Move steps - can extract motor_id from JSON arguments"""
+    motor_id = "motor1"
+    steps = 0
+    sps = None
+    forward = None
+    
+    # Handle different argument patterns
+    if args:
+        if len(args) >= 4:
+            steps, sps, forward, motor_id = args[0], args[1], args[2], args[3]
+        elif len(args) >= 2 and isinstance(args[-1], str):
+            # Assume last string arg is motor_id
+            if len(args) == 4:
+                steps, sps, forward, motor_id = args[0], args[1], args[2], args[3]
+            elif len(args) == 3:
+                steps, sps, motor_id = args[0], args[1], args[2]
+            elif len(args) == 2:
+                steps, motor_id = args[0], args[1]
+        elif len(args) == 1:
+            if isinstance(args[0], dict):
+                # JSON-like dict
+                data = args[0]
+                steps = data.get('steps', 0)
+                sps = data.get('sps')
+                forward = data.get('forward')
+                motor_id = data.get('motor_id', 'motor1')
+            else:
+                steps = args[0]
+        else:
+            # (steps, sps, forward)
+            steps = args[0]
+            if len(args) > 1:
+                sps = args[1]
+            if len(args) > 2:
+                forward = args[2]
+    
+    # Override with kwargs
+    motor_id = kwargs.get('motor_id', motor_id)
+    steps = kwargs.get('steps', steps)
+    sps = kwargs.get('sps', sps)
+    if 'forward' in kwargs:
+        forward = kwargs['forward']
+    
+    return espMoveSteps(steps, sps, forward, motor_id)
+
+def espStopWithMotorId(*args, **kwargs) -> Dict[str, Any]:
+    """Stop motor - can extract motor_id from JSON arguments"""
+    motor_id = "motor1"
+    
+    if args:
+        if len(args) >= 1:
+            if isinstance(args[0], dict):
+                # JSON-like dict
+                data = args[0]
+                motor_id = data.get('motor_id', 'motor1')
+            elif isinstance(args[0], str):
+                motor_id = args[0]
+    
+    motor_id = kwargs.get('motor_id', motor_id)
+    return espStop(motor_id)
+
+# Comprehensive wrappers for common ESP32 commands with flexible JSON parameter handling
+def espCommand(command_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Universal ESP32 command handler that can parse JSON command structures"""
+    try:
+        cmd_type = command_data.get('command', command_data.get('cmd', ''))
+        motor_id = command_data.get('motor_id', command_data.get('motor', 'motor1'))
+        
+        if cmd_type == 'enable':
+            value = command_data.get('value', command_data.get('on', False))
+            return espEnable(value, motor_id)
+        elif cmd_type == 'start':
+            sps = command_data.get('sps', 0)
+            forward = command_data.get('forward')
+            return espStart(sps, forward, motor_id)
+        elif cmd_type == 'move_steps':
+            steps = command_data.get('steps', 0)
+            sps = command_data.get('sps')
+            forward = command_data.get('forward')
+            return espMoveSteps(steps, sps, forward, motor_id)
+        elif cmd_type == 'stop':
+            return espStop(motor_id)
+        elif cmd_type == 'set_speed':
+            sps = command_data.get('sps', 0)
+            return espSetSpeed(sps, motor_id)
+        elif cmd_type == 'set_direction':
+            forward = command_data.get('forward', True)
+            return espSetDirection(forward, motor_id)
+        elif cmd_type == 'set_current':
+            mA = command_data.get('mA', command_data.get('current', 500))
+            return espSetCurrent(mA, motor_id)
+        elif cmd_type == 'set_microsteps':
+            value = command_data.get('value', command_data.get('microsteps', 16))
+            return espSetMicrosteps(value, motor_id)
+        elif cmd_type == 'set_mode':
+            mode = command_data.get('mode', 'stealth')
+            return espSetMode(mode, motor_id)
+        elif cmd_type == 'set_accel':
+            sps2 = command_data.get('sps2', command_data.get('accel', 1000))
+            return espSetAccel(sps2, motor_id)
+        elif cmd_type == 'status':
+            return espStatus(motor_id)
+        elif cmd_type == 'status_all':
+            return espStatusAll()
+        else:
+            return {"error": f"Unknown command: {cmd_type}"}
     except Exception as e:
         return {"error": str(e)}
 
@@ -249,7 +475,7 @@ function_map = {
     "capturePhoto": capturePhoto,
     "startLiveView": startLiveView,
     "stopLiveView": stopLiveView,
-    # ESP32 controls
+    # ESP32 controls - original functions (backward compatibility)
     "espEnable": espEnable,
     "espSetDirection": espSetDirection,
     "espSetSpeed": espSetSpeed,
@@ -261,4 +487,42 @@ function_map = {
     "espSetMode": espSetMode,
     "espSetAccel": espSetAccel,
     "espStatus": espStatus,
+    "espStatusAll": espStatusAll,
+    # Enhanced ESP32 controls with motor ID support
+    "espEnableMotor": espEnableWithMotorId,
+    "espStartMotor": espStartWithMotorId,
+    "espMoveStepsMotor": espMoveStepsWithMotorId,
+    "espStopMotor": espStopWithMotorId,
+    # Universal command handler
+    "espCommand": espCommand,
 }
+
+# Example usage for motor identification:
+# 
+# 1. WebSocket JSON commands can now include motor_id:
+# {
+#   "function": "espStart",
+#   "args": [800, true],
+#   "motor_id": "motor1"
+# }
+# 
+# 2. Or use the universal command handler:
+# {
+#   "function": "espCommand",
+#   "args": [{
+#     "command": "start",
+#     "sps": 800,
+#     "forward": true,
+#     "motor_id": "motor1"
+#   }]
+# }
+# 
+# 3. Enhanced motor functions accept JSON-like arguments:
+# {
+#   "function": "espStartMotor",
+#   "args": [{
+#     "sps": 800,
+#     "forward": true,
+#     "motor_id": "motor1"
+#   }]
+# }

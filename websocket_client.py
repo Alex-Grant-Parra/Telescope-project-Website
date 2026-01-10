@@ -95,7 +95,19 @@ async def handle_server(ws):
                 if function_name in function_map:
                     func = function_map[function_name]
                     args = data.get("args", [])
-                    result = func(*args)
+                    kwargs = data.get("kwargs", {})
+                    
+                    # Enhanced handling for ESP32 commands with motor_id
+                    # If motor_id is in the top-level data, add it to kwargs
+                    if "motor_id" in data:
+                        kwargs["motor_id"] = data["motor_id"]
+                    
+                    # Call function with both args and kwargs
+                    if kwargs:
+                        result = func(*args, **kwargs)
+                    else:
+                        result = func(*args)
+                    
                     response = json.dumps({"result": result, "id": data.get("id")})
                 else:
                     response = json.dumps({"error": f"Function '{function_name}' not found", "id": data.get("id")})
