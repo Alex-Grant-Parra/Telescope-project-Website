@@ -4,7 +4,8 @@ const stars = JSON.parse(document.getElementById('stars-data').textContent);
 
 // Image cache for planet sprites
 const planetImages = {};
-const fixedPlanetSize = 24; // Fixed size for all planets (increased for better visibility)
+const basePlanetSize = 24; // Base size for all planets (will be scaled by zoom)
+const baseStarSizeMultiplier = 1.0; // Base star size multiplier (will be scaled by zoom)
 
 // Find the actual magnitude range in the data
 let minMag = Infinity, maxMag = -Infinity;
@@ -65,6 +66,7 @@ function getPlanetsMagRange() {
 // UI elements
 const magFilter = document.getElementById('mag-filter');
 const magValue = document.getElementById('mag-value');
+const autoMagnitudeZoom = document.getElementById('auto-magnitude-zoom');
 const latInput = document.getElementById('latitude');
 const lonInput = document.getElementById('longitude');
 const showStars = document.getElementById('show-stars');
@@ -150,6 +152,39 @@ let zoom = 1.0; // Default zoom level
 const minZoom = 1; // 80% - only slightly zoomed out
 const maxZoom = 6.7; // 500% - zoomed way in
 const zoomStep = 0.1; // Zoom increment per scroll
+
+// Magnitude-Zoom linking parameters
+let magnitudeZoomEnabled = true; // Enable magnitude change with zoom
+const baseMagnitude = 4.0; // Base magnitude at zoom level 1.0
+const magnitudePerZoomLevel = 1.5; // How much magnitude increases per zoom level
+
+// Size scaling with zoom
+function getMagnitudeBasedSize(effectiveMag) {
+    // Improved magnitude-based sizing with larger overall sizes and good size differences
+    // Examples: mag -1 → ~8.5, mag 0 → ~6.0, mag 2 → ~3.8, mag 4 → ~2.2, mag 6 → ~1.2
+    const referenceMag = 3.0; // Reference magnitude for size calculations
+    const baseSizeAtRef = 2.5; // Increased base size at reference magnitude
+    const sizeFactor = 1.75; // Slightly increased size factor for more variation
+    
+    // Calculate size using a power function with fractional exponent
+    const magDiff = referenceMag - effectiveMag;
+    const calculatedSize = baseSizeAtRef * Math.pow(sizeFactor, magDiff * 0.6);
+    
+    return Math.max(0.8, calculatedSize); // Increased minimum size
+}
+
+function getZoomedStarSize(baseMagnitudeSize) {
+    // Scale star size based on zoom level
+    // At zoom 1.0, use base size; higher zoom = larger stars
+    const zoomScale = 0.5 + (zoom * 0.5); // Range from 0.5x to ~3.85x
+    return Math.max(0.5, baseMagnitudeSize * baseStarSizeMultiplier * zoomScale);
+}
+
+function getZoomedPlanetSize() {
+    // Scale planet size based on zoom level
+    const zoomScale = 0.5 + (zoom * 0.5); // Range from 0.5x to ~3.85x
+    return Math.max(8, basePlanetSize * zoomScale);
+}
 
 // Camera is inside the sphere: invert z-culling (draw z < 0)
 // Convert RA/DEC to 3D Cartesian coordinates
@@ -739,6 +774,27 @@ function updatePlanetsList() {
     }
 }
 
+// Update magnitude slider based on zoom level
+function updateMagnitudeForZoom() {
+    if (!magnitudeZoomEnabled) return;
+    
+    // Calculate new magnitude based on zoom level
+    // Higher zoom = fainter stars visible (higher magnitude)
+    const newMagnitude = baseMagnitude + (zoom - 1.0) * magnitudePerZoomLevel;
+    
+    // Clamp to slider bounds
+    const minSliderMag = parseFloat(magFilter.min) || -2;
+    const maxSliderMag = parseFloat(magFilter.max) || 20;
+    const clampedMagnitude = Math.max(minSliderMag, Math.min(maxSliderMag, newMagnitude));
+    
+    // Update the slider and display
+    magFilter.value = clampedMagnitude.toFixed(1);
+    magValue.textContent = clampedMagnitude.toFixed(1);
+    
+    // Fetch more stars if needed and rebuild visible stars
+    fetchMoreStarsIfNeeded(clampedMagnitude);
+}
+
 function rebuildVisibleStars(magLimit) {
     lastMagLimit = magLimit;
     visibleStars = [];
@@ -1165,12 +1221,13 @@ function draw() {
             if (z <= 0) continue;
             const [cx, cy] = project([x, y, z]);
             const effectiveMag = obj.mag == null ? 50 : obj.mag;
-            const size = Math.max(1, 6 - effectiveMag);
+            const baseMagnitudeSize = getMagnitudeBasedSize(effectiveMag);
+            const size = getZoomedStarSize(baseMagnitudeSize);
             ctx.fillStyle = "#fff";
             const a = Math.max(0.5, 1 - effectiveMag/8);
             if (size <= 1.5 && a >= 0.9) {
                 ctx.globalAlpha = 1;
-                ctx.fillRect(cx | 0, cy | 0, 1, 1);
+                ctx.fillRect(cx | 0, cy | 0, Math.max(1, size | 0), Math.max(1, size | 0));
             } else {
                 ctx.globalAlpha = a;
                 ctx.beginPath();
@@ -1196,7 +1253,7 @@ function draw() {
             if (z <= 0) continue;
             const [cx, cy] = project([x, y, z]);
 
-            const size = fixedPlanetSize; // fixed size for all planets
+            const size = getZoomedPlanetSize();
             ctx.globalAlpha = 1;
             if (obj.icon && planetImages[obj.icon]) {
                 const img = planetImages[obj.icon];
@@ -1351,8 +1408,16 @@ canvas.addEventListener('click', function(e) {
         if (z <= 0) continue;
         const [cx, cy] = project([x, y, z]);
 
-        let size = obj.type === "planet" ? fixedPlanetSize : Math.max(1, 6 - effectiveMag);
-        let hitRadius = obj.type === "planet" ? fixedPlanetSize/2 : size;
+        let size, hitRadius;
+        if (obj.type === "planet") {
+            size = getZoomedPlanetSize();
+            hitRadius = size / 2;
+        } else {
+            const baseMagnitudeSize = getMagnitudeBasedSize(effectiveMag);
+            size = getZoomedStarSize(baseMagnitudeSize);
+            hitRadius = size;
+        }
+        
         if ((mx-cx)**2 + (my-cy)**2 < hitRadius*hitRadius*1.5) {
             const displayMag = obj.mag == null ? "null" : obj.mag;
             const lstDegNow = lstDegrees(new Date((timeControl && timeControl.value) ? new Date(timeControl.value).toISOString() : new Date().toISOString()), parseFloat(lonInput.value));
@@ -1644,7 +1709,13 @@ canvas.addEventListener('wheel', (e) => {
     const scrollDirection = e.deltaY > 0 ? -1 : 1; // positive deltaY => zoom out
     const zoomChange = scrollDirection * zoomStep;
 
+    const oldZoom = zoom;
     zoom = Math.max(minZoom, Math.min(maxZoom, zoom + zoomChange));
+    
+    // Update magnitude based on zoom level if enabled
+    if (magnitudeZoomEnabled && zoom !== oldZoom) {
+        updateMagnitudeForZoom();
+    }
     
     draw();
 }, { passive: false });
@@ -1789,11 +1860,28 @@ async function stagedPrefetchAfterFirstDraw() {
 }
 
 // UI event listeners
+let manualMagnitudeTimeout = null; // Timer to re-enable auto magnitude after manual adjustment
+
 magFilter.addEventListener('input', () => {
     magValue.textContent = magFilter.value;
     // If user expands the magnitude beyond what we've fetched, fetch more
     const newMagLimit = parseFloat(magFilter.value);
     fetchMoreStarsIfNeeded(newMagLimit);
+    
+    // Temporarily disable auto magnitude-zoom linking only if it's currently enabled
+    if (magnitudeZoomEnabled) {
+        magnitudeZoomEnabled = false;
+        // Also uncheck the checkbox to show user the state
+        if (autoMagnitudeZoom) {
+            autoMagnitudeZoom.checked = false;
+        }
+        
+        // Clear any existing timeout
+        if (manualMagnitudeTimeout) {
+            clearTimeout(manualMagnitudeTimeout);
+        }
+    }
+    
     draw();
 });
 latInput.addEventListener('change', draw);
@@ -1804,6 +1892,19 @@ showHorizonGrid.addEventListener('change', draw);
 showEquatorialGrid.addEventListener('change', draw);
 if (showEcliptic) showEcliptic.addEventListener('change', draw);
 if (showBelowHorizon) showBelowHorizon.addEventListener('change', draw);
+
+// Auto-magnitude zoom checkbox
+if (autoMagnitudeZoom) {
+    autoMagnitudeZoom.addEventListener('change', () => {
+        magnitudeZoomEnabled = autoMagnitudeZoom.checked;
+        if (magnitudeZoomEnabled) {
+            // If re-enabling, update magnitude based on current zoom
+            updateMagnitudeForZoom();
+        }
+        console.log('Auto magnitude-zoom linking', magnitudeZoomEnabled ? 'enabled' : 'disabled');
+    });
+}
+
 if (flipVerticalCheckbox) {
     flipVerticalCheckbox.addEventListener('change', () => {
         // Capture current orientation so toggling doesn't move the map
@@ -1833,6 +1934,18 @@ resetBtn.addEventListener('click', () => {
     showPlanets.checked = true;
     clearSearch(); // Clear search when resetting view
     
+    // Reset auto-magnitude zoom to enabled
+    magnitudeZoomEnabled = true;
+    if (autoMagnitudeZoom) {
+        autoMagnitudeZoom.checked = true;
+    }
+    
+    // Clear any pending timeout
+    if (manualMagnitudeTimeout) {
+        clearTimeout(manualMagnitudeTimeout);
+        manualMagnitudeTimeout = null;
+    }
+    
     // Reset to current time and user's location if available
     if (window.resetToCurrentLocationAndTime) {
         window.resetToCurrentLocationAndTime();
@@ -1856,6 +1969,18 @@ searchInput.addEventListener('keydown', (e) => {
         clearSearch();
     }
 });
+
+// Global Ctrl+F handler to focus search box instead of browser search
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault(); // Prevent browser's find dialog
+        if (searchInput) {
+            searchInput.focus();
+            searchInput.select(); // Select any existing text for easy replacement
+        }
+    }
+});
+
 helpBtn.addEventListener('click', () => {
     helpModal.style.display = "flex";
 });
@@ -2053,15 +2178,69 @@ function searchObject() {
             highlightAnimation = 0;
             moveToObject(foundObject);
             
-            // Show info with friendly name in brackets if available
+            // Automatically adjust magnitude setting to ensure object is visible
+            const objectMag = foundObject.mag == null ? 6 : foundObject.mag;
+            const currentMagLimit = parseFloat(magFilter.value);
+            
+            // If the object is fainter than current limit, increase the magnitude limit
+            if (objectMag > currentMagLimit) {
+                const newMagLimit = Math.ceil(objectMag) + 0.3;
+                const maxSliderMag = parseFloat(magFilter.max) || 20;
+                const clampedMagLimit = Math.min(newMagLimit, maxSliderMag);
+                
+                magFilter.value = clampedMagLimit.toFixed(1);
+                magValue.textContent = clampedMagLimit.toFixed(1);
+                
+                // Temporarily disable auto magnitude-zoom linking if it's enabled
+                if (magnitudeZoomEnabled) {
+                    magnitudeZoomEnabled = false;
+                    if (autoMagnitudeZoom) {
+                        autoMagnitudeZoom.checked = false;
+                    }
+                    
+                    // Clear any existing timeout
+                    if (manualMagnitudeTimeout) {
+                        clearTimeout(manualMagnitudeTimeout);
+                    }
+                    
+                    // Re-enable auto magnitude-zoom linking after 5 seconds
+                    manualMagnitudeTimeout = setTimeout(() => {
+                        magnitudeZoomEnabled = true;
+                        if (autoMagnitudeZoom) {
+                            autoMagnitudeZoom.checked = true;
+                        }
+                        console.log('Auto magnitude-zoom linking re-enabled after search');
+                    }, 5000);
+                }
+                
+                // Fetch more stars if needed for the new magnitude limit
+                fetchMoreStarsIfNeeded(clampedMagLimit);
+                
+                console.log(`Adjusted magnitude limit from ${currentMagLimit} to ${clampedMagLimit} to show ${foundObject.name} (mag ${objectMag})`);
+            }
+            
+            // Show info with same format as click handler (two-button layout)
             const lstDeg2 = lstDegrees(new Date((timeControl && timeControl.value) ? new Date(timeControl.value).toISOString() : new Date().toISOString()), parseFloat(lonInput.value));
             const ha2 = hourAngleDegrees(foundObject.ra, lstDeg2);
+            
+            // Convert coordinates to HMS/DMS format like click handler
+            const raHMS = decimalToHMS(foundObject.ra);
+            const decDMS = decimalToDMS(foundObject.dec);
+            const displayMagFormatted = foundObject.mag == null ? "null" : foundObject.mag.toFixed(2);
+            
             const displayName = foundObject.friendlyName 
                 ? `${foundObject.name} (${foundObject.friendlyName})`
                 : foundObject.name;
+                
+            // Store the full data for advanced info modal 
+            window.currentStarData = { ...foundObject, hourAngle: ha2 };
+                
             document.getElementById('info').innerHTML = 
-                `<b>🔍 ${displayName}</b><br>RA: ${foundObject.ra.toFixed(2)}° | HA: ${(ha2/15).toFixed(2)}h<br>DEC: ${foundObject.dec.toFixed(2)}°<br>Mag: ${foundObject.mag}<br>
-                 <button onclick="trackObject('${foundObject.name}', ${foundObject.ra}, ${foundObject.dec}, ${foundObject.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
+                `<b>🔍 ${displayName}</b><br>RA: ${raHMS}<br>DEC: ${decDMS}<br>V-Mag: ${displayMagFormatted}<br>
+                 <div style="margin-top: 5px; display: flex; gap: 4px;">
+                    <button onclick="trackObject('${foundObject.name}', ${foundObject.ra}, ${foundObject.dec}, ${foundObject.mag})" style="padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer; flex: 1;">Track</button>
+                    <button onclick="showStarInfoModal(window.currentStarData)" style="padding: 4px 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; flex: 1;">Advanced Info</button>
+                 </div>`;
         } else {
             alert(data.message || 'Object not found.');
         }

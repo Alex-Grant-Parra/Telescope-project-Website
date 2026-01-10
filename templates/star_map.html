@@ -106,6 +106,9 @@
         <input type="range" id="mag-filter">
     </label>
     <label>
+        <input type="checkbox" id="auto-magnitude-zoom" checked> Auto-adjust magnitude on zoom
+    </label>
+    <label>
         Latitude:
         <input type="number" id="latitude" min="-90" max="90" step="0.01" value="0">
     </label>
@@ -166,10 +169,11 @@
         <b>3D Planetarium Controls</b><br><br>
         <ul>
             <li>Drag mouse to rotate the sky</li>
-            <li>Scroll wheel to zoom in/out</li>
+            <li>Scroll wheel to zoom in/out (auto-adjusts magnitude to show fainter stars when zoomed in)</li>
             <li>Click a star/planet for info</li>
             <li>Right-click magnitude slider for custom values</li>
             <li>Adjust magnitude filter to show/hide faint stars</li>
+            <li>Toggle "Auto-adjust magnitude on zoom" to link zoom level with star visibility</li>
             <li>Set your latitude/longitude for local sky orientation</li>
             <li>Toggle stars/planets visibility</li>
             <li>Toggle horizon grid (altitude/azimuth with N/E/S/W)</li>

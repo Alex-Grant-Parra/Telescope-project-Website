@@ -205,7 +205,7 @@ def force_https():
         host_only, port = raw_host.rsplit(':', 1)
 
     # Allow localhost explicitly
-    if host_only.startswith('127.0.0.1') or host_only.startswith('localhost'):
+    if host_only.startswith('127.0.0.1') or host_only.startswith('localhost') or host_only.startswith("192.168.0"):
         return None
 
     # If the host is an IP address, decide based on private/public and port
