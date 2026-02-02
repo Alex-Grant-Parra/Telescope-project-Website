@@ -1,8 +1,10 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
+import os
 from flask_login import login_user, logout_user, current_user, login_required
 import logging
 sec_logger = logging.getLogger('security')
 import json
+import ipaddress
 from utility.hash import hash_password, check_password
 from models.user import User
 from models.trusted_device import TrustedDevice
@@ -11,6 +13,41 @@ from utility.emailer import send_email
 
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def is_local_connection():
+    """Check if the request is coming from localhost, 127.0.0.1, or a local IP address."""
+    # Get the client IP address
+    client_ip = request.remote_addr
+    
+    # Handle X-Forwarded-For header for reverse proxies
+    xff_header = request.headers.get('X-Forwarded-For')
+    if xff_header:
+        # Take the first IP from the comma-separated list
+        client_ip = xff_header.split(',')[0].strip()
+    
+    # Configurable local IPs/hosts
+    local_ips = os.getenv('LOCAL_IP_ADDRESSES', '127.0.0.1,localhost,192.168.0').split(',')
+    local_ips = [ip.strip() for ip in local_ips if ip.strip()]
+
+    # Check for localhost variations and configured local IPs
+    if client_ip in local_ips or client_ip in ['::1']:
+        return True
+    
+    # Check if the host starts with any configured local host/IP (handles ports like localhost:8080)
+    if any(request.host.startswith(h) for h in local_ips):
+        return True
+    
+    # Check for private IP ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+    try:
+        ip_obj = ipaddress.ip_address(client_ip)
+        if ip_obj.is_private or ip_obj.is_loopback:
+            return True
+    except ValueError:
+        # Invalid IP format, not a local connection
+        pass
+    
+    return False
 
 @auth_bp.route("/login", methods=['GET', 'POST'])
 def login():
@@ -30,17 +67,17 @@ def login():
             except Exception:
                 # If is_enabled check fails for some reason, proceed cautiously
                 pass
-            # Check if the request is coming from localhost:8080 to bypass 2FA
-            is_localhost = (request.host.startswith('localhost:8080'))
+            # Check if the request is coming from a local connection
+            is_local = is_local_connection()
             
             # Check if this device is already trusted
             is_trusted, device_name = TrustedDevice.is_device_trusted(user.id)
             
-            if is_localhost:
-                # Skip 2FA for localhost:8080 connections
+            if is_local:
+                # Skip 2FA for local connections (localhost, 127.0.0.1, private IPs)
                 login_user(user)
-                flash('Login successful! (2FA bypassed for localhost)', 'success')
-                sec_logger.info(json.dumps({'event': 'login_success', 'user_id': user.id, 'method': 'localhost_bypass'}))
+                flash('Login successful! (2FA bypassed for local connection)', 'success')
+                sec_logger.info(json.dumps({'event': 'login_success', 'user_id': user.id, 'method': 'local_bypass'}))
                 return redirect(url_for('home.home'))
             elif is_trusted:
                 # Skip 2FA for trusted devices
@@ -137,19 +174,27 @@ def forgot_password():
                 break
 
         if found_user:
-            # Generate a reset token
-            reset_token = found_user.get_reset_token()
+            # Check if request is from local connection
+            if is_local_connection():
+                # For local connections, show reset token directly instead of sending email
+                reset_token = found_user.get_reset_token()
+                flash(f'Password reset token (local connection): {reset_token}', 'info')
+                flash('Use this token to access the reset link directly.', 'info')
+                return redirect(url_for('auth.login'))
+            else:
+                # Generate a reset token
+                reset_token = found_user.get_reset_token()
 
-            # Send an email with the token link
-            reset_url = url_for('auth.reset_password', token=reset_token, _external=True)
-            try:
-                send_email(current_app, 'auth', [email], "Password Reset Request", f"Click the following link to reset your password: {reset_url}")
-                flash('A password reset link has been sent to your email.', 'info')
-            except Exception as e:
-                flash(f"Error sending email: {str(e)}", 'danger')
-                return redirect(url_for('auth.forgot_password'))
+                # Send an email with the token link
+                reset_url = url_for('auth.reset_password', token=reset_token, _external=True)
+                try:
+                    send_email(current_app, 'auth', [email], "Password Reset Request", f"Click the following link to reset your password: {reset_url}")
+                    flash('A password reset link has been sent to your email.', 'info')
+                except Exception as e:
+                    flash(f"Error sending email: {str(e)}", 'danger')
+                    return redirect(url_for('auth.forgot_password'))
 
-            return redirect(url_for('auth.login'))
+                return redirect(url_for('auth.login'))
         else:
             flash('No account found with that email address.', 'danger')
 

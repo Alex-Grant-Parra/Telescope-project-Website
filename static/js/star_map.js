@@ -4,7 +4,8 @@ const stars = JSON.parse(document.getElementById('stars-data').textContent);
 
 // Image cache for planet sprites
 const planetImages = {};
-const fixedPlanetSize = 24; // Fixed size for all planets (increased for better visibility)
+const basePlanetSize = 24; // Base size for all planets (will be scaled by zoom)
+const baseStarSizeMultiplier = 1.0; // Base star size multiplier (will be scaled by zoom)
 
 // Find the actual magnitude range in the data
 let minMag = Infinity, maxMag = -Infinity;
@@ -65,6 +66,7 @@ function getPlanetsMagRange() {
 // UI elements
 const magFilter = document.getElementById('mag-filter');
 const magValue = document.getElementById('mag-value');
+const autoMagnitudeZoom = document.getElementById('auto-magnitude-zoom');
 const latInput = document.getElementById('latitude');
 const lonInput = document.getElementById('longitude');
 const showStars = document.getElementById('show-stars');
@@ -99,6 +101,13 @@ function starLoadingEnd() {
 }
 // Debug orientation toggle
 const flipVerticalCheckbox = document.getElementById('flip-vertical');
+
+// Cursor coordinate elements
+const showRADecCursor = document.getElementById('show-radec-cursor');
+const showAzElCursor = document.getElementById('show-azel-cursor');
+const cursorCoordsDiv = document.getElementById('cursor-coords');
+let lastCursorX = null;
+let lastCursorY = null;
 
 // Context menu elements
 const magContextMenu = document.getElementById('mag-context-menu');
@@ -144,6 +153,39 @@ const minZoom = 1; // 80% - only slightly zoomed out
 const maxZoom = 6.7; // 500% - zoomed way in
 const zoomStep = 0.1; // Zoom increment per scroll
 
+// Magnitude-Zoom linking parameters
+let magnitudeZoomEnabled = true; // Enable magnitude change with zoom
+const baseMagnitude = 4.0; // Base magnitude at zoom level 1.0
+const magnitudePerZoomLevel = 1.5; // How much magnitude increases per zoom level
+
+// Size scaling with zoom
+function getMagnitudeBasedSize(effectiveMag) {
+    // Improved magnitude-based sizing with larger overall sizes and good size differences
+    // Examples: mag -1 → ~8.5, mag 0 → ~6.0, mag 2 → ~3.8, mag 4 → ~2.2, mag 6 → ~1.2
+    const referenceMag = 3.0; // Reference magnitude for size calculations
+    const baseSizeAtRef = 2.5; // Increased base size at reference magnitude
+    const sizeFactor = 1.75; // Slightly increased size factor for more variation
+    
+    // Calculate size using a power function with fractional exponent
+    const magDiff = referenceMag - effectiveMag;
+    const calculatedSize = baseSizeAtRef * Math.pow(sizeFactor, magDiff * 0.6);
+    
+    return Math.max(0.8, calculatedSize); // Increased minimum size
+}
+
+function getZoomedStarSize(baseMagnitudeSize) {
+    // Scale star size based on zoom level
+    // At zoom 1.0, use base size; higher zoom = larger stars
+    const zoomScale = 0.5 + (zoom * 0.5); // Range from 0.5x to ~3.85x
+    return Math.max(0.5, baseMagnitudeSize * baseStarSizeMultiplier * zoomScale);
+}
+
+function getZoomedPlanetSize() {
+    // Scale planet size based on zoom level
+    const zoomScale = 0.5 + (zoom * 0.5); // Range from 0.5x to ~3.85x
+    return Math.max(8, basePlanetSize * zoomScale);
+}
+
 // Camera is inside the sphere: invert z-culling (draw z < 0)
 // Convert RA/DEC to 3D Cartesian coordinates
 function radecToXYZ(ra, dec) {
@@ -185,52 +227,8 @@ function setTimeControlFromDate(d, preserveSelectionSegment) {
 // Determine which segment of the datetime string the caret is on
 // Returns one of: 'year'|'month'|'day'|'hour'|'minute' or null if unknown
 function getCaretSegment(input) {
-    if (!input) return null;
-    const v = input.value || '';
-    // Expect pattern YYYY-MM-DDTHH:MM (length 16)
-    const pos = (typeof input.selectionStart === 'number') ? input.selectionStart : -1;
-    if (pos < 0 || v.length < 4) return null;
-
-    // Match common datetime-local formats: YYYY-MM-DDTHH:MM or YYYY-MM-DDTHH:MM:SS
-    const re = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/;
-    const m = v.match(re);
-    if (!m) return null;
-
-    // Compute start/end indices for each capture group within the full string
-    // Group offsets: year at 0, then '-' at 4, month at 5, '-' at 7, day at 8, 'T' at 10, hour at 11, ':' at 13, minute at 14, optional ':' at 16, second at 17
-    // We'll calculate exact ranges programmatically to stay robust
-    let idx = 0;
-    const ranges = {};
-    // year
-    ranges.year = { start: idx, end: idx + m[1].length - 1 };
-    idx += m[1].length; // 4
-    idx += 1; // '-'
-    // month
-    ranges.month = { start: idx, end: idx + m[2].length - 1 };
-    idx += m[2].length; // 2
-    idx += 1; // '-'
-    // day
-    ranges.day = { start: idx, end: idx + m[3].length - 1 };
-    idx += m[3].length; // 2
-    idx += 1; // 'T'
-    // hour
-    ranges.hour = { start: idx, end: idx + m[4].length - 1 };
-    idx += m[4].length; // 2
-    idx += 1; // ':'
-    // minute
-    ranges.minute = { start: idx, end: idx + m[5].length - 1 };
-    idx += m[5].length; // 2
-
-    if (m[6]) {
-        idx += 1; // ':'
-        ranges.second = { start: idx, end: idx + m[6].length - 1 };
-    }
-
-    // Find which range contains the caret position
-    for (const seg of ['year','month','day','hour','minute','second']) {
-        if (!ranges[seg]) continue;
-        if (pos >= ranges[seg].start && pos <= ranges[seg].end + 1) return seg; // allow caret at end of segment
-    }
+    // For datetime-local inputs, selectionStart is unreliable, so we return null
+    // and rely on virtualTimeSegment set by click handlers
     return null;
 }
 
@@ -269,26 +267,74 @@ function handleTimeInputClick(e) {
     const value = input.value || '';
     if (!value) return;
     
-    // For datetime-local inputs, try to detect which segment was clicked
-    // by checking if selectionStart is available
-    if (typeof input.selectionStart === 'number' && input.selectionStart >= 0) {
-        const seg = getCaretSegment(input);
-        if (seg) {
-            virtualTimeSegment = seg;
-            updateTimeSegmentIndicator(seg);
-            return;
-        }
+    // For datetime-local inputs, estimate segment based on click position
+    const rect = input.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    
+    // Create a temporary span to measure the actual text width
+    const tempSpan = document.createElement('span');
+    tempSpan.style.cssText = `
+        position: absolute; 
+        visibility: hidden; 
+        white-space: nowrap;
+        font-family: ${getComputedStyle(input).fontFamily};
+        font-size: ${getComputedStyle(input).fontSize};
+        font-weight: ${getComputedStyle(input).fontWeight};
+    `;
+    
+    // Format the value for display (DD/MM/YYYY HH:MM)
+    const dateObj = new Date(value);
+    const displayText = dateObj.toLocaleString('en-GB', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: false 
+    }).replace(',', '');
+    
+    tempSpan.textContent = displayText;
+    document.body.appendChild(tempSpan);
+    const textWidth = tempSpan.offsetWidth;
+    document.body.removeChild(tempSpan);
+    
+    // Calculate padding to center the text in the input
+    const padding = (rect.width - textWidth) / 2;
+    const textStart = padding;
+    const textEnd = padding + textWidth;
+    
+    // Check if click is within the text area
+    if (clickX < textStart || clickX > textEnd) {
+        // Click is in padding area, ignore or default to last segment
+        console.log(`Click at ${clickX.toFixed(0)}px is outside text area (${textStart.toFixed(0)}-${textEnd.toFixed(0)}px)`);
+        return;
     }
     
-    // Fallback: estimate from click position
-    const rect = input.getBoundingClientRect();
-    const totalChars = Math.max(1, value.length);
-    const x = e.clientX - rect.left;
-    const charWidth = rect.width / totalChars;
-    let index = Math.floor(x / charWidth);
-    if (index < 0) index = 0;
-    if (index > totalChars) index = totalChars;
-    const seg = getSegmentFromIndex(index, value);
+    // Calculate relative position within the actual text
+    const relativePosition = (clickX - textStart) / textWidth;
+    console.log(`Click at ${(relativePosition * 100).toFixed(1)}% of text width`);
+    
+    let seg = null;
+    
+    // Format is DD/MM/YYYY HH:MM (UK/ISO format)
+    // Split based on typical character positions:
+    // DD (2) / (1) MM (2) / (1) YYYY (4) space (1) HH (2) : (1) MM (2) = 18 chars
+    // Proportions: day=2/18, month=2/18, year=4/18, hour=2/18, minute=2/18
+    
+    if (relativePosition < 0.15) {
+        seg = 'day';       // First ~15% (DD)
+    } else if (relativePosition < 0.3) {
+        seg = 'month';     // Next ~15% (MM)
+    } else if (relativePosition < 0.55) {
+        seg = 'year';      // Next ~25% (YYYY)
+    } else if (relativePosition < 0.75) {
+        seg = 'hour';      // Next ~20% (HH)
+    } else {
+        seg = 'minute';    // Last ~25% (MM)
+    }
+    
+    console.log(`Detected segment: ${seg}`);
+    
     if (seg) {
         virtualTimeSegment = seg;
         updateTimeSegmentIndicator(seg);
@@ -297,7 +343,13 @@ function handleTimeInputClick(e) {
 
 function getCurrentSegmentBounds(input) {
     const v = input.value || '';
-    const seg = getCaretSegment(input);
+    let seg = getCaretSegment(input);
+    
+    // If no caret segment detected, use virtualTimeSegment
+    if (!seg && virtualTimeSegment) {
+        seg = virtualTimeSegment;
+    }
+    
     if (!seg) return null;
 
     // Recompute ranges using the same regex-based method so bounds match caret detection
@@ -620,6 +672,96 @@ function project([x, y, z]) {
     ];
 }
 
+// Inverse stereographic projection: screen coords to 3D unit vector (in view space)
+function unproject(screenX, screenY) {
+    const k = Math.max(width, height) * 0.35 * zoom;
+    const x = (screenX - width / 2) / (2 * k);
+    const y = -(screenY - height / 2) / (2 * k);
+    
+    // Inverse stereographic: given (x,y) on projection plane, find unit vector
+    // Standard formula: p² = x² + y²; X = 2x/(1+p²), Y = 2y/(1+p²), Z = (1-p²)/(1+p²)
+    const p2 = x * x + y * y;
+    const denom = 1 + p2;
+    return [
+        (2 * x) / denom,
+        (2 * y) / denom,
+        (1 - p2) / denom
+    ];
+}
+
+// Inverse rotation: from view space back to horizon space
+function inverseRotate([x, y, z], rotX, rotY) {
+    // Reverse user rotations: inverse of X rotation first, then Y
+    const cx = Math.cos(rotX), sx = Math.sin(rotX);
+    const cy = Math.cos(rotY), sy = Math.sin(rotY);
+    
+    // Inverse X rotation (rotX is applied second in forward, so undo first)
+    let y1 = y * cx + z * sx;
+    let z1 = -y * sx + z * cx;
+    
+    // Inverse Y rotation
+    let x1 = x * cy + z1 * sy;
+    let z2 = -x * sy + z1 * cy;
+    
+    return [x1, y1, z2];
+}
+
+// Convert XYZ in horizon frame to Alt/Az
+function xyzToAltAz([x, y, z]) {
+    const alt = Math.asin(y) * 180 / Math.PI;
+    const az = Math.atan2(x, z) * 180 / Math.PI;
+    return { altDeg: alt, azDeg: (az + 360) % 360 };
+}
+
+// Convert Alt/Az to RA/Dec using LST and latitude
+function altazToRaDec(altDeg, azDeg, lstDeg, latDeg) {
+    const alt = altDeg * Math.PI / 180;
+    const az = azDeg * Math.PI / 180;
+    const lat = latDeg * Math.PI / 180;
+    
+    const sinAlt = Math.sin(alt), cosAlt = Math.cos(alt);
+    const sinAz = Math.sin(az), cosAz = Math.cos(az);
+    const sinLat = Math.sin(lat), cosLat = Math.cos(lat);
+    
+    // Dec calculation
+    const sinDec = sinAlt * sinLat + cosAlt * cosLat * cosAz;
+    const dec = Math.asin(sinDec) * 180 / Math.PI;
+    
+    // Hour angle calculation
+    const cosH = (sinAlt - sinDec * Math.sin(dec * Math.PI / 180)) / (Math.cos(dec * Math.PI / 180) * cosLat);
+    const sinH = -cosAlt * sinAz / Math.cos(dec * Math.PI / 180);
+    let H = Math.atan2(sinH, cosH) * 180 / Math.PI;
+    
+    // RA = LST - HA
+    let ra = lstDeg - H;
+    ra = ((ra % 360) + 360) % 360;
+    
+    return { raDeg: ra, decDeg: dec };
+}
+
+// Get celestial coordinates at screen position
+function getCoordsAtScreen(screenX, screenY) {
+    const latDeg = parseFloat(latInput.value) || 0;
+    const lonDeg = parseFloat(lonInput.value) || 0;
+    let selectedDate = new Date();
+    try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
+    const lstDeg = lstDegrees(new Date(selectedDate.toISOString()), lonDeg);
+    
+    // Unproject screen to view space
+    const viewVec = unproject(screenX, screenY);
+    
+    // Inverse rotate to horizon space
+    const horizonVec = inverseRotate(viewVec, rotX, rotY);
+    
+    // Convert to Alt/Az
+    const { altDeg, azDeg } = xyzToAltAz(horizonVec);
+    
+    // Convert to RA/Dec
+    const { raDeg, decDeg } = altazToRaDec(altDeg, azDeg, lstDeg, latDeg);
+    
+    return { raDeg, decDeg, altDeg, azDeg };
+}
+
 // Visible caches (recomputed only when needed)
 let visibleStars = [];   // filtered by magnitude only
 let planetsList = [];    // updated when planets are replaced
@@ -630,6 +772,27 @@ function updatePlanetsList() {
     for (let i = 0; i < stars.length; i++) {
         if (stars[i] && stars[i].type === 'planet') planetsList.push(stars[i]);
     }
+}
+
+// Update magnitude slider based on zoom level
+function updateMagnitudeForZoom() {
+    if (!magnitudeZoomEnabled) return;
+    
+    // Calculate new magnitude based on zoom level
+    // Higher zoom = fainter stars visible (higher magnitude)
+    const newMagnitude = baseMagnitude + (zoom - 1.0) * magnitudePerZoomLevel;
+    
+    // Clamp to slider bounds
+    const minSliderMag = parseFloat(magFilter.min) || -2;
+    const maxSliderMag = parseFloat(magFilter.max) || 20;
+    const clampedMagnitude = Math.max(minSliderMag, Math.min(maxSliderMag, newMagnitude));
+    
+    // Update the slider and display
+    magFilter.value = clampedMagnitude.toFixed(1);
+    magValue.textContent = clampedMagnitude.toFixed(1);
+    
+    // Fetch more stars if needed and rebuild visible stars
+    fetchMoreStarsIfNeeded(clampedMagnitude);
 }
 
 function rebuildVisibleStars(magLimit) {
@@ -1058,12 +1221,13 @@ function draw() {
             if (z <= 0) continue;
             const [cx, cy] = project([x, y, z]);
             const effectiveMag = obj.mag == null ? 50 : obj.mag;
-            const size = Math.max(1, 6 - effectiveMag);
+            const baseMagnitudeSize = getMagnitudeBasedSize(effectiveMag);
+            const size = getZoomedStarSize(baseMagnitudeSize);
             ctx.fillStyle = "#fff";
             const a = Math.max(0.5, 1 - effectiveMag/8);
             if (size <= 1.5 && a >= 0.9) {
                 ctx.globalAlpha = 1;
-                ctx.fillRect(cx | 0, cy | 0, 1, 1);
+                ctx.fillRect(cx | 0, cy | 0, Math.max(1, size | 0), Math.max(1, size | 0));
             } else {
                 ctx.globalAlpha = a;
                 ctx.beginPath();
@@ -1089,7 +1253,7 @@ function draw() {
             if (z <= 0) continue;
             const [cx, cy] = project([x, y, z]);
 
-            const size = fixedPlanetSize; // fixed size for all planets
+            const size = getZoomedPlanetSize();
             ctx.globalAlpha = 1;
             if (obj.icon && planetImages[obj.icon]) {
                 const img = planetImages[obj.icon];
@@ -1126,6 +1290,72 @@ function draw() {
     }
 }
 
+// Update cursor coordinate display
+function updateCursorCoords(screenX, screenY) {
+    if (!cursorCoordsDiv) return;
+    
+    const showRADec = showRADecCursor && showRADecCursor.checked;
+    const showAzEl = showAzElCursor && showAzElCursor.checked;
+    
+    if (!showRADec && !showAzEl) {
+        cursorCoordsDiv.style.display = 'none';
+        return;
+    }
+    
+    try {
+        const coords = getCoordsAtScreen(screenX, screenY);
+        
+        let html = '';
+        
+        if (showRADec) {
+            // Convert RA to hours:minutes:seconds
+            const raHours = coords.raDeg / 15;
+            const raH = Math.floor(raHours);
+            const raM = Math.floor((raHours - raH) * 60);
+            const raS = Math.floor(((raHours - raH) * 60 - raM) * 60);
+            
+            // Convert Dec to degrees:arcminutes:arcseconds
+            const decSign = coords.decDeg >= 0 ? '+' : '-';
+            const decAbs = Math.abs(coords.decDeg);
+            const decD = Math.floor(decAbs);
+            const decM = Math.floor((decAbs - decD) * 60);
+            const decS = Math.floor(((decAbs - decD) * 60 - decM) * 60);
+            
+            html += `<div>RA: ${raH}h ${raM}m ${raS}s</div>`;
+            html += `<div>DEC: ${decSign}${decD}° ${decM}' ${decS}"</div>`;
+        }
+        
+        if (showAzEl) {
+            html += `<div>Az: ${coords.azDeg.toFixed(2)}°</div>`;
+            html += `<div>Elv: ${coords.altDeg.toFixed(2)}°</div>`;
+        }
+        
+        cursorCoordsDiv.innerHTML = html;
+        cursorCoordsDiv.style.display = 'block';
+        
+        // Position near cursor with offset to avoid blocking view
+        const offset = 15;
+        let left = screenX + offset;
+        let top = screenY + offset;
+        
+        // Keep within bounds
+        const rect = cursorCoordsDiv.getBoundingClientRect();
+        if (left + rect.width > window.innerWidth) {
+            left = screenX - rect.width - offset;
+        }
+        if (top + rect.height > window.innerHeight) {
+            top = screenY - rect.height - offset;
+        }
+        
+        cursorCoordsDiv.style.left = left + 'px';
+        cursorCoordsDiv.style.top = top + 'px';
+        
+    } catch (e) {
+        console.error('Error calculating cursor coords:', e);
+        cursorCoordsDiv.style.display = 'none';
+    }
+}
+
 // Mouse controls
 canvas.addEventListener('mousedown', e => {
     dragging = true;
@@ -1133,6 +1363,11 @@ canvas.addEventListener('mousedown', e => {
     lastY = e.clientY;
 });
 window.addEventListener('mousemove', e => {
+    // Track cursor position for coordinate display
+    lastCursorX = e.clientX;
+    lastCursorY = e.clientY;
+    updateCursorCoords(e.clientX, e.clientY);
+    
     if (!dragging) return;
     // Optionally invert controls: affects deltas only
     const controlInvert = invertControls ? -1 : 1;
@@ -1144,6 +1379,13 @@ window.addEventListener('mousemove', e => {
     draw();
 });
 window.addEventListener('mouseup', () => dragging = false);
+
+// Mouse leave canvas - hide cursor coords
+canvas.addEventListener('mouseleave', () => {
+    lastCursorX = null;
+    lastCursorY = null;
+    if (cursorCoordsDiv) cursorCoordsDiv.style.display = 'none';
+});
 
 // Click to show info
 canvas.addEventListener('click', function(e) {
@@ -1166,12 +1408,25 @@ canvas.addEventListener('click', function(e) {
         if (z <= 0) continue;
         const [cx, cy] = project([x, y, z]);
 
-        let size = obj.type === "planet" ? fixedPlanetSize : Math.max(1, 6 - effectiveMag);
-        let hitRadius = obj.type === "planet" ? fixedPlanetSize/2 : size;
+        let size, hitRadius;
+        if (obj.type === "planet") {
+            size = getZoomedPlanetSize();
+            hitRadius = size / 2;
+        } else {
+            const baseMagnitudeSize = getMagnitudeBasedSize(effectiveMag);
+            size = getZoomedStarSize(baseMagnitudeSize);
+            hitRadius = size;
+        }
+        
         if ((mx-cx)**2 + (my-cy)**2 < hitRadius*hitRadius*1.5) {
             const displayMag = obj.mag == null ? "null" : obj.mag;
             const lstDegNow = lstDegrees(new Date((timeControl && timeControl.value) ? new Date(timeControl.value).toISOString() : new Date().toISOString()), parseFloat(lonInput.value));
             const ha = hourAngleDegrees(obj.ra, lstDegNow);
+            
+            // Convert coordinates to HMS/DMS
+            const raHMS = decimalToHMS(obj.ra);
+            const decDMS = decimalToDMS(obj.dec);
+            const displayMagFormatted = obj.mag == null ? "null" : obj.mag.toFixed(2);
             
             // Fetch full star info to get friendlyName if available
             fetch(`/star_info/${encodeURIComponent(obj.name)}`)
@@ -1181,27 +1436,262 @@ canvas.addEventListener('click', function(e) {
                         const displayName = data.friendlyName 
                             ? `${data.name} (${data.friendlyName})`
                             : data.name;
+                        
+                        // Store the full data for advanced info modal with additional context
+                        window.currentStarData = { ...data, ra: obj.ra, dec: obj.dec, hourAngle: ha };
+                        
                         document.getElementById('info').innerHTML =
-                            `<b>${displayName}</b><br>RA: ${obj.ra.toFixed(2)}° | HA: ${(ha/15).toFixed(2)}h<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}<br>
-                             <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
+                            `<b>${displayName}</b><br>RA: ${raHMS}<br>DEC: ${decDMS}<br>V-Mag: ${displayMagFormatted}<br>
+                             <div style="margin-top: 5px; display: flex; gap: 4px;">
+                                <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer; flex: 1;">Track</button>
+                                <button onclick="showStarInfoModal(window.currentStarData)" style="padding: 4px 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; flex: 1;">Advanced Info</button>
+                             </div>`;
                     } else {
-                        // Fallback if fetch fails
+                        // Fallback if fetch fails - still show advanced info button with basic data
+                        window.currentStarData = { name: obj.name, ra: obj.ra, dec: obj.dec, mag: obj.mag, hourAngle: ha };
+                        
                         document.getElementById('info').innerHTML =
-                            `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}° | HA: ${(ha/15).toFixed(2)}h<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}<br>
-                             <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
+                            `<b>${obj.name}</b><br>RA: ${raHMS}<br>DEC: ${decDMS}<br>V-Mag: ${displayMagFormatted}<br>
+                             <div style="margin-top: 5px; display: flex; gap: 4px;">
+                                <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer; flex: 1;">Track</button>
+                                <button onclick="showStarInfoModal(window.currentStarData)" style="padding: 4px 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; flex: 1;">Advanced Info</button>
+                             </div>`;
                     }
                 })
                 .catch(() => {
-                    // Fallback on error
+                    // Fallback on error - still show advanced info button with basic data
+                    window.currentStarData = { name: obj.name, ra: obj.ra, dec: obj.dec, mag: obj.mag, hourAngle: ha };
+                    
                     document.getElementById('info').innerHTML =
-                        `<b>${obj.name}</b><br>RA: ${obj.ra.toFixed(2)}° | HA: ${(ha/15).toFixed(2)}h<br>DEC: ${obj.dec.toFixed(2)}°<br>Mag: ${displayMag}<br>
-                         <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
+                        `<b>${obj.name}</b><br>RA: ${raHMS}<br>DEC: ${decDMS}<br>V-Mag: ${displayMagFormatted}<br>
+                         <div style="margin-top: 5px; display: flex; gap: 4px;">
+                            <button onclick="trackObject('${obj.name}', ${obj.ra}, ${obj.dec}, ${obj.mag})" style="padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer; flex: 1;">Track</button>
+                            <button onclick="showStarInfoModal(window.currentStarData)" style="padding: 4px 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; flex: 1;">Advanced Info</button>
+                         </div>`;
                 });
             return;
         }
     }
     document.getElementById('info').innerHTML = "Drag to rotate. Click a star/planet for info.";
 });
+
+// Coordinate conversion helpers
+function decimalToHMS(degrees) {
+    // Convert RA degrees to hours:minutes:seconds
+    const hours = degrees / 15;
+    const h = Math.floor(hours);
+    const m = Math.floor((hours - h) * 60);
+    const s = ((hours - h) * 60 - m) * 60;
+    return `${h}h ${m}m ${s.toFixed(2)}s`;
+}
+
+function decimalToDMS(degrees) {
+    // Convert DEC degrees to degrees:arcminutes:arcseconds
+    const sign = degrees >= 0 ? '+' : '-';
+    const abs = Math.abs(degrees);
+    const d = Math.floor(abs);
+    const m = Math.floor((abs - d) * 60);
+    const s = ((abs - d) * 60 - m) * 60;
+    return `${sign}${d}° ${m}' ${s.toFixed(2)}"`;
+}
+
+// Advanced info modal functions (from interface.js)
+function extractCommonName(commonNames) {
+    if (!commonNames) return "";
+    const parts = commonNames.split(',').map(p => p.trim());
+    for (const name of parts) {
+        const nameUpper = name.toUpperCase();
+        // Skip catalog designations (HD, NGC, IC, M followed by number)
+        if (nameUpper.startsWith('HD') || 
+            nameUpper.startsWith('NGC') || 
+            nameUpper.startsWith('IC') || 
+            (nameUpper.startsWith('M') && name.length > 1 && name.slice(1).trim().replace(/\s/g, '').match(/^\d+$/))) {
+            continue;
+        }
+        // Found a friendly name
+        return name;
+    }
+    return "";
+}
+
+function generateAdvancedInfo(star) {
+    let advancedHtml = "<h6 style='margin-bottom: 1rem; color: #007bff;'>📋 Detailed Information</h6>";
+    
+    // Create a table of all available properties
+    const excludeKeys = ['name', 'Name', 'friendlyName'];
+    const propertyMappings = {
+        'ra': 'RA (decimal degrees)',
+        'RA': 'RA (decimal degrees)',
+        'dec': 'DEC (decimal degrees)',
+        'DEC': 'DEC (decimal degrees)',
+        'hourAngle': 'Hour Angle (degrees)',
+        'mag': 'Visual Magnitude',
+        'V-Mag': 'Visual Magnitude', 
+        'B-Mag': 'Blue Magnitude',
+        'U-Mag': 'Ultraviolet Magnitude',
+        'R-Mag': 'Red Magnitude',
+        'I-Mag': 'Infrared Magnitude',
+        'J-Mag': 'J-band Magnitude',
+        'H-Mag': 'H-band Magnitude',
+        'K-Mag': 'K-band Magnitude',
+        'commonNames': 'All Names',
+        'Common names': 'All Names',
+        'SpectralType': 'Spectral Type',
+        'spectralType': 'Spectral Type',
+        'Parallax': 'Parallax (mas)',
+        'parallax': 'Parallax (mas)',
+        'ProperMotionRA': 'Proper Motion RA (mas/yr)',
+        'ProperMotionDec': 'Proper Motion DEC (mas/yr)',
+        'RadialVelocity': 'Radial Velocity (km/s)',
+        'Distance': 'Distance (pc)',
+        'Luminosity': 'Luminosity',
+        'Temperature': 'Temperature (K)',
+        'Mass': 'Mass (Solar masses)',
+        'Radius': 'Radius (Solar radii)',
+        'Age': 'Age (Gyr)',
+        'Metallicity': 'Metallicity [Fe/H]'
+    };
+    
+    advancedHtml += '<div class="table-responsive"><table class="table table-sm table-hover" style="color: inherit;">';
+    advancedHtml += '<thead><tr><th>Property</th><th>Value</th></tr></thead><tbody>';
+    
+    for (const [key, value] of Object.entries(star)) {
+        if (excludeKeys.includes(key) || value === null || value === undefined || value === "") continue;
+        
+        const displayName = propertyMappings[key] || key.replace(/([A-Z])/g, ' $1').trim();
+        let displayValue = value;
+        
+        // Format numeric values
+        if (typeof value === 'number' && !Number.isInteger(value)) {
+            displayValue = value.toFixed(2);
+        }
+        
+        advancedHtml += `<tr><td><strong>${displayName}:</strong></td><td>${displayValue}</td></tr>`;
+    }
+    
+    advancedHtml += '</tbody></table></div>';
+    
+    if (Object.keys(star).filter(key => !excludeKeys.includes(key)).length === 0) {
+        advancedHtml = "<p class='text-muted'>No additional information available for this object.</p>";
+    }
+    
+    return advancedHtml;
+}
+
+function toggleAdvancedObjectInfo() {
+    const advancedInfo = document.getElementById("advancedObjectInfo");
+    const toggleBtn = document.getElementById("toggleAdvancedInfo");
+    
+    if (advancedInfo && toggleBtn) {
+        if (advancedInfo.style.display === "none") {
+            advancedInfo.style.display = "block";
+            toggleBtn.innerHTML = "📊 Hide Advanced Information";
+            toggleBtn.classList.remove("btn-outline-secondary");
+            toggleBtn.classList.add("btn-outline-primary");
+        } else {
+            advancedInfo.style.display = "none";
+            toggleBtn.innerHTML = "📊 Show Advanced Information";
+            toggleBtn.classList.remove("btn-outline-primary");
+            toggleBtn.classList.add("btn-outline-secondary");
+        }
+    }
+}
+
+function showStarInfoModal(star) {
+    const existingModal = document.getElementById("starInfoModal");
+    if (existingModal) existingModal.remove();
+
+    // Extract basic information with proper fallbacks
+    const name = star.name || star.Name || "Unknown";
+    const commonName = star.friendlyName || extractCommonName(star.commonNames || star['Common names']) || "";
+    const raDecimal = parseFloat(star.ra !== undefined ? star.ra : star.RA || 0);
+    const decDecimal = parseFloat(star.dec !== undefined ? star.dec : star.DEC || 0);
+    const raHMS = decimalToHMS(raDecimal);
+    const decDMS = decimalToDMS(decDecimal);
+    const magnitude = star.mag !== undefined ? star.mag : star["V-Mag"] || "N/A";
+
+    // Create modal with enhanced styling
+    const modal = document.createElement("div");
+    modal.id = "starInfoModal";
+    modal.className = "star-info-modal";
+    modal.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #ffffff;
+        color: #333;
+        border-radius: 12px;
+        z-index: 10000;
+        min-width: 350px;
+        max-width: 500px;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.5);
+        border: none;
+        overflow: hidden;
+    `;
+
+    modal.innerHTML = `
+        <div class="modal-header" style="background: linear-gradient(135deg, #007bff, #0056b3); color: white; padding: 1rem; border-bottom: none;">
+            <h5 class="modal-title" style="margin: 0; font-weight: 600;">🌟 Object Information</h5>
+            <button type="button" class="btn-close" id="closeStarInfo" style="filter: invert(1); background: none; border: none; font-size: 1.5rem; cursor: pointer; color: white; line-height: 1; padding: 0; width: 24px; height: 24px;">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 1.5rem;">
+            <!-- Basic Information -->
+            <div class="basic-info">
+                <div class="info-item" style="margin-bottom: 1rem;">
+                    <strong>Identifier:</strong> <span style="color: #007bff;">${name}</span>${commonName ? `  <span style="color: #28a745;">(${commonName})</span>` : ''}
+                </div>
+                <div class="info-item" style="margin-bottom: 1rem;">
+                    <strong>RA:</strong> <span style="color: #17a2b8;">${raHMS}</span>
+                </div>
+                <div class="info-item" style="margin-bottom: 1rem;">
+                    <strong>DEC:</strong> <span style="color: #17a2b8;">${decDMS}</span>
+                </div>
+                <div class="info-item" style="margin-bottom: 1rem;">
+                    <strong>Magnitude:</strong> <span style="color: #17a2b8;">${magnitude}</span>
+                </div>
+            </div>
+            
+            <!-- Advanced Info Toggle -->
+            <div class="advanced-toggle" style="margin: 1.5rem 0;">
+                <button id="toggleAdvancedInfo" class="btn btn-outline-secondary btn-sm w-100" onclick="toggleAdvancedObjectInfo()" style="padding: 8px; border: 1px solid #6c757d; background: white; color: #6c757d; border-radius: 4px; cursor: pointer; width: 100%;">
+                    📊 Show Advanced Information
+                </button>
+            </div>
+            
+            <!-- Advanced Information (Initially Hidden) -->
+            <div id="advancedObjectInfo" class="advanced-info" style="display: none; padding: 1rem; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #007bff; max-height: 300px; overflow-y: auto;">
+                ${generateAdvancedInfo(star)}
+            </div>
+        </div>
+        <div class="modal-footer" style="padding: 1rem; background-color: #f8f9fa; border-top: 1px solid #dee2e6; display: flex; justify-content: space-between; gap: 8px;">
+            <button id="trackObjectBtnModal" class="btn btn-success" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 1;">🎯 Track Object</button>
+            <button id="closeStarInfoFooter" class="btn btn-secondary" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 1;">Close</button>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Event listeners
+    document.getElementById("closeStarInfo").addEventListener("click", () => modal.remove());
+    document.getElementById("closeStarInfoFooter").addEventListener("click", () => modal.remove());
+    
+    const raVal = star.ra !== undefined ? star.ra : star.RA;
+    const decVal = star.dec !== undefined ? star.dec : star.DEC;
+    const magVal = star.mag !== undefined ? star.mag : star["V-Mag"];
+    
+    document.getElementById("trackObjectBtnModal").addEventListener("click", () => {
+        trackObject(name, raVal, decVal, magVal);
+        modal.remove();
+    });
+
+    // Close on outside click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    });
+}
 
 // Responsive resize
 window.addEventListener('resize', () => {
@@ -1219,7 +1709,13 @@ canvas.addEventListener('wheel', (e) => {
     const scrollDirection = e.deltaY > 0 ? -1 : 1; // positive deltaY => zoom out
     const zoomChange = scrollDirection * zoomStep;
 
+    const oldZoom = zoom;
     zoom = Math.max(minZoom, Math.min(maxZoom, zoom + zoomChange));
+    
+    // Update magnitude based on zoom level if enabled
+    if (magnitudeZoomEnabled && zoom !== oldZoom) {
+        updateMagnitudeForZoom();
+    }
     
     draw();
 }, { passive: false });
@@ -1364,11 +1860,28 @@ async function stagedPrefetchAfterFirstDraw() {
 }
 
 // UI event listeners
+let manualMagnitudeTimeout = null; // Timer to re-enable auto magnitude after manual adjustment
+
 magFilter.addEventListener('input', () => {
     magValue.textContent = magFilter.value;
     // If user expands the magnitude beyond what we've fetched, fetch more
     const newMagLimit = parseFloat(magFilter.value);
     fetchMoreStarsIfNeeded(newMagLimit);
+    
+    // Temporarily disable auto magnitude-zoom linking only if it's currently enabled
+    if (magnitudeZoomEnabled) {
+        magnitudeZoomEnabled = false;
+        // Also uncheck the checkbox to show user the state
+        if (autoMagnitudeZoom) {
+            autoMagnitudeZoom.checked = false;
+        }
+        
+        // Clear any existing timeout
+        if (manualMagnitudeTimeout) {
+            clearTimeout(manualMagnitudeTimeout);
+        }
+    }
+    
     draw();
 });
 latInput.addEventListener('change', draw);
@@ -1379,6 +1892,19 @@ showHorizonGrid.addEventListener('change', draw);
 showEquatorialGrid.addEventListener('change', draw);
 if (showEcliptic) showEcliptic.addEventListener('change', draw);
 if (showBelowHorizon) showBelowHorizon.addEventListener('change', draw);
+
+// Auto-magnitude zoom checkbox
+if (autoMagnitudeZoom) {
+    autoMagnitudeZoom.addEventListener('change', () => {
+        magnitudeZoomEnabled = autoMagnitudeZoom.checked;
+        if (magnitudeZoomEnabled) {
+            // If re-enabling, update magnitude based on current zoom
+            updateMagnitudeForZoom();
+        }
+        console.log('Auto magnitude-zoom linking', magnitudeZoomEnabled ? 'enabled' : 'disabled');
+    });
+}
+
 if (flipVerticalCheckbox) {
     flipVerticalCheckbox.addEventListener('change', () => {
         // Capture current orientation so toggling doesn't move the map
@@ -1401,13 +1927,34 @@ if (flipVerticalCheckbox) {
 resetBtn.addEventListener('click', () => {
     rotX = 0; rotY = 0;
     zoom = 1.0; // Reset zoom level
-    latInput.value = 0;
-    lonInput.value = 0;
-    magFilter.value = maxMag.toFixed(1); // Reset to show all objects
-    magValue.textContent = maxMag.toFixed(1);
+    magFilter.value = "4.0"; // Reset magnitude to 4
+    magValue.textContent = "4.0";
+    rebuildVisibleStars(4.0); // Rebuild visible stars with magnitude 4
     showStars.checked = true;
     showPlanets.checked = true;
     clearSearch(); // Clear search when resetting view
+    
+    // Reset auto-magnitude zoom to enabled
+    magnitudeZoomEnabled = true;
+    if (autoMagnitudeZoom) {
+        autoMagnitudeZoom.checked = true;
+    }
+    
+    // Clear any pending timeout
+    if (manualMagnitudeTimeout) {
+        clearTimeout(manualMagnitudeTimeout);
+        manualMagnitudeTimeout = null;
+    }
+    
+    // Reset to current time and user's location if available
+    if (window.resetToCurrentLocationAndTime) {
+        window.resetToCurrentLocationAndTime();
+    } else {
+        // Fallback: reset to 0,0 if location function not available
+        latInput.value = 0;
+        lonInput.value = 0;
+    }
+    
     draw();
 });
 // Search event listeners (guarded)
@@ -1422,6 +1969,18 @@ searchInput.addEventListener('keydown', (e) => {
         clearSearch();
     }
 });
+
+// Global Ctrl+F handler to focus search box instead of browser search
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault(); // Prevent browser's find dialog
+        if (searchInput) {
+            searchInput.focus();
+            searchInput.select(); // Select any existing text for easy replacement
+        }
+    }
+});
+
 helpBtn.addEventListener('click', () => {
     helpModal.style.display = "flex";
 });
@@ -1619,15 +2178,69 @@ function searchObject() {
             highlightAnimation = 0;
             moveToObject(foundObject);
             
-            // Show info with friendly name in brackets if available
+            // Automatically adjust magnitude setting to ensure object is visible
+            const objectMag = foundObject.mag == null ? 6 : foundObject.mag;
+            const currentMagLimit = parseFloat(magFilter.value);
+            
+            // If the object is fainter than current limit, increase the magnitude limit
+            if (objectMag > currentMagLimit) {
+                const newMagLimit = Math.ceil(objectMag) + 0.3;
+                const maxSliderMag = parseFloat(magFilter.max) || 20;
+                const clampedMagLimit = Math.min(newMagLimit, maxSliderMag);
+                
+                magFilter.value = clampedMagLimit.toFixed(1);
+                magValue.textContent = clampedMagLimit.toFixed(1);
+                
+                // Temporarily disable auto magnitude-zoom linking if it's enabled
+                if (magnitudeZoomEnabled) {
+                    magnitudeZoomEnabled = false;
+                    if (autoMagnitudeZoom) {
+                        autoMagnitudeZoom.checked = false;
+                    }
+                    
+                    // Clear any existing timeout
+                    if (manualMagnitudeTimeout) {
+                        clearTimeout(manualMagnitudeTimeout);
+                    }
+                    
+                    // Re-enable auto magnitude-zoom linking after 5 seconds
+                    manualMagnitudeTimeout = setTimeout(() => {
+                        magnitudeZoomEnabled = true;
+                        if (autoMagnitudeZoom) {
+                            autoMagnitudeZoom.checked = true;
+                        }
+                        console.log('Auto magnitude-zoom linking re-enabled after search');
+                    }, 5000);
+                }
+                
+                // Fetch more stars if needed for the new magnitude limit
+                fetchMoreStarsIfNeeded(clampedMagLimit);
+                
+                console.log(`Adjusted magnitude limit from ${currentMagLimit} to ${clampedMagLimit} to show ${foundObject.name} (mag ${objectMag})`);
+            }
+            
+            // Show info with same format as click handler (two-button layout)
             const lstDeg2 = lstDegrees(new Date((timeControl && timeControl.value) ? new Date(timeControl.value).toISOString() : new Date().toISOString()), parseFloat(lonInput.value));
             const ha2 = hourAngleDegrees(foundObject.ra, lstDeg2);
+            
+            // Convert coordinates to HMS/DMS format like click handler
+            const raHMS = decimalToHMS(foundObject.ra);
+            const decDMS = decimalToDMS(foundObject.dec);
+            const displayMagFormatted = foundObject.mag == null ? "null" : foundObject.mag.toFixed(2);
+            
             const displayName = foundObject.friendlyName 
                 ? `${foundObject.name} (${foundObject.friendlyName})`
                 : foundObject.name;
+                
+            // Store the full data for advanced info modal 
+            window.currentStarData = { ...foundObject, hourAngle: ha2 };
+                
             document.getElementById('info').innerHTML = 
-                `<b>🔍 ${displayName}</b><br>RA: ${foundObject.ra.toFixed(2)}° | HA: ${(ha2/15).toFixed(2)}h<br>DEC: ${foundObject.dec.toFixed(2)}°<br>Mag: ${foundObject.mag}<br>
-                 <button onclick="trackObject('${foundObject.name}', ${foundObject.ra}, ${foundObject.dec}, ${foundObject.mag})" style="margin-top: 5px; padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>`;
+                `<b>🔍 ${displayName}</b><br>RA: ${raHMS}<br>DEC: ${decDMS}<br>V-Mag: ${displayMagFormatted}<br>
+                 <div style="margin-top: 5px; display: flex; gap: 4px;">
+                    <button onclick="trackObject('${foundObject.name}', ${foundObject.ra}, ${foundObject.dec}, ${foundObject.mag})" style="padding: 4px 8px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer; flex: 1;">Track</button>
+                    <button onclick="showStarInfoModal(window.currentStarData)" style="padding: 4px 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; flex: 1;">Advanced Info</button>
+                 </div>`;
         } else {
             alert(data.message || 'Object not found.');
         }
@@ -1746,6 +2359,9 @@ window.addEventListener('DOMContentLoaded', () => {
         timeControl.addEventListener('keydown', handleTimeControlKeydown);
         // Add click handler to support virtual caret segmentation on browsers without selectionStart
         timeControl.addEventListener('click', handleTimeInputClick);
+        
+        // Also detect segment on mouseup for better accuracy
+        timeControl.addEventListener('mouseup', handleTimeInputClick);
     }
     if (timeNowBtn) {
         timeNowBtn.addEventListener('click', () => {
@@ -1766,6 +2382,22 @@ window.addEventListener('DOMContentLoaded', () => {
             invertControls = !!flipVerticalCheckbox.checked;
         }
     } catch { invertControls = !!(flipVerticalCheckbox && flipVerticalCheckbox.checked); }
+    
+    // Add event listeners for cursor coordinate toggles
+    if (showRADecCursor) {
+        showRADecCursor.addEventListener('change', () => {
+            if (lastCursorX !== null && lastCursorY !== null) {
+                updateCursorCoords(lastCursorX, lastCursorY);
+            }
+        });
+    }
+    if (showAzElCursor) {
+        showAzElCursor.addEventListener('change', () => {
+            if (lastCursorX !== null && lastCursorY !== null) {
+                updateCursorCoords(lastCursorX, lastCursorY);
+            }
+        });
+    }
     
     // Start initial fetches: planets for current time and a small bright-star set
     const planetsPromise = refreshPlanetsForCurrentTime();

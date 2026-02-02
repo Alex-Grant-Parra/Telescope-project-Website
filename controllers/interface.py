@@ -4,12 +4,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from flask import Blueprint, render_template, request, jsonify, session
 from algorithms.convert import convert
-# from camera.cameraController import Camera # Redundant import, using Cameralink instead
-
 from datetime import datetime
 import time
 
-from app.telescopeLink import Cameralink
+from app.telescopeLink import Telescope, current_telescope  # Updated import
 
 interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
@@ -19,14 +17,15 @@ def interface():
 
 @interface_bp.route("/update_camera", methods=["POST"])
 def update_camera():
-    data = request.json
-    # print("Received Camera Settings:", data)
+    data = request.json or {}
     response = {"status": "success", "message": "Settings updated"}
 
     # Determine target telescope
-    telescope_id = (data or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+    telescope_id = data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
     if not telescope_id:
         return jsonify({"status": "error", "message": "No telescope selected"}), 400
+
+    t = Telescope(telescope_id)
 
     # Set shutter speed if provided
     shutter_speed = data.get("shutterSpeed")
@@ -37,7 +36,7 @@ def update_camera():
         try:
             # Set the shutter speed using Camera class
             print("Changing shutterspeed")
-            Cameralink.setSettings(["/main/capturesettings/shutterspeed", shutter_speed], client_id_override=telescope_id)
+            t.camera.set_settings(["/main/capturesettings/shutterspeed", shutter_speed])
         except Exception as e:
             response = {"status": "error", "message": f"Failed to set shutter speed: {e}"}
             print(response)
@@ -47,7 +46,7 @@ def update_camera():
     if iso:
         try:
             print("Changing iso")
-            Cameralink.setSettings(["/main/imgsettings/iso", iso], client_id_override=telescope_id)
+            t.camera.set_settings(["/main/imgsettings/iso", iso])
         except Exception as e:
             response = {"status": "error", "message": f"Failed to set ISO: {e}"}
             print(response)
@@ -57,17 +56,24 @@ def update_camera():
 
 def extract_friendly_common_name(common_names_field: str) -> str:
     """
-    Extract the first non-HD name from commonNames field.
-    commonNames format: 'Sirius, HD 48915, HD48915'
-    Returns: 'Sirius' or '' if no friendly name found.
+    Extract the first friendly name from commonNames field.
+    commonNames format: 'Sirius, HD 48915, HD48915' or 'Andromeda Galaxy, M31, NGC 224'
+    Returns: 'Sirius' or 'Andromeda Galaxy' or '' if no friendly name found.
+    Skips catalog designations like HD, NGC, IC, M (Messier).
     """
     if not common_names_field:
         return ''
     parts = [p.strip() for p in common_names_field.split(',')]
     for name in parts:
-        # Skip HD variants (with or without space)
-        if not name.upper().startswith('HD'):
-            return name
+        name_upper = name.upper()
+        # Skip catalog designations (HD, NGC, IC, M followed by number)
+        if (name_upper.startswith('HD') or 
+            name_upper.startswith('NGC') or 
+            name_upper.startswith('IC') or 
+            (name_upper.startswith('M') and len(name) > 1 and name[1:].strip().replace(' ', '').isdigit())):
+            continue
+        # Found a friendly name
+        return name
     return ''
 
 @interface_bp.route("/search_object", methods=["POST"])
@@ -155,7 +161,8 @@ def search_object():
         mag = result_data.get('V-Mag', 0)  # Default to 0 if V-Mag is missing or None
 
         # Extract friendly common name (non-HD variant) if available
-        common_names_raw = result_data.get('commonNames', '')
+        # Try both 'commonNames' (HDSTARtable) and 'Common names' (NGCtable/IndexTable)
+        common_names_raw = result_data.get('commonNames', '') or result_data.get('Common names', '')
         friendly_name = extract_friendly_common_name(common_names_raw)
         if friendly_name:
             result_data['friendlyName'] = friendly_name
@@ -186,40 +193,31 @@ def format_celestial_data(name, data):
 @interface_bp.route("/get_camera_choices")
 def get_camera_choices():
     try:
-        selected = session.get('selected_telescope')
-        if not selected or not selected.get('telescopeId'):
+        selected = session.get('selected_telescope') or {}
+        cid = selected.get('telescopeId')
+        if not cid:
             return jsonify({"status": "error", "message": "No telescope selected"}), 400
-        choices = Cameralink.getSettings(client_id_override=selected.get('telescopeId'))
-        # print(choices)
+        t = Telescope(cid)
+        choices = t.camera.get_settings()
         return jsonify(choices)
-    except (KeyError, TypeError) as e:
-        print(f"{e}. Maybe camera is not connected?")
+    except Exception as e:
+        print(e)
         return jsonify({"status": "error", "message": str(e)})
     
 
 @interface_bp.route("/take_photo", methods=["POST"])
 def take_photo():
-    # Set your camera photos folder path here
-    # photos_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "camera_photos")
-    # os.makedirs(photos_folder, exist_ok=True)
     try:
         from flask_login import current_user
-        if current_user.is_authenticated:
-            currentId = current_user.get_id()
-            print(f"User ID: {currentId}")
-
-            try:
-                telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
-                if not telescope_id:
-                    return jsonify({"status": "error", "message": "No telescope selected"}), 400
-                print(Cameralink.capturePhoto(currentId, client_id_override=telescope_id))
-
-                return jsonify({"status": "success"})
-            except Exception as e:
-                return jsonify({"status": "error", "message": str(e)})
-        else:
+        if not current_user.is_authenticated:
             return jsonify({"status": "error", "message": "Must be logged in to take photos"})
-
+        current_id = current_user.get_id()
+        telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+        if not telescope_id:
+            return jsonify({"status": "error", "message": "No telescope selected"}), 400
+        t = Telescope(telescope_id)
+        print(t.camera.capture_photo(current_id))
+        return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
     
@@ -371,7 +369,8 @@ def start_live_view():
         telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
         if not telescope_id:
             return jsonify({"status": "error", "message": "No telescope selected"}), 400
-        result = Cameralink.startLiveView(client_id_override=telescope_id)
+        t = Telescope(telescope_id)
+        result = t.camera.start_live_view()
         return jsonify({"status": "success", "message": "Live view started", "result": result})
     except Exception as e:
         return jsonify({"status": "error", "message": f"Failed to start live view: {str(e)}"})
@@ -384,7 +383,98 @@ def stop_live_view():
         telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
         if not telescope_id:
             return jsonify({"status": "error", "message": "No telescope selected"}), 400
-        result = Cameralink.stopLiveView(client_id_override=telescope_id)
+        t = Telescope(telescope_id)
+        result = t.camera.stop_live_view()
         return jsonify({"status": "success", "message": "Live view stopped", "result": result})
     except Exception as e:
         return jsonify({"status": "error", "message": f"Failed to stop live view: {str(e)}"})
+
+@interface_bp.route("/motor_command", methods=["POST"])
+def motor_command():
+    """Execute motor commands on the telescope"""
+    try:
+        data = request.json or {}
+        telescope_id = data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+        command = data.get("command")
+        args = data.get("args")
+        motor_id = data.get("motor_id", "motor1")  # Default to motor1 for backward compatibility
+        
+        if not telescope_id:
+            return jsonify({"status": "error", "message": "No telescope selected"}), 400
+        
+        if not command:
+            return jsonify({"status": "error", "message": "No command specified"}), 400
+        
+        # Create telescope instance
+        t = Telescope(telescope_id)
+        
+        # Map command to motor controller method
+        motor_commands = {
+            "enable": t.motor.enable,
+            "set_direction": t.motor.set_direction,
+            "set_speed": t.motor.set_speed,
+            "start": t.motor.start,
+            "move_steps": t.motor.move_steps,
+            "stop": t.motor.stop,
+            "set_microsteps": t.motor.set_microsteps,
+            "set_current": t.motor.set_current,
+            "set_mode": t.motor.set_mode,
+            "set_accel": t.motor.set_accel,
+            "status": t.motor.status,
+            "status_all": t.motor.status_all
+        }
+        
+        if command not in motor_commands:
+            return jsonify({"status": "error", "message": f"Unknown motor command: {command}"}), 400
+        
+        # Execute the command
+        method = motor_commands[command]
+        
+        # Handle status_all separately (no motor_id parameter)
+        if command == "status_all":
+            result = method()
+        elif args is not None:
+            # Add motor_id to the call
+            if isinstance(args, list):
+                result = method(*args, motor_id=motor_id)
+            else:
+                result = method(args, motor_id=motor_id)
+        else:
+            result = method(motor_id=motor_id)
+        
+        print(f"Motor command '{command}' executed on motor '{motor_id}' with args {args}, result: {result}")
+        return jsonify({"status": "success", "message": f"Motor command '{command}' executed successfully", "result": result})
+        
+    except Exception as e:
+        error_msg = f"Failed to execute motor command: {str(e)}"
+        print(error_msg)
+        return jsonify({"status": "error", "message": error_msg}), 500
+
+@interface_bp.route("/get_motors", methods=["POST"])
+def get_motors():
+    """Get list of available motors for the selected telescope"""
+    try:
+        data = request.json or {}
+        telescope_id = data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+        
+        if not telescope_id:
+            return jsonify({"status": "error", "message": "No telescope selected"}), 400
+        
+        # Create telescope instance
+        t = Telescope(telescope_id)
+        
+        # Get status of all motors
+        result = t.motor.status_all()
+        
+        # Extract motor IDs from the result
+        if isinstance(result, dict) and "error" not in result:
+            motors = list(result.keys()) if result else ["motor1"]
+            return jsonify({"status": "success", "motors": motors})
+        else:
+            # Fallback to default motor
+            return jsonify({"status": "success", "motors": ["motor1"]})
+        
+    except Exception as e:
+        # If query fails, return default motor
+        print(f"Failed to get motors: {str(e)}")
+        return jsonify({"status": "success", "motors": ["motor1"]})

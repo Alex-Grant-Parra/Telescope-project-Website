@@ -37,6 +37,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        // Expose server-configured domain to JS
+        window.APP_DOMAIN = "{{ config['APP_DOMAIN'] or 'telescopes.dev' }}";
+    </script>
     {% block extra_css %}{% endblock %}
 </head>
 {# Server-render the user's night mode preference so the page can apply it instantly #}

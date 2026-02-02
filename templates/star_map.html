@@ -75,6 +75,25 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        #cursor-coords {
+            position: fixed;
+            pointer-events: none;
+            z-index: 999;
+            display: none;
+            background: rgba(0,0,0,0.75);
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px);
+            white-space: nowrap;
+        }
+        #cursor-coords div {
+            margin: 1px 0;
+        }
     </style>
 </head>
 <body>
@@ -87,18 +106,26 @@
         <input type="range" id="mag-filter">
     </label>
     <label>
+        <input type="checkbox" id="auto-magnitude-zoom" checked> Auto-adjust magnitude on zoom
+    </label>
+    <label>
         Latitude:
-        <input type="number" id="latitude" min="-90" max="90" step="0.1" value="0">
+        <input type="number" id="latitude" min="-90" max="90" step="0.01" value="0">
     </label>
     <label>
         Longitude:
-        <input type="number" id="longitude" min="-180" max="180" step="0.1" value="0">
+        <input type="number" id="longitude" min="-180" max="180" step="0.01" value="0">
     </label>
     <div>
         <label for="time-control" style="display:block; margin-top: 4px;">Time (local):</label>
         <div style="display:flex; gap: 6px; align-items:center;">
             <input type="datetime-local" id="time-control" style="flex:1; padding: 4px; background:#222; color:#fff; border:1px solid #555; border-radius:3px;">
             <button id="time-now" title="Set to current time" style="padding:4px 8px;">Now</button>
+        </div>
+        <div style="margin-top: 4px;">
+            <label for="live-time" style="font-size: 0.9em;">
+                <input type="checkbox" id="live-time"> Live Time
+            </label>
         </div>
         <div style="font-size: 0.85em; color:#bbb; margin-top:4px;">
             Grid shows Hour Angle (HA) using your longitude and the selected time.
@@ -120,6 +147,10 @@
         <input type="checkbox" id="show-below-horizon" checked> Below-horizon tint
     </label>
     <label>
+        <input type="checkbox" id="show-radec-cursor"> RA/DEC at cursor
+        <input type="checkbox" id="show-azel-cursor"> Az/Elv at cursor
+    </label>
+    <label>
         <input type="checkbox" id="flip-vertical"> Invert controls
     </label>
     <div style="margin-top: 8px;">
@@ -138,10 +169,11 @@
         <b>3D Planetarium Controls</b><br><br>
         <ul>
             <li>Drag mouse to rotate the sky</li>
-            <li>Scroll wheel to zoom in/out</li>
+            <li>Scroll wheel to zoom in/out (auto-adjusts magnitude to show fainter stars when zoomed in)</li>
             <li>Click a star/planet for info</li>
             <li>Right-click magnitude slider for custom values</li>
             <li>Adjust magnitude filter to show/hide faint stars</li>
+            <li>Toggle "Auto-adjust magnitude on zoom" to link zoom level with star visibility</li>
             <li>Set your latitude/longitude for local sky orientation</li>
             <li>Toggle stars/planets visibility</li>
             <li>Toggle horizon grid (altitude/azimuth with N/E/S/W)</li>
@@ -162,6 +194,8 @@
         <button id="mag-cancel">Cancel</button>
     </div>
 </div>
+<!-- Cursor coordinate labels -->
+<div id="cursor-coords"></div>
 <!-- Small bottom-right throbber for star loading/processing -->
 <div id="star-loading-indicator" aria-live="polite" aria-atomic="true">
     <div class="star-spinner" role="status" aria-hidden="true"></div>
@@ -186,5 +220,159 @@
 <script src="{{ url_for('static', filename='js/csrf-protection.js') }}" defer></script>
 <!-- Cache-busting query param to ensure latest JS is fetched -->
 <script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-30-2" defer></script>
+<script>
+// Auto-detect user location and set latitude/longitude
+document.addEventListener('DOMContentLoaded', function() {
+    function setLocation(lat, lon) {
+        const latInput = document.getElementById('latitude');
+        const lonInput = document.getElementById('longitude');
+        if (latInput && lonInput) {
+            latInput.value = lat.toFixed(2);
+            lonInput.value = lon.toFixed(2);
+            // Store the detected location for reset functionality
+            detectedUserLocation.lat = lat;
+            detectedUserLocation.lon = lon;
+            // Trigger change events to update the star map
+            latInput.dispatchEvent(new Event('change'));
+            lonInput.dispatchEvent(new Event('change'));
+        }
+    }
+    
+    function getApproxLocationFromTimezone(timezone) {
+        // Rough approximations for major timezones
+        const timezoneLocations = {
+            'America/New_York': { lat: 40.71, lon: -74.01 },
+            'America/Chicago': { lat: 41.88, lon: -87.63 },
+            'America/Denver': { lat: 39.74, lon: -104.99 },
+            'America/Los_Angeles': { lat: 34.05, lon: -118.24 },
+            'America/Toronto': { lat: 43.65, lon: -79.38 },
+            'Europe/London': { lat: 51.51, lon: -0.13 },
+            'Europe/Paris': { lat: 48.86, lon: 2.35 },
+            'Europe/Berlin': { lat: 52.52, lon: 13.41 },
+            'Europe/Rome': { lat: 41.90, lon: 12.50 },
+            'Europe/Madrid': { lat: 40.42, lon: -3.70 },
+            'Asia/Tokyo': { lat: 35.68, lon: 139.69 },
+            'Asia/Shanghai': { lat: 31.23, lon: 121.47 },
+            'Asia/Seoul': { lat: 37.57, lon: 126.98 },
+            'Asia/Mumbai': { lat: 19.08, lon: 72.88 },
+            'Australia/Sydney': { lat: -33.87, lon: 151.21 },
+            'Australia/Melbourne': { lat: -37.81, lon: 144.96 },
+            'Pacific/Auckland': { lat: -36.85, lon: 174.76 }
+        };
+        
+        return timezoneLocations[timezone] || null;
+    }
+    
+    function requestLocation() {
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    setLocation(lat, lon);
+                },
+                function(error) {
+                    console.log('Location access denied or unavailable:', error.message);
+                    // Fallback: try to detect location by timezone (rough approximation)
+                    try {
+                        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                        const roughLocation = getApproxLocationFromTimezone(timezone);
+                        if (roughLocation) {
+                            setLocation(roughLocation.lat, roughLocation.lon);
+                        }
+                    } catch (e) {
+                        console.log('Could not determine location from timezone');
+                    }
+                },
+                {
+                    enableHighAccuracy: false,
+                    timeout: 10000,
+                    maximumAge: 300000 // 5 minutes
+                }
+            );
+        }
+    }
+    
+    // Live time functionality
+    let liveTimeInterval = null;
+    let detectedUserLocation = { lat: 0, lon: 0 }; // Store detected location for reset
+    
+    function formatLocalDateTime(date) {
+        // Format date for datetime-local input
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+    
+    function updateTimeToNow() {
+        const timeControl = document.getElementById('time-control');
+        if (timeControl) {
+            const now = new Date();
+            now.setSeconds(0, 0); // Round to nearest minute
+            timeControl.value = formatLocalDateTime(now);
+            
+            // Trigger change event to update the star map
+            timeControl.dispatchEvent(new Event('change'));
+        }
+    }
+    
+    function resetToCurrentLocationAndTime() {
+        // Reset time to current time
+        updateTimeToNow();
+        
+        // Reset location to detected user location
+        setLocation(detectedUserLocation.lat, detectedUserLocation.lon);
+        
+        // Turn off live time if it was on
+        const liveTimeToggle = document.getElementById('live-time');
+        if (liveTimeToggle && liveTimeToggle.checked) {
+            liveTimeToggle.checked = false;
+            stopLiveTime();
+        }
+    }
+    
+    // Make reset function globally available for the reset button
+    window.resetToCurrentLocationAndTime = resetToCurrentLocationAndTime;
+    
+    function startLiveTime() {
+        if (liveTimeInterval) {
+            clearInterval(liveTimeInterval);
+        }
+        
+        // Update immediately
+        updateTimeToNow();
+        
+        // Then update every 5 seconds
+        liveTimeInterval = setInterval(updateTimeToNow, 5000);
+        console.log('Live time mode started');
+    }
+    
+    function stopLiveTime() {
+        if (liveTimeInterval) {
+            clearInterval(liveTimeInterval);
+            liveTimeInterval = null;
+            console.log('Live time mode stopped');
+        }
+    }
+    
+    // Setup live time toggle
+    const liveTimeToggle = document.getElementById('live-time');
+    if (liveTimeToggle) {
+        liveTimeToggle.addEventListener('change', function() {
+            if (this.checked) {
+                startLiveTime();
+            } else {
+                stopLiveTime();
+            }
+        });
+    }
+    
+    // Request location automatically when page loads
+    setTimeout(requestLocation, 1000); // Small delay to let the page load first
+});
+</script>
 </body>
 </html>

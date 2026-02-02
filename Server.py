@@ -19,6 +19,7 @@ import subprocess
 import atexit
 from waitress import serve  
 from datetime import datetime
+import ipaddress
 # Import security components
 from security import SecurityMiddleware, register_security_error_handlers
 
@@ -101,7 +102,7 @@ app.config["ENCRYPTION_KEY"] = os.getenv("ENCRYPTION_KEY")
 db.init_app(app)
 
 # Email Configuration
-app.config["MAIL_SERVER"] = "smtp.zoho.eu"
+app.config["MAIL_SERVER"] = os.getenv("MAIL_SERVER", "smtp.zoho.eu")
 app.config["MAIL_PORT"] = 587
 app.config["MAIL_USE_TLS"] = True
 app.config["MAIL_USE_SSL"] = not(app.config["MAIL_USE_TLS"])
@@ -136,6 +137,9 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 
 mail = Mail(app)
+
+# Site domain
+app.config["APP_DOMAIN"] = os.getenv("APP_DOMAIN", "telescopes.dev")
 
 # Initialize CSRF protection
 csrf = CSRFProtect()
@@ -186,42 +190,50 @@ except Exception as e:
 # HTTPS Enforcement Middleware
 @app.before_request
 def force_https():
-    # Only force HTTPS when the request is not already secure and no reverse proxy
-    # has indicated the original protocol. However, if the client is connecting
-    # using a raw IP address (e.g. 192.168.x.x) we assume this is a direct
-    # HTTP connection to the Flask dev server and should not be redirected to
-    # HTTPS (which would cause browsers to attempt a TLS handshake against a
-    # non-TLS server and trigger ERR_SSL_PROTOCOL_ERROR).
-    if not request.is_secure and request.headers.get('X-Forwarded-Proto') != 'https':
-        # Allow localhost for development/testing
-        host = (request.host or '')
-        # Extract hostname portion if a port is present
-        if ':' in host:
-            host = host.split(':', 1)[0]
+    """Redirect HTTP->HTTPS appropriately.
 
-        if host.startswith('127.0.0.1') or host.startswith('localhost'):
+    Rules:
+    - If already secure or a reverse proxy says original was HTTPS, do nothing.
+    - Always allow localhost/127.0.0.1 without redirect (handy for local dev/tools).
+    - If request targets a private LAN IP on the Flask HTTP port (e.g., 8080),
+      redirect to the same host over HTTPS on the default port (handled by Caddy).
+    - For domains (non-IP hosts), redirect http:// -> https://.
+    """
+    if request.is_secure or (request.headers.get('X-Forwarded-Proto') or '').lower() == 'https':
+        return None
+
+    raw_host = request.host or ''
+    host_only, port = raw_host, ''
+    if ':' in raw_host:
+        host_only, port = raw_host.rsplit(':', 1)
+
+    # Allow localhost/private prefixes explicitly via env config
+    local_hosts = os.getenv('LOCAL_IP_ADDRESSES', '127.0.0.1,localhost,192.168.0').split(',')
+    local_hosts = [h.strip() for h in local_hosts if h.strip()]
+    if any(host_only.startswith(h) for h in local_hosts):
+        return None
+
+    # If the host is an IP address, decide based on private/public and port
+    try:
+        ip_obj = ipaddress.ip_address(host_only)
+        if ip_obj.is_private:
+            # If hitting the Flask server directly on its HTTP port, upgrade to HTTPS on the same host
+            try:
+                flask_port_str = str(FlaskServerPort)
+            except Exception:
+                flask_port_str = '8080'
+
+            if port == flask_port_str:
+                # Build HTTPS URL without the explicit HTTP port
+                target = f"https://{host_only}{request.full_path if request.query_string else request.path}"
+                return redirect(target, code=301)
+            # Otherwise (private IP but different port), do not force to avoid surprises
             return None
-
-        # If the host is an IP address (IPv4 or IPv6), do not redirect here.
-        # This avoids sending a 301 to https:// on a server that is not
-        # configured with TLS, which causes the client to start a TLS
-        # handshake to a plain HTTP server (the cause of the errors seen).
-        try:
-            import ipaddress
-            ipaddress.ip_address(host)
-            # It's a valid IP address; skip HTTPS enforcement for direct IP access
-            print(f"force_https: detected IP host={host}; skipping HTTPS redirect")
-            return None
-        except Exception:
-            # Not an IP address — fall through to enforce HTTPS
-            pass
-
-        # Log the decision for diagnostics
-        try:
-            print(f"force_https: host={host}, secure={request.is_secure}, x-forwarded-proto={request.headers.get('X-Forwarded-Proto')}; redirecting to HTTPS")
-        except Exception:
-            pass
-
+        else:
+            # Public IPs: upgrade to HTTPS
+            return redirect(request.url.replace('http://', 'https://'), code=301)
+    except ValueError:
+        # Not an IP literal (likely a domain): upgrade to HTTPS
         return redirect(request.url.replace('http://', 'https://'), code=301)
 
 # Register Blueprints
@@ -445,7 +457,9 @@ if __name__ == '__main__':
     # handshakes. Otherwise, run plain HTTP. This makes explicit the behavior
     # and prevents ERR_SSL_PROTOCOL_ERROR when clients attempt HTTPS against a
     # plain HTTP server.
-    print(f"Starting Flask server on {gethostname()} at http://127.0.0.1:{FlaskServerPort}")
+    flask_host = os.getenv("FLASK_SERVER_HOST", "127.0.0.1")
+    flask_port = os.getenv("FLASK_SERVER_PORT", FlaskServerPort)
+    print(f"Starting Flask server on {gethostname()} at http://{flask_host}:{flask_port}")
 
     # Environment-driven SSL toggle
     use_ssl = os.getenv('FLASK_USE_SSL', 'False').lower() in ('1', 'true', 'yes')

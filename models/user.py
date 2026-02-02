@@ -2,31 +2,27 @@ import os
 import jwt
 import random
 from datetime import datetime, timedelta
-from cryptography.fernet import Fernet
 from flask_login import UserMixin, login_required, current_user
 from app.db import db
 from dotenv import load_dotenv  # Import load_dotenv
 from flask import Blueprint, jsonify
+from utility.encryption import EncryptedString
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Fetch the encryption key from environment variables
-encryption_key = os.getenv('ENCRYPTION_KEY')
-if encryption_key is None:
-    raise ValueError("ENCRYPTION_KEY environment variable is not set")
-encryption_key = encryption_key.encode()  # Ensure it's in bytes format
-fernet = Fernet(encryption_key)  # Initialize Fernet with the key
+# Ensure encryption key is configured (utility.encryption will raise otherwise)
 
 class User(UserMixin, db.Model):
     __tablename__ = "user"
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
-    email = db.Column(db.String(150), unique=True, nullable=False)
+    # Store encrypted; transparently returns plaintext when accessed
+    email = db.Column(EncryptedString(150), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     AccountType = db.Column(db.String(32), nullable=False, default="Standard")  # "Standard", "Administrator", "Limited", or "None"
-    totp_secret = db.Column(db.String(16))
-    current_2fa_code = db.Column(db.String(6))
+    totp_secret = db.Column(EncryptedString(64))
+    current_2fa_code = db.Column(EncryptedString(64))
     night_mode = db.Column(db.Boolean, default=False, nullable=False)  # Night mode preference
     # Persistent enabled flag for quick checks (new column)
     is_enabled_flag = db.Column('is_enabled', db.Boolean, default=True, nullable=False)
@@ -49,13 +45,13 @@ class User(UserMixin, db.Model):
     def is_none(self):
         return self.AccountType == "None"
 
-    # Encrypt email before storing in the database
     def set_email(self, email):
-        self.email = fernet.encrypt(email.encode()).decode()
+        # Assign plaintext; type handles encryption on write
+        self.email = email
 
-    # Decrypt email when accessing the user email
     def get_email(self):
-        return fernet.decrypt(self.email.encode()).decode()
+        # Column accessor returns plaintext
+        return self.email
 
     # Generate a reset token using JWT
     def get_reset_token(self, expires_sec=1800):
@@ -100,12 +96,14 @@ class User(UserMixin, db.Model):
         self.totp_secret = ''.join(random.choices('0123456789abcdef', k=16))
 
     def generate_totp_code(self):
+        # Store encrypted transparently via EncryptedString
         self.current_2fa_code = ''.join(random.choices('0123456789abcdef', k=6))
         db.session.commit()  # Save the generated code to the database
         return self.current_2fa_code
 
     def verify_2fa_code(self, code):
-        result = self.current_2fa_code == code
+        # current_2fa_code accessor yields plaintext
+        result = (self.current_2fa_code == code)
         if result:
             self.current_2fa_code = None  # Clear the 2FA code after successful verification
             db.session.commit()
@@ -162,7 +160,7 @@ class AccountStatusHistory(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
     changed_by = db.Column(db.Integer, nullable=True)  # user id of admin who changed status
-    reason = db.Column(db.String(255), nullable=True)
+    reason = db.Column(EncryptedString(1024), nullable=True)
     changed_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship('User', backref='status_history')

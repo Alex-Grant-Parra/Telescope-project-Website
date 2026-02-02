@@ -10,7 +10,8 @@ from time import sleep
 from PIL import Image
 import io
 
-url = f"https://telescopes.dev/sendCommand" # Url for sending flask server commands
+domain = os.getenv("APP_DOMAIN", "telescopes.dev")
+url = f"https://{domain}/sendCommand"  # Endpoint for sending flask server commands
 
 # Example
 # payload = {"client_id": client_id, "command": "add", "args": [5, 7]}
@@ -43,164 +44,186 @@ def load_api_token():
         print(f"Warning: Could not load API token: {e}")
         return None
 
-class Cameralink:
+class Telescope:
+    """Represents a single telescope (client) identified by client_id."""
+    def __init__(self, client_id: str):
+        if not client_id:
+            raise ValueError("Telescope requires a valid client_id")
+        self.client_id = client_id
+        self.camera = CameraController(self)
+        self.motor = MotorController(self)
+
+    def send_command(self, command: str, args=None, kwargs=None):
+        payload = {"client_id": self.client_id, "command": command}
+        if args is not None:
+            payload["args"] = args
+        if kwargs is not None:
+            payload["kwargs"] = kwargs
+        try:
+            resp_text = requests.post(url, json=payload, timeout=8).text
+            data = ujson.loads(resp_text)
+            return data.get("result", data)
+        except Exception as e:
+            return {"error": str(e)}
 
     @staticmethod
-    def _effective_client_id(provided_id=None):
-        """Resolve the client_id to use for commands.
-
-        Priority:
-        1) Explicit provided_id argument
-        2) Telescope selected in the web interface (from Flask session)
-        """
+    def resolve_client_id(provided_id=None):
         if provided_id:
             return provided_id
         try:
             if has_request_context():
                 selected = session.get('selected_telescope') or {}
-                sel_id = (selected or {}).get('telescopeId')
+                sel_id = selected.get('telescopeId')
                 if sel_id:
                     return sel_id
         except Exception:
-            # If session is unavailable for any reason, fall back to default
             pass
         return None
 
-    # @staticmethod
-    def getSettings(client_id_override=None):
-        payload = {"client_id": Cameralink._effective_client_id(client_id_override), "command": "getCameraChoices"}
-        response = requests.post(url, json=payload).text 
-        
-        data = ujson.loads(response) 
-        extracted_data = data["result"] 
-        
-        return extracted_data  
-    
-    # @staticmethod
-    def setSettings(args, client_id_override=None):
-        payload = {"client_id": Cameralink._effective_client_id(client_id_override), "command": "setCameraSetting", "args": args}
-        response = requests.post(url, json=payload).text
+    @classmethod
+    def from_session(cls):
+        cid = cls.resolve_client_id()
+        if not cid:
+            raise ValueError("No selected telescope in session")
+        return cls(cid)
 
-        data = ujson.loads(response)
-        extracted_data = data["result"] 
-        
-        return extracted_data  
-    
-    def capturePhoto(currentid, client_id_override=None):
-        payload = {"client_id": Cameralink._effective_client_id(client_id_override), "command": "capturePhoto", "args": currentid}
-        response = requests.post(url, json=payload).text
 
-        data = ujson.loads(response)
+class CameraController:
+    def __init__(self, telescope: 'Telescope'):
+        self.telescope = telescope
 
-        print(data)
-        
-        return data
+    def get_settings(self):
+        return self.telescope.send_command("getCameraChoices")
 
-    def start_liveview_client(server_ip=None, client_id=None):
-        # Maximum frame size (2MB - small buffer for safety)
-        MAX_FRAME_SIZE = 2 * 1024 * 1024 - 10240  # 2MB minus 10KB buffer
-        
-        def compress_frame_if_needed(frame_data):
-            """Compress frame if it's too large, return compressed data or None if should skip"""
+    def set_settings(self, args):
+        return self.telescope.send_command("setCameraSetting", args)
+
+    def capture_photo(self, current_id):
+        return self.telescope.send_command("capturePhoto", current_id)
+
+    def start_live_view(self):
+        return self.telescope.send_command("startLiveView")
+
+    def stop_live_view(self):
+        return self.telescope.send_command("stopLiveView")
+
+    # Port of previous start_liveview_client logic as an instance method (optional use)
+    def stream_live_view(self):
+        MAX_FRAME_SIZE = 2 * 1024 * 1024 - 10240
+        def compress_frame_if_needed(frame_data: bytes):
             if len(frame_data) <= MAX_FRAME_SIZE:
                 return frame_data
-                
             try:
-                # Try to compress the JPEG frame
                 image = Image.open(io.BytesIO(frame_data))
-                
-                # Progressive quality reduction until under size limit
                 for quality in [85, 70, 55, 40, 25]:
                     output = io.BytesIO()
                     image.save(output, format='JPEG', quality=quality, optimize=True)
-                    compressed_data = output.getvalue()
-                    
-                    if len(compressed_data) <= MAX_FRAME_SIZE:
-                        print(f"[LiveView] Compressed frame from {len(frame_data)} to {len(compressed_data)} bytes (quality {quality})")
-                        return compressed_data
-                
-                # If still too large even at lowest quality, skip frame
-                print(f"[LiveView] Frame too large ({len(frame_data)} bytes), skipping...")
+                    compressed = output.getvalue()
+                    if len(compressed) <= MAX_FRAME_SIZE:
+                        print(f"[LiveView] Compressed frame {len(frame_data)} -> {len(compressed)} bytes (q={quality})")
+                        return compressed
+                print(f"[LiveView] Frame still too large ({len(frame_data)} bytes), skipping")
                 return None
-                
             except Exception as e:
-                print(f"[LiveView] Error compressing frame: {e}, skipping...")
+                print(f"[LiveView] Compression error: {e}")
                 return None
-        
         async def send_frames():
-            # Load API token
             api_token = load_api_token()
             if not api_token:
-                print("[LiveView] Error: No API token found. Please configure api_tokens.json")
+                print("[LiveView] No API token found")
                 return
-            
-            # Use new WSS endpoint through Cloudflare Tunnel
-            uri = "wss://liveview.telescopes.dev"
+            lv_domain = os.getenv("APP_DOMAIN", "telescopes.dev")
+            uri = f"wss://liveview.{lv_domain}"
             async with websockets.connect(uri, max_size=2*1024*1024) as ws:
-                # Send authentication data
-                auth_data = {
-                    "token": api_token,
-                    "client_id": client_id
-                }
-                await ws.send(ujson.dumps(auth_data))
-                
-                # Use gphoto2 to capture preview frames
-                proc = subprocess.Popen([
-                    "gphoto2", "--capture-movie", "--stdout"
-                ], stdout=subprocess.PIPE)
-                
+                await ws.send(ujson.dumps({"token": api_token, "client_id": self.telescope.client_id}))
+                proc = subprocess.Popen(["gphoto2", "--capture-movie", "--stdout"], stdout=subprocess.PIPE)
                 frame_buffer = b""
                 try:
                     while True:
-                        # Read data in chunks
-                        chunk = proc.stdout.read(1024*32)  # 32KB chunks
+                        chunk = proc.stdout.read(1024 * 32)
                         if not chunk:
                             break
-                            
                         frame_buffer += chunk
-                        
-                        # Look for JPEG end marker (FF D9) to detect complete frames
                         while b'\xff\xd9' in frame_buffer:
-                            # Find the end of current JPEG
                             end_pos = frame_buffer.find(b'\xff\xd9') + 2
-                            complete_frame = frame_buffer[:end_pos]
+                            complete = frame_buffer[:end_pos]
                             frame_buffer = frame_buffer[end_pos:]
-                            
-                            # Check and compress frame if needed
-                            processed_frame = compress_frame_if_needed(complete_frame)
-                            if processed_frame:
+                            processed = compress_frame_if_needed(complete)
+                            if processed:
                                 try:
-                                    await ws.send(processed_frame)
+                                    await ws.send(processed)
                                 except websockets.exceptions.ConnectionClosed:
-                                    print("[LiveView] Connection closed during frame send")
+                                    print("[LiveView] Connection closed during send")
                                     return
                                 except Exception as e:
-                                    print(f"[LiveView] Error sending frame: {e}")
-                                    # Continue trying to send other frames
-                            # If processed_frame is None, frame was skipped due to size
-                            
+                                    print(f"[LiveView] Send error: {e}")
                 finally:
                     proc.terminate()
         asyncio.run(send_frames())
 
-    @staticmethod
-    def startLiveView(client_id_override=None):
-        print("Starting Live View from telescopeLink.py")
-        payload = {"client_id": Cameralink._effective_client_id(client_id_override), "command": "startLiveView"}
-        response = requests.post(url, json=payload).text
 
-        data = ujson.loads(response)
-        extracted_data = data["result"] 
-        
-        return extracted_data
-    
-    @staticmethod
-    def stopLiveView(client_id_override=None):
-        print("Stopping Live View from telescopeLink.py")
-        payload = {"client_id": Cameralink._effective_client_id(client_id_override), "command": "stopLiveView"}
-        response = requests.post(url, json=payload).text
+class MotorController:
+    def __init__(self, telescope: 'Telescope'):
+        self.telescope = telescope
 
-        data = ujson.loads(response)
-        extracted_data = data["result"] 
-        
-        return extracted_data  
+    def enable(self, on, motor_id="motor1"):
+        """Enable/disable the stepper driver for a specific motor."""
+        return self.telescope.send_command("espEnable", args=[bool(on)], kwargs={"motor_id": motor_id})
+
+    def set_direction(self, forward, motor_id="motor1"):
+        """Set motor direction: True=forward, False=reverse."""
+        return self.telescope.send_command("espSetDirection", args=[bool(forward)], kwargs={"motor_id": motor_id})
+
+    def set_speed(self, sps, motor_id="motor1"):
+        """Set continuous target speed in steps/sec (does not auto-enable)."""
+        return self.telescope.send_command("espSetSpeed", args=[float(sps)], kwargs={"motor_id": motor_id})
+
+    def start(self, sps, forward=None, motor_id="motor1"):
+        """Start continuous rotation at speed; optional direction; auto-enables."""
+        args = [float(sps)]
+        if forward is not None:
+            args.append(bool(forward))
+        return self.telescope.send_command("espStart", args=args, kwargs={"motor_id": motor_id})
+
+    def move_steps(self, steps, sps=None, forward=None, motor_id="motor1"):
+        """Move a finite number of steps; optional speed and direction override."""
+        args = [int(steps)]
+        if sps is not None:
+            args.append(float(sps))
+        if forward is not None:
+            args.append(bool(forward))
+        return self.telescope.send_command("espMoveSteps", args=args, kwargs={"motor_id": motor_id})
+
+    def stop(self, motor_id="motor1"):
+        """Stop motion and disable driver for a specific motor."""
+        return self.telescope.send_command("espStop", args=[], kwargs={"motor_id": motor_id})
+
+    def set_microsteps(self, value, motor_id="motor1"):
+        """Set TMC2209 microstepping value (e.g., 16, 32) for a specific motor."""
+        return self.telescope.send_command("espSetMicrosteps", args=[int(value)], kwargs={"motor_id": motor_id})
+
+    def set_current(self, mA, motor_id="motor1"):
+        """Set RMS motor current in milliamps for a specific motor."""
+        return self.telescope.send_command("espSetCurrent", args=[int(mA)], kwargs={"motor_id": motor_id})
+
+    def set_mode(self, mode, motor_id="motor1"):
+        """Set chopper mode: 'stealth' or 'spread' for a specific motor."""
+        return self.telescope.send_command("espSetMode", args=[str(mode)], kwargs={"motor_id": motor_id})
+
+    def set_accel(self, sps2, motor_id="motor1"):
+        """Set acceleration in steps/sec^2 for ramping for a specific motor."""
+        return self.telescope.send_command("espSetAccel", args=[float(sps2)], kwargs={"motor_id": motor_id})
+
+    def status(self, motor_id="motor1"):
+        """Query ESP32 firmware status for a specific motor."""
+        return self.telescope.send_command("espStatus", args=[], kwargs={"motor_id": motor_id})
+
+    def status_all(self):
+        """Query status of all motors on the ESP32."""
+        return self.telescope.send_command("espStatusAll", args=[])
+
+
+# Convenience helper
+def current_telescope() -> Telescope:
+    """Return a Telescope object for the currently selected client in session."""
+    return Telescope.from_session()
