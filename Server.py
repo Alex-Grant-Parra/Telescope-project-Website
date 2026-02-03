@@ -35,38 +35,31 @@ else:
     # fallback: try system env or log that .env is missing
     print(f".env not found at {env_path}")
     
-# Check for correct account
-if os.getlogin() == os.getenv("EXECUTER"):
-    ifOnline = False
 
-if ifOnline:
-    print("Running server for online developement")
-    # Startup caddy (now located in infrastructure/)
-    caddyPath = os.path.join(BASE_DIR, "infrastructure", "Caddy.exe")
-    caddyConfigPath = os.path.join(BASE_DIR, "infrastructure", "Caddyfile")
-    # Redirect Caddy stdout/stderr to log files instead of piping (prevents blocking if not read)
-    try:
-        caddy_out = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cadd_stdout.log"), "a", encoding="utf-8")
-        caddy_err = open(os.path.join(BASE_DIR, "infrastructure", "logs", "caddy_stderr.log"), "a", encoding="utf-8")
-        caddyProc = subprocess.Popen([caddyPath, "run", "--config", caddyConfigPath], stdout=caddy_out, stderr=caddy_err, cwd=os.path.join(BASE_DIR, "infrastructure"))
-        print("Caddy started in the background (using config:", caddyConfigPath, ")")
-    except Exception as e:
-        print(f"Failed to start Caddy: {e}")
+# Startup caddy (now located in infrastructure/)
+caddyPath = os.path.join(BASE_DIR, "infrastructure", "Caddy.exe")
+caddyConfigPath = os.path.join(BASE_DIR, "infrastructure", "Caddyfile")
+# Redirect Caddy stdout/stderr to log files instead of piping (prevents blocking if not read)
+try:
+    caddy_out = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cadd_stdout.log"), "a", encoding="utf-8")
+    caddy_err = open(os.path.join(BASE_DIR, "infrastructure", "logs", "caddy_stderr.log"), "a", encoding="utf-8")
+    caddyProc = subprocess.Popen([caddyPath, "run", "--config", caddyConfigPath], stdout=caddy_out, stderr=caddy_err, cwd=os.path.join(BASE_DIR, "infrastructure"))
+    print("Caddy started in the background (using config:", caddyConfigPath, ")")
+except Exception as e:
+    print(f"Failed to start Caddy: {e}")
 
-    # Startup Cloudflare Tunnel
-    cloudflaredPath = os.path.join(BASE_DIR, "infrastructure", "cloudflared.exe")
-    configPath = os.path.join(BASE_DIR, "infrastructure", "config.yml")
-    # Redirect cloudflared output to logs as well
-    try:
-        cf_out = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cloudflared_stdout.log"), "a", encoding="utf-8")
-        cf_err = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cloudflared_stderr.log"), "a", encoding="utf-8")
-        cloudflaredProc = subprocess.Popen([cloudflaredPath, "tunnel", "--config", configPath, "run", "telescope-websockets"],
-                                        stdout=cf_out, stderr=cf_err, cwd=os.path.join(BASE_DIR, "infrastructure"))
-        print("Cloudflare Tunnel started in the background (using config:", configPath, ")")
-    except Exception as e:
-        print(f"Failed to start cloudflared: {e}")
-else:
-    print("Running server for local development")
+# Startup Cloudflare Tunnel
+cloudflaredPath = os.path.join(BASE_DIR, "infrastructure", "cloudflared.exe")
+configPath = os.path.join(BASE_DIR, "infrastructure", "config.yml")
+# Redirect cloudflared output to logs as well
+try:
+    cf_out = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cloudflared_stdout.log"), "a", encoding="utf-8")
+    cf_err = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cloudflared_stderr.log"), "a", encoding="utf-8")
+    cloudflaredProc = subprocess.Popen([cloudflaredPath, "tunnel", "--config", configPath, "run", "telescope-websockets"],
+                                    stdout=cf_out, stderr=cf_err, cwd=os.path.join(BASE_DIR, "infrastructure"))
+    print("Cloudflare Tunnel started in the background (using config:", configPath, ")")
+except Exception as e:
+    print(f"Failed to start cloudflared: {e}")
 
 # Cleanup function for shutting down processes
 def cleanup_processes():
