@@ -1,30 +1,11 @@
 {
-    # Global options if needed
+    # Disable automatic HTTPS
+    auto_https off
 }
 
-# Redirect HTTP for the domain to HTTPS
+# HTTP listener for domain
 http://telescopes.dev {
-    redir https://telescopes.dev{uri} permanent
-}
-
-# HTTPS for domain, bound to LAN IP
-telescopes.dev {
-    bind 192.168.0.60
     reverse_proxy 127.0.0.1:8080
-
-    # Security headers for domain requests
-    header {
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "DENY"
-        X-XSS-Protection "1; mode=block"
-        # Intentionally omit HSTS here unless you have a valid public cert and stable domain
-    }
-
-    # Block access to sensitive files
-    @blockedFiles {
-        path *.env *.env.* *.yml *.json *.aws/credentials client_secrets.json pinfo.php phpinfo.php
-    }
-    respond @blockedFiles "403 Forbidden" 403
 }
 
 # Redirect raw IP HTTP to HTTPS on the same IP
@@ -33,21 +14,9 @@ http://192.168.0.60 {
     redir https://192.168.0.60{uri} permanent
 }
 
-# Serve HTTPS on the LAN IP using Caddy's internal CA; reverse proxy to Flask
+# Serve HTTPS on the LAN IP
 https://192.168.0.60 {
     bind 192.168.0.60
     tls internal
     reverse_proxy 127.0.0.1:8080
-
-    # Minimal security headers; avoid HSTS for an IP to prevent sticky HTTPS
-    header {
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "DENY"
-        X-XSS-Protection "1; mode=block"
-    }
-
-    @blockedFiles {
-        path *.env *.env.* *.yml *.json *.aws/credentials client_secrets.json pinfo.php phpinfo.php
-    }
-    respond @blockedFiles "403 Forbidden" 403
 }
