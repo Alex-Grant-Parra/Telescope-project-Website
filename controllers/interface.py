@@ -17,6 +17,10 @@ def interface():
 
 @interface_bp.route("/update_camera", methods=["POST"])
 def update_camera():
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to control telescope"}), 401
+    
     data = request.json or {}
     response = {"status": "success", "message": "Settings updated"}
 
@@ -210,7 +214,7 @@ def take_photo():
     try:
         from flask_login import current_user
         if not current_user.is_authenticated:
-            return jsonify({"status": "error", "message": "Must be logged in to take photos"})
+            return jsonify({"status": "error", "message": "Must be logged in to take photos"}), 401
         current_id = current_user.get_id()
         telescope_id = (request.json or {}).get("telescopeId") or (request.json or {}).get("telescope_id") or (session.get('selected_telescope') or {}).get('telescope_id')
         if not telescope_id:
@@ -252,6 +256,10 @@ def select_telescope():
     """
     Set the selected telescope in the user's session
     """
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to select telescope"}), 401
+    
     try:
         data = request.json
         telescope_id = data.get("telescopeId") or data.get("telescope_id")
@@ -299,6 +307,10 @@ def add_telescope():
     """
     Add a new telescope to the database
     """
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to manage telescopes"}), 401
+    
     try:
         data = request.json
         telescope_id = data.get("telescopeId") or data.get("telescope_id")
@@ -325,6 +337,10 @@ def remove_telescope():
     """
     Remove a telescope from the database
     """
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to manage telescopes"}), 401
+    
     try:
         data = request.json
         telescope_id = data.get("telescopeId") or data.get("telescope_id")
@@ -368,6 +384,10 @@ def update_telescope_heartbeat():
 @interface_bp.route("/start_live_view", methods=["POST"])
 def start_live_view():
     """Start live view on the telescope"""
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to control telescope"}), 401
+    
     print("Started live view")
     try:
         telescope_id = (request.json or {}).get("telescopeId") or (request.json or {}).get("telescope_id") or (session.get('selected_telescope') or {}).get('telescope_id')
@@ -382,6 +402,10 @@ def start_live_view():
 @interface_bp.route("/stop_live_view", methods=["POST"])
 def stop_live_view():
     """Stop live view on the telescope"""
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to control telescope"}), 401
+    
     print("Stopped live view")
     try:
         telescope_id = (request.json or {}).get("telescopeId") or (request.json or {}).get("telescope_id") or (session.get('selected_telescope') or {}).get('telescope_id')
@@ -396,6 +420,10 @@ def stop_live_view():
 @interface_bp.route("/motor_command", methods=["POST"])
 def motor_command():
     """Execute motor commands on the telescope"""
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to control telescope"}), 401
+    
     try:
         data = request.json or {}
         telescope_id = data.get("telescope_id") or data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescope_id')

@@ -1,4 +1,15 @@
 // Interface Controls JavaScript
+
+// Helper function to check for authentication errors in fetch responses
+function checkAuthResponse(response) {
+    if (response.status === 401) {
+        alert('You must be logged in to control the telescope.');
+        window.location.href = '/auth/login';
+        throw new Error('Not authenticated');
+    }
+    return response;
+}
+
 // Toggle full screen mode
 function toggleFullscreen() {
     let panel = document.getElementById("mainPanel");
@@ -281,6 +292,7 @@ function toggleLiveView() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ telescope_id: selectedTelescopeId })
         })
+        .then(checkAuthResponse)
         .then(response => {
             console.log("Start live view response received:", response);
             return response.json();
@@ -301,7 +313,9 @@ function toggleLiveView() {
         })
         .catch(error => {
             console.error("Error starting live view:", error);
-            alert("Error starting live view: " + error);
+            if (error.message !== 'Not authenticated') {
+                alert("Error starting live view: " + error);
+            }
         });
     }
 }

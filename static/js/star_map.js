@@ -1,4 +1,15 @@
 // 3D Planetarium JavaScript
+
+// Helper function to check for authentication errors in fetch responses
+function checkAuthResponse(response) {
+    if (response.status === 401) {
+        alert('You must be logged in to control the telescope.');
+        window.location.href = '/auth/login';
+        throw new Error('Not authenticated');
+    }
+    return response;
+}
+
 // Initial stars are empty (we fetch a small filtered set after load)
 const stars = JSON.parse(document.getElementById('stars-data').textContent);
 
@@ -2070,6 +2081,7 @@ function trackObject(name, ra, dec, mag) {
                     mag: mag
                 })
             })
+            .then(checkAuthResponse)
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'tracking') {
@@ -2112,6 +2124,7 @@ function trackObject(name, ra, dec, mag) {
                     mag: mag
                 })
             })
+            .then(checkAuthResponse)
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'tracking') {

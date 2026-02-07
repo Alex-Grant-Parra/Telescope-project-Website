@@ -337,6 +337,14 @@ def star_info(star_name):
 
 @star_map_bp.route("/track_star", methods=["POST"])
 def track_star():
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({
+            "status": "error",
+            "error": "Must be logged in",
+            "message": "Must be logged in to control telescope"
+        }), 401
+    
     data = request.get_json()
     ra = data.get("ra")
     dec = data.get("dec")

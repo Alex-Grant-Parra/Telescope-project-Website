@@ -10,8 +10,14 @@ from time import sleep
 from PIL import Image
 import io
 
-domain = os.getenv("APP_DOMAIN", "telescopes.dev")
-url = f"https://{domain}/sendCommand"  # Endpoint for sending flask server commands
+# Determine the correct URL for /sendCommand
+# Use localhost for internal calls to avoid Cloudflare challenges
+flask_port = os.getenv("FLASK_PORT", "5000")
+app_domain = os.getenv("APP_DOMAIN", "telescopes.dev")
+
+# For internal API calls, use localhost to bypass Cloudflare
+url = f"http://localhost:{flask_port}/sendCommand"
+external_domain = f"https://{app_domain}"
 
 # Example
 # payload = {"client_id": client_id, "command": "add", "args": [5, 7]}

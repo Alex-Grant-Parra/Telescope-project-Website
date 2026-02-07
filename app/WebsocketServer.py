@@ -48,6 +48,7 @@ last_frame_log_time = {}
 clients = []
 clients = []
 heartbeat_tasks = {}  # Store heartbeat tasks by client_id
+ws_event_loop = None  # Store reference to WebSocket thread's event loop
 
 def authenticate_token(token):
     """Validate client authentication token"""
@@ -124,10 +125,25 @@ class ClientManager:
     def remove_client(self, client_id):
         self.clients.pop(client_id, None)
 
-    async def command(self, client_id, function_name, args=None):
+    def command(self, client_id, function_name, args=None, kwargs=None):
+        """Send command to client using thread-safe asyncio.run_coroutine_threadsafe"""
+        global ws_event_loop
         if client_id not in self.clients:
             raise Exception(f"Client '{client_id}' not found")
-        return await self.clients[client_id].execute(function_name, args)
+        
+        if ws_event_loop is None:
+            raise Exception("WebSocket event loop not initialized")
+        
+        # Use run_coroutine_threadsafe to safely execute async code from another thread
+        coroutine = self.clients[client_id].execute(function_name, args, kwargs)
+        future = asyncio.run_coroutine_threadsafe(coroutine, ws_event_loop)
+        
+        try:
+            # Wait for result with timeout
+            result = future.result(timeout=5)
+            return result
+        except Exception as e:
+            raise Exception(f"Command execution failed: {str(e)}")
 
 # Global client manager instance
 client_manager = ClientManager()
@@ -448,8 +464,10 @@ def save_latest_frame(client_id):
 
 # Start WebSocket Server in Background
 def start_ws_server():
+    global ws_event_loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+    ws_event_loop = loop  # Store reference for thread-safe operations
     async def run_server():
         try:
             async with websockets.serve(
@@ -512,9 +530,10 @@ def send_command_handler():
     client_id = data.get('client_id')
     command = data.get('command')
     args = data.get('args', [])
+    kwargs = data.get('kwargs', {})  # Extract kwargs from request
 
     try:
-        result = asyncio.run(client_manager.command(client_id, command, args))
+        result = client_manager.command(client_id, command, args, kwargs)
         return jsonify({"status": "success", "result": result})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
