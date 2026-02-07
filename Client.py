@@ -3,14 +3,15 @@
 from asyncio import run
 import os
 import ujson as json
-from websocket_client import websocketClient, cleanup_camera
-from hotspotController import HotspotController
+from core.networking.websocket import websocketClient, cleanup_camera
+from core.system.hotspot import HotspotController
+from utils.location import update_location_config
 
 
 def load_local_config():
-    path = "client_config.json"
+    path = "config/client_config.json"
     if not os.path.exists(path):
-        print(f"Configuration file '{path}' not found. Run 'python websocket_client.py setup' to create it.")
+        print(f"Configuration file '{path}' not found. Run 'python Client.py setup' to create it.")
         raise SystemExit(1)
     try:
         with open(path, 'r') as f:
@@ -22,6 +23,9 @@ def load_local_config():
 
 if __name__ == "__main__":
     try:
+        # Update GPS location on startup
+        update_location_config()
+        
         cfg = load_local_config()
         # CLIENT_ID = cfg["client_id"]
         # hotspot = HotspotController()
