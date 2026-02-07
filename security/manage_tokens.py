@@ -7,7 +7,11 @@ Use this script to generate and manage authentication tokens for your clients.
 import secrets
 import json
 import os
+import sys
 from datetime import datetime
+
+# Add parent directory to path so we can import from the server
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 TOKENS_FILE = "security/api_tokens.json"
 
@@ -27,7 +31,7 @@ def generate_token():
     """Generate a secure token"""
     return secrets.token_urlsafe(32)
 
-def add_token(name, client_type="observer"):
+def add_token(name, client_type="observer", telescope_type=None):
     """Add a new token for a client"""
     tokens = load_tokens()
     token = generate_token()
@@ -39,6 +43,29 @@ def add_token(name, client_type="observer"):
     }
     
     save_tokens(tokens)
+    
+    # If this is a telescope, add it to the database
+    if client_type == "telescope":
+        try:
+            from app.db import db
+            from models.tables import Telescope
+            from Server import app
+            
+            with app.app_context():
+                result = Telescope.add_telescope(
+                    telescope_id=name,
+                    ip_address=None,
+                    telescope_type=client_type,
+                    last_seen=None
+                )
+                if result["status"] == "success":
+                    print(f"✓ Telescope added to database with ID: {result.get('id')}")
+                else:
+                    print(f"⚠️  Warning: Failed to add telescope to database: {result['message']}")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not add telescope to database: {str(e)}")
+            print("   (Token was still created successfully)")
+    
     return token
 
 def list_tokens():
@@ -90,10 +117,18 @@ def main():
             if client_type not in ["telescope", "observer"]:
                 client_type = "observer"
             
-            token = add_token(name, client_type)
+            telescope_type = None
+            if client_type == "telescope":
+                telescope_type = input("Enter telescope type/model (optional): ").strip()
+                if not telescope_type:
+                    telescope_type = None
+            
+            token = add_token(name, client_type, telescope_type)
             print(f"\nNew token generated for '{name}':")
             print(f"Token: {token}")
             print(f"Type: {client_type}")
+            if telescope_type:
+                print(f"Telescope Type: {telescope_type}")
             print("\n⚠️  IMPORTANT: Store this token securely! You won't be able to retrieve it again.")
             
         elif choice == "2":

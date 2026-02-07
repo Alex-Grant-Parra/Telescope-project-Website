@@ -349,7 +349,7 @@ def track_star():
 
     # Check if a telescope is selected
     selected_telescope = session.get('selected_telescope')
-    telescope_id = selected_telescope.get('telescopeId') if selected_telescope else None
+    telescope_id = selected_telescope.get('telescope_id') if selected_telescope else None
     
     if not telescope_id:
         # No telescope selected - client should redirect to interface
@@ -428,7 +428,7 @@ def stop_tracking():
     """Stop tracking the current object"""
     # Check if a telescope is selected
     selected_telescope = session.get('selected_telescope')
-    telescope_id = selected_telescope.get('telescopeId') if selected_telescope else None
+    telescope_id = selected_telescope.get('telescope_id') if selected_telescope else None
     
     if not telescope_id:
         print(f"[TRACKING] No telescope selected for stop command")

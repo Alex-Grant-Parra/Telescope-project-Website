@@ -47,10 +47,21 @@ latest_frames = {}
 last_frame_log_time = {}
 clients = []
 clients = []
+heartbeat_tasks = {}  # Store heartbeat tasks by client_id
 
 def authenticate_token(token):
     """Validate client authentication token"""
     return token in API_TOKENS
+
+def get_ws_client_ip(ws):
+    """Resolve client IP for WebSocket connections using forwarded headers when available."""
+    try:
+        xff = ws.request_headers.get('X-Forwarded-For') or ws.request_headers.get('X-Real-IP')
+        if xff:
+            return xff.split(',')[0].strip()
+    except Exception:
+        pass
+    return ws.remote_address[0] if ws.remote_address else "unknown"
 
 def check_rate_limit(client_ip):
     """Simple rate limiting check"""
@@ -121,8 +132,45 @@ class ClientManager:
 # Global client manager instance
 client_manager = ClientManager()
 
+async def telescope_heartbeat(client_id, client_name, telescope_id, ws):
+    """
+    Send periodic heartbeat pings to telescope and update last_seen in database.
+    Runs every 30 seconds.
+    """
+    while True:
+        try:
+            await asyncio.sleep(30)  # Wait 30 seconds between pings
+
+            try:
+                pong_waiter = ws.ping()
+                await asyncio.wait_for(pong_waiter, timeout=10)
+
+                # Update last_seen in database on successful ping/pong
+                from models.tables import Telescope
+                from Server import app
+                with app.app_context():
+                    result = Telescope.update_last_seen(telescope_id)
+                    if result.get('status') == 'success':
+                        # Only log occasionally to avoid spam (every 5 minutes)
+                        if int(time.time()) % 300 < 30:  # Log once every 10 pings
+                            print(f"[Heartbeat] {client_name} alive (last_seen updated)")
+
+            except websockets.exceptions.ConnectionClosed:
+                print(f"[Heartbeat] {client_name} connection closed, stopping heartbeat")
+                break
+            except Exception as e:
+                print(f"[Heartbeat] Error pinging {client_name}: {e}")
+                break
+                
+        except asyncio.CancelledError:
+            print(f"[Heartbeat] Stopped for {client_name}")
+            break
+        except Exception as e:
+            print(f"[Heartbeat] Unexpected error for {client_name}: {e}")
+            break
+
 async def handle_client(ws):
-    client_ip = ws.remote_address[0] if ws.remote_address else "unknown"
+    client_ip = get_ws_client_ip(ws)
     
     # Rate limiting check
     if not check_rate_limit(client_ip):
@@ -166,6 +214,60 @@ async def handle_client(ws):
     client_type = API_TOKENS[token].get('client_type', 'unknown')
     client_name = API_TOKENS[token].get('name', client_id)
     print(f"[+] {client_name} ({client_type}) connected from {client_ip}")
+    
+    # Handle telescope database operations
+    if client_type == 'telescope':
+        try:
+            from models.tables import Telescope
+            from Server import app
+            with app.app_context():
+                from app.db import db
+                # Check if telescope exists in database by name
+                existing = Telescope.get_telescope_by_id(client_name)
+
+                if not existing:
+                    # If an old token-based record exists, migrate it to the name
+                    legacy = db.session.query(Telescope).filter_by(telescope_id=token).first()
+                    if legacy:
+                        legacy.telescope_id = client_name
+                        legacy.type = client_type
+                        if client_ip and client_ip != 'unknown':
+                            legacy.ip_address = client_ip
+                        legacy.last_seen = time.time()
+                        db.session.commit()
+                        print(f"[DB] Migrated telescope ID to '{client_name}'")
+                    else:
+                        # Auto-add telescope to database
+                        result = Telescope.add_telescope(
+                            telescope_id=client_name,
+                            telescope_type=client_type,
+                            ip_address=client_ip if client_ip != 'unknown' else None,
+                            last_seen=time.time()
+                        )
+                        if result['status'] == 'success':
+                            print(f"[DB] Auto-added telescope '{client_name}' to database (ID: {result.get('id')})")
+                        else:
+                            print(f"[DB] Failed to auto-add telescope: {result['message']}")
+                else:
+                    # Update existing telescope
+                    Telescope.update_last_seen(client_name)
+                    if client_ip and client_ip != 'unknown':
+                        Telescope.update_ip_address(client_name, client_ip)
+                    record = db.session.query(Telescope).filter_by(telescope_id=client_name).first()
+                    if record and record.type != client_type:
+                        record.type = client_type
+                        db.session.commit()
+                    print(f"[DB] Updated telescope '{client_name}' in database")
+        except Exception as e:
+            print(f"[WARNING] Could not update telescope database: {e}")
+    
+    # Start heartbeat task for telescopes
+    heartbeat_task = None
+    if client_type == 'telescope':
+        heartbeat_task = asyncio.create_task(
+            telescope_heartbeat(client_id, client_name, client_name, ws)
+        )
+        heartbeat_tasks[client_id] = heartbeat_task
 
     try:
         async for message in ws:
@@ -188,11 +290,15 @@ async def handle_client(ws):
     except Exception as e:
         print(f"[ERROR] Error handling {client_id}: {e}")
     finally:
+        # Cancel heartbeat task if it exists
+        if client_id in heartbeat_tasks:
+            heartbeat_tasks[client_id].cancel()
+            del heartbeat_tasks[client_id]
         client_manager.remove_client(client_id)
 
 # WebSocket handler for live view frames from client
 async def handle_liveview_client(ws):
-    client_ip = ws.remote_address[0] if ws.remote_address else "unknown"
+    client_ip = get_ws_client_ip(ws)
     
     # Rate limiting check
     if not check_rate_limit(client_ip):
@@ -236,6 +342,57 @@ async def handle_liveview_client(ws):
     client_name = API_TOKENS[token].get('name', client_id)
     print(f"[LiveView] {client_name} ({client_type}) connected from {client_ip}")
     
+    # Handle telescope database operations
+    if client_type == 'telescope':
+        try:
+            from models.tables import Telescope
+            from Server import app
+            with app.app_context():
+                from app.db import db
+                # Check if telescope exists in database by name
+                existing = Telescope.get_telescope_by_id(client_name)
+
+                if not existing:
+                    legacy = db.session.query(Telescope).filter_by(telescope_id=token).first()
+                    if legacy:
+                        legacy.telescope_id = client_name
+                        legacy.type = client_type
+                        if client_ip and client_ip != 'unknown':
+                            legacy.ip_address = client_ip
+                        legacy.last_seen = time.time()
+                        db.session.commit()
+                        print(f"[DB] Migrated telescope ID to '{client_name}'")
+                    else:
+                        # Auto-add telescope to database
+                        result = Telescope.add_telescope(
+                            telescope_id=client_name,
+                            telescope_type=client_type,
+                            ip_address=client_ip if client_ip != 'unknown' else None,
+                            last_seen=time.time()
+                        )
+                        if result['status'] == 'success':
+                            print(f"[DB] Auto-added telescope '{client_name}' to database (ID: {result.get('id')})")
+                else:
+                    # Update existing telescope
+                    Telescope.update_last_seen(client_name)
+                    if client_ip and client_ip != 'unknown':
+                        Telescope.update_ip_address(client_name, client_ip)
+                    record = db.session.query(Telescope).filter_by(telescope_id=client_name).first()
+                    if record and record.type != client_type:
+                        record.type = client_type
+                        db.session.commit()
+        except Exception as e:
+            print(f"[WARNING] Could not update telescope database: {e}")
+    
+    # Start heartbeat task for telescopes
+    liveview_heartbeat_task = None
+    if client_type == 'telescope':
+        liveview_client_id = f"{client_id}_liveview"
+        liveview_heartbeat_task = asyncio.create_task(
+            telescope_heartbeat(liveview_client_id, f"{client_name} (LiveView)", client_name, ws)
+        )
+        heartbeat_tasks[liveview_client_id] = liveview_heartbeat_task
+    
     try:
         while True:
             try:
@@ -268,6 +425,12 @@ async def handle_liveview_client(ws):
     except Exception as e:
         print(f"[LiveView] Error in connection: {e}")
     finally:
+        # Cancel heartbeat task if it exists
+        if client_type == 'telescope':
+            liveview_client_id = f"{client_id}_liveview"
+            if liveview_client_id in heartbeat_tasks:
+                heartbeat_tasks[liveview_client_id].cancel()
+                del heartbeat_tasks[liveview_client_id]
         latest_frames.pop(client_id, None)
         last_frame_log_time.pop(client_id, None)
 

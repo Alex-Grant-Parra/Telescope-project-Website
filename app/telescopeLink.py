@@ -73,7 +73,7 @@ class Telescope:
         try:
             if has_request_context():
                 selected = session.get('selected_telescope') or {}
-                sel_id = selected.get('telescopeId')
+                sel_id = selected.get('telescope_id')
                 if sel_id:
                     return sel_id
         except Exception:

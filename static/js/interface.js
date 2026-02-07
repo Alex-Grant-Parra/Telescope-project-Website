@@ -155,7 +155,7 @@ function updateSetting() {
         aperture: document.getElementById("apertureValue").innerText,
         whiteBalance: document.getElementById("whiteBalance").value,
         photoFormat: document.getElementById("photoFormat").value,
-        telescopeId: selectedTelescopeId
+        telescope_id: selectedTelescopeId
     };
     fetch("/interface/update_camera", {
         method: "POST",
@@ -174,7 +174,7 @@ function takePhoto() {
     fetch("/interface/take_photo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telescopeId: selectedTelescopeId })
+        body: JSON.stringify({ telescope_id: selectedTelescopeId })
     })
     .then(response => response.json())
     .then(data => {
@@ -246,7 +246,7 @@ function toggleLiveView() {
         fetch("/interface/stop_live_view", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ telescopeId: selectedTelescopeId })
+            body: JSON.stringify({ telescope_id: selectedTelescopeId })
         })
         .then(response => {
             console.log("Stop live view response received:", response);
@@ -279,7 +279,7 @@ function toggleLiveView() {
         fetch("/interface/start_live_view", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ telescopeId: selectedTelescopeId })
+            body: JSON.stringify({ telescope_id: selectedTelescopeId })
         })
         .then(response => {
             console.log("Start live view response received:", response);
@@ -629,15 +629,31 @@ function loadTelescopes() {
         });
 }
 
+function formatLastSeen(lastSeen) {
+    if (!lastSeen) return "Unknown";
+    const now = Date.now() / 1000;
+    const diff = Math.max(0, now - lastSeen);
+    if (diff < 60) return `${Math.floor(diff)}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+}
+
 function populateTelescopeDropdown(telescopes) {
     const select = document.getElementById("telescopeSelect");
     select.innerHTML = '<option value="">Select a telescope...</option>';
+    const currentSelection = selectedTelescopeId;
     
     telescopes.forEach(telescope => {
         const option = document.createElement("option");
-        option.value = telescope.telescopeId;
-        option.text = `${telescope.telescopeId} (${telescope.online ? 'Online' : 'Offline'})`;
+        const displayId = telescope.telescope_id || telescope.telescopeId || "Unknown";
+        const online = telescope.online ? "Online" : "Offline";
+        option.value = displayId;
+        option.text = `${displayId} (${online})`;
         option.dataset.telescope = JSON.stringify(telescope);
+        if (currentSelection && displayId === currentSelection) {
+            option.selected = true;
+        }
         select.appendChild(option);
     });
 }
@@ -657,18 +673,19 @@ function selectTelescope() {
     const telescope = JSON.parse(selectedOption.dataset.telescope);
     
     // Update UI with telescope info
-    document.getElementById("telescopeId").textContent = telescope.telescopeId;
-    document.getElementById("telescopeIp").textContent = telescope.ipAddress;
-    document.getElementById("telescopeVersion").textContent = telescope.firmwareVersion;
-    document.getElementById("telescopeStatus").textContent = telescope.online ? 'Online' : 'Offline';
-    document.getElementById("telescopeStatus").className = telescope.online ? 'text-success' : 'text-danger';
+    const displayId = telescope.telescope_id || telescope.telescopeId || "Unknown";
+    document.getElementById("telescopeName").textContent = displayId;
+    document.getElementById("telescopeIp").textContent = telescope.ip_address || telescope.ipAddress || "";
+    document.getElementById("telescopeType").textContent = telescope.type || telescope.telescope_type || telescope.firmwareVersion || "";
+    const lastSeen = telescope.last_seen || telescope.lastSeen || null;
+    document.getElementById("telescopeLastSeen").textContent = formatLastSeen(lastSeen);
     document.getElementById("telescopeInfo").style.display = "block";
     
     // Send selection to backend
     fetch("/interface/select_telescope", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telescopeId: selectedValue })
+        body: JSON.stringify({ telescope_id: selectedValue })
     })
     .then(response => response.json())
     .then(data => {
@@ -689,7 +706,34 @@ function selectTelescope() {
 }
 
 function refreshTelescopes() {
-    loadTelescopes();
+    fetch("/interface/get_telescopes")
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === "success") {
+                populateTelescopeDropdown(data.telescopes);
+                if (!selectedTelescopeId) {
+                    return;
+                }
+                const match = data.telescopes.find(t => {
+                    const id = t.telescope_id || t.telescopeId;
+                    return id === selectedTelescopeId;
+                });
+                if (match) {
+                    const displayId = match.telescope_id || match.telescopeId || "Unknown";
+                    document.getElementById("telescopeName").textContent = displayId;
+                    document.getElementById("telescopeIp").textContent = match.ip_address || match.ipAddress || "";
+                    document.getElementById("telescopeType").textContent = match.type || match.telescope_type || match.firmwareVersion || "";
+                    const lastSeen = match.last_seen || match.lastSeen || null;
+                    document.getElementById("telescopeLastSeen").textContent = formatLastSeen(lastSeen);
+                    document.getElementById("telescopeInfo").style.display = "block";
+                }
+            } else {
+                console.error("Failed to load telescopes:", data.message);
+            }
+        })
+        .catch(error => {
+            console.error("Error loading telescopes:", error);
+        });
 }
 
 function loadSelectedTelescope() {
@@ -699,20 +743,21 @@ function loadSelectedTelescope() {
             if (data.status === "success" && data.telescope) {
                 // Set the dropdown to show the selected telescope
                 const select = document.getElementById("telescopeSelect");
+                const selectedId = data.telescope.telescope_id || data.telescope.telescopeId;
                 for (let i = 0; i < select.options.length; i++) {
-                    if (select.options[i].value === data.telescope.telescopeId) {
+                    if (select.options[i].value === selectedId) {
                         select.selectedIndex = i;
                         // Update the info panel and local state without re-posting to backend
                         const selectedOption = select.options[select.selectedIndex];
                         const telescope = JSON.parse(selectedOption.dataset.telescope);
-                        document.getElementById("telescopeId").textContent = telescope.telescopeId;
-                        document.getElementById("telescopeIp").textContent = telescope.ipAddress;
-                        document.getElementById("telescopeVersion").textContent = telescope.firmwareVersion;
-                        const statusEl = document.getElementById("telescopeStatus");
-                        statusEl.textContent = telescope.online ? 'Online' : 'Offline';
-                        statusEl.className = telescope.online ? 'text-success' : 'text-danger';
+                        const displayId = telescope.telescope_id || telescope.telescopeId || "Unknown";
+                        document.getElementById("telescopeName").textContent = displayId;
+                        document.getElementById("telescopeIp").textContent = telescope.ip_address || telescope.ipAddress || "";
+                        document.getElementById("telescopeType").textContent = telescope.type || telescope.telescope_type || telescope.firmwareVersion || "";
+                        const lastSeen = telescope.last_seen || telescope.lastSeen || null;
+                        document.getElementById("telescopeLastSeen").textContent = formatLastSeen(lastSeen);
                         document.getElementById("telescopeInfo").style.display = "block";
-                        selectedTelescopeId = data.telescope.telescopeId;
+                        selectedTelescopeId = selectedId;
                         setControlsEnabled(true);
                         updateLiveViewSrcForTelescope(selectedTelescopeId);
                         populateCameraChoices();

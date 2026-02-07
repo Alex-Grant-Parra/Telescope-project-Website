@@ -378,17 +378,37 @@ def admin_security_tokens():
         return guard
 
     import security.manage_tokens as token_utils
+    from models.tables import Telescope
+    
     tokens = token_utils.load_tokens()
     # Build mapping of identifier -> (token, info)
     view_tokens = []
     for token, info in tokens.items():
-        view_tokens.append({
+        token_data = {
             'id': token,  # Full token for identification
             'truncated': token[:12] + '...',  # Truncated for display
             'name': info.get('name'),
             'client_type': info.get('client_type'),
-            'created': info.get('created')
-        })
+            'created': info.get('created'),
+            'db_info': None
+        }
+        
+        # If it's a telescope, get database info
+        if info.get('client_type') == 'telescope':
+            try:
+                telescope_name = info.get('name') or token
+                telescope = Telescope.get_telescope_by_id(telescope_name)
+                if telescope:
+                    token_data['db_info'] = {
+                        'type': telescope.get('type'),
+                        'ip_address': telescope.get('ip_address'),
+                        'last_seen': telescope.get('last_seen'),
+                        'online': Telescope.is_telescope_online(telescope_name)
+                    }
+            except Exception as e:
+                logging.error(f"Error fetching telescope data: {e}")
+        
+        view_tokens.append(token_data)
 
     return render_template('security_tokens.html', tokens=view_tokens)
 
@@ -403,6 +423,7 @@ def admin_generate_token():
     import security.manage_tokens as token_utils
     name = request.form.get('name') or 'unnamed'
     client_type = request.form.get('client_type') or 'observer'
+    telescope_type = request.form.get('telescope_type') or None
     
     # Check for duplicate names
     tokens = token_utils.load_tokens()
@@ -411,9 +432,13 @@ def admin_generate_token():
             flash(f'Token with name "{name}" already exists. Please choose a different name.', 'danger')
             return redirect(url_for('admin.admin_security_tokens'))
     
-    token = token_utils.add_token(name, client_type)
-    sec_logger.info(f"token_generated: token={token[:12]}..., name={name}, by={current_user.id}")
-    flash(f'Generated token for {name}: {token} (store securely)', 'success')
+    token = token_utils.add_token(name, client_type, client_type)
+    sec_logger.info(f"token_generated: token={token[:12]}..., name={name}, type={client_type}, by={current_user.id}")
+    
+    flash_msg = f'Generated token for {name}: {token} (store securely)'
+    if client_type == 'telescope':
+        flash_msg += ' - Telescope added to database.'
+    flash(flash_msg, 'success')
     return redirect(url_for('admin.admin_security_tokens'))
 
 
@@ -425,6 +450,8 @@ def admin_revoke_token():
         return guard
 
     import security.manage_tokens as token_utils
+    from models.tables import Telescope
+    
     identifier = request.form.get('token')
     if not identifier:
         flash('No token specified.', 'danger')
@@ -432,9 +459,21 @@ def admin_revoke_token():
 
     tokens = token_utils.load_tokens()
     if identifier in tokens:
+        token_info = tokens[identifier]
+        
+        # If it's a telescope, remove from database too
+        if token_info.get('client_type') == 'telescope':
+            try:
+                telescope_name = token_info.get('name') or identifier
+                result = Telescope.remove_telescope(telescope_name)
+                if result['status'] == 'success':
+                    sec_logger.info(f"telescope_removed: token={identifier[:12]}..., by={current_user.id}")
+            except Exception as e:
+                logging.error(f"Error removing telescope from database: {e}")
+        
         token_utils.revoke_token(identifier)
         sec_logger.info(f"token_revoked: token={identifier[:12]}..., by={current_user.id}")
-        flash('Token revoked.', 'success')
+        flash('Token revoked and telescope removed from database.', 'success')
     else:
         flash('Token not found.', 'danger')
 
