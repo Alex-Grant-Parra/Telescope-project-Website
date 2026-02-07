@@ -113,6 +113,7 @@ async def handle_server(ws):
             try:
                 last_message_time = time.time()
                 data = json.loads(message)
+                print(f"[received] Command: {json.dumps(data)}")
                 function_name = data.get("function")
 
                 if function_name in function_map:
@@ -124,6 +125,12 @@ async def handle_server(ws):
                     # If motor_id is in the top-level data, add it to kwargs
                     if "motor_id" in data:
                         kwargs["motor_id"] = data["motor_id"]
+                    
+                    # Log the function call
+                    args_str = ", ".join(repr(arg) for arg in args) if args else ""
+                    kwargs_str = ", ".join(f"{k}={repr(v)}" for k, v in kwargs.items()) if kwargs else ""
+                    all_args = ", ".join(filter(None, [args_str, kwargs_str]))
+                    print(f"[function_call] Calling {function_name}({all_args})")
                     
                     # Call function with both args and kwargs
                     if kwargs:
@@ -469,6 +476,3 @@ async def websocketClient(cfg: dict = None):
         print(f"[main] Unexpected exception: {e}")
     finally:
         cleanup_camera()
-
-if __name__ == "__main__":
-    asyncio.run(websocketClient())
