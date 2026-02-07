@@ -124,9 +124,23 @@ function populateCameraChoices() {
 
 // Call on page load
 document.addEventListener("DOMContentLoaded", function() {
+    console.log('Page loaded - initializing...');
     setControlsEnabled(false);
     loadTelescopes();
     loadSelectedTelescope();
+    loadTrackingStatus();
+    
+    // Initialize draggable panels
+    const trackingPanel = document.getElementById('trackingPanel');
+    if (trackingPanel) {
+        const header = trackingPanel.querySelector('.panel-header');
+        if (header) {
+            console.log('Making trackingPanel draggable');
+            makeDraggable(trackingPanel, header);
+        }
+    } else {
+        console.warn('WARNING: trackingPanel element not found!');
+    }
 });
 
 // Update settings to backend
@@ -487,10 +501,29 @@ function toggleAdvancedObjectInfo() {
 }
 
 function trackObject(star) {
-    const name = star.name || star.Name;
-    const ra = star.ra !== undefined ? star.ra : star.RA;
-    const dec = star.dec !== undefined ? star.dec : star.DEC;
-    const mag = star.mag !== undefined ? star.mag : star["V-Mag"];
+    console.log('=== trackObject CALLED ===');
+    console.log('Star object received:', star);
+    console.log('Star object keys:', Object.keys(star));
+    
+    // Extract with better fallback handling
+    const name = star.name || star.Name || star.friendlyName || 'Unknown';
+    const ra = star.ra !== undefined ? star.ra : (star.RA !== undefined ? star.RA : null);
+    const dec = star.dec !== undefined ? star.dec : (star.DEC !== undefined ? star.DEC : null);
+    const mag = star.mag !== undefined ? star.mag : (star["V-Mag"] !== undefined ? star["V-Mag"] : null);
+    
+    console.log('Extracted values:');
+    console.log('  name:', name, '(type:', typeof name, ')');
+    console.log('  ra:', ra, '(type:', typeof ra, ')');
+    console.log('  dec:', dec, '(type:', typeof dec, ')');
+    console.log('  mag:', mag, '(type:', typeof mag, ')');
+    
+    if (!name || ra === null || dec === null) {
+        console.error('ERROR: Missing required properties!');
+        updateMotorStatusDisplay('❌ Cannot track - missing coordinate data', 'error');
+        return;
+    }
+    
+    console.log('Sending fetch to /track_star with:', { name, ra, dec, mag });
     
     fetch("/track_star", {
         method: "POST",
@@ -499,11 +532,31 @@ function trackObject(star) {
     })
     .then(response => response.json())
     .then(data => {
-        updateMotorStatusDisplay(`🎯 Tracking started for ${name}`, 'success');
+        console.log('=== RESPONSE FROM /track_star ===');
+        console.log('Response data:', data);
+        console.log('Response status:', data.status);
+        
+        if (data.status === 'tracking') {
+            console.log('✓ Tracking confirmed! Updating panel...');
+            updateMotorStatusDisplay(`🎯 Tracking command sent to telescope for ${name}`, 'success');
+            
+            // Update the tracking panel
+            const trackingInfo = { name, ra, dec, mag };
+            console.log('Calling updateTrackingPanel with:', trackingInfo);
+            updateTrackingPanel(trackingInfo);
+            console.log(`Tracking ${name} on telescope ${data.telescope_id}`);
+        } else if (data.redirect) {
+            console.log('! No telescope selected');
+            updateMotorStatusDisplay(`⚠️ ${data.message}`, 'error');
+            alert(data.message);
+        } else {
+            console.error('✗ Tracking failed:', data);
+            updateMotorStatusDisplay(`❌ Failed to start tracking: ${data.message || data.error}`, 'error');
+        }
     })
     .catch(error => {
+        console.error('✗ FETCH ERROR:', error);
         updateMotorStatusDisplay(`❌ Failed to start tracking: ${error}`, 'error');
-        console.error(error);
     });
 }
 
@@ -1093,3 +1146,142 @@ function trackManualCoordinates() {
     raInput.value = "";
     decInput.value = "";
 }
+
+/**
+ * Update the tracking status panel with the current object being tracked
+ * @param {Object} trackingData - Object containing name, ra, dec, mag
+ */
+function updateTrackingPanel(trackingData) {
+    console.log('=== updateTrackingPanel CALLED ===');
+    console.log('trackingData:', trackingData);
+    
+    const statusContent = document.getElementById('trackingStatusContent');
+    const stopBtn = document.getElementById('stopTrackingBtn');
+    
+    console.log('statusContent element found:', !!statusContent);
+    console.log('stopBtn element found:', !!stopBtn);
+    
+    if (!statusContent) {
+        console.error('❌ ERROR: trackingStatusContent element not found!');
+        console.error('Available elements:', document.body.innerHTML.substring(0, 500));
+        return;
+    }
+    
+    if (trackingData && trackingData.name) {
+        const raValue = parseFloat(trackingData.ra);
+        const decValue = parseFloat(trackingData.dec);
+        const magValue = parseFloat(trackingData.mag);
+        
+        const ra = !isNaN(raValue) ? raValue.toFixed(4) : trackingData.ra;
+        const dec = !isNaN(decValue) ? decValue.toFixed(4) : trackingData.dec;
+        const mag = !isNaN(magValue) ? magValue.toFixed(2) : trackingData.mag;
+        
+        console.log('✓ Updating panel with tracking info:');
+        console.log('  name:', trackingData.name);
+        console.log('  ra:', ra);
+        console.log('  dec:', dec);
+        console.log('  mag:', mag);
+        
+        const htmlContent = `
+            <div style="color: #333;">
+                <strong style="color: #0d6efd; display: block; margin-bottom: 6px;">✓ Now Tracking:</strong>
+                <div><strong>${trackingData.name}</strong></div>
+                <hr style="margin: 8px 0;">
+                <div><small><strong>RA:</strong> ${ra}°</small></div>
+                <div><small><strong>DEC:</strong> ${dec}°</small></div>
+                <div><small><strong>Magnitude:</strong> ${mag}</small></div>
+            </div>
+        `;
+        
+        statusContent.innerHTML = htmlContent;
+        statusContent.className = 'text-dark small'; // Change from text-muted to text-dark
+        statusContent.style.color = '#333';
+        
+        console.log('✓ Panel HTML updated');
+        console.log('New HTML:', statusContent.innerHTML);
+        
+        if (stopBtn) {
+            stopBtn.style.display = 'block';
+            console.log('✓ Stop button shown');
+        }
+        
+        // Store tracking state in sessionStorage for persistence across page reloads
+        sessionStorage.setItem('currentTracking', JSON.stringify(trackingData));
+        console.log('✓ Tracking data saved to sessionStorage');
+    } else {
+        // No object being tracked
+        console.log('! Clearing tracking panel (no tracking data)');
+        statusContent.innerHTML = '<em>No object being tracked</em>';
+        statusContent.className = 'text-muted small';
+        if (stopBtn) {
+            stopBtn.style.display = 'none';
+        }
+        sessionStorage.removeItem('currentTracking');
+    }
+}
+
+/**
+ * Stop tracking the current object
+ */
+function stopTracking() {
+    if (!selectedTelescopeId) {
+        updateMotorStatusDisplay('⚠️ No telescope selected', 'warning');
+        return;
+    }
+    
+    console.log('=== stopTracking CALLED ===');
+    console.log('Sending stop tracking command to telescope:', selectedTelescopeId);
+    
+    // Send stop tracking command directly to star_map endpoint
+    fetch("/stop_tracking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Stop tracking response:', data);
+        if (data.status === "stopped") {
+            // Clear tracking panel
+            updateTrackingPanel(null);
+            updateMotorStatusDisplay('🛑 Tracking stopped successfully', 'success');
+            console.log('✓ Tracking stopped successfully');
+        } else {
+            throw new Error(data.message || "Failed to stop tracking");
+        }
+    })
+    .catch(error => {
+        console.error('✗ Error stopping tracking:', error);
+        updateMotorStatusDisplay(`❌ Failed to stop tracking: ${error}`, 'error');
+        
+        // Still clear the panel even if command failed
+        updateTrackingPanel(null);
+    });
+}
+
+/**
+ * Load and display current tracking status on page load
+ */
+function loadTrackingStatus() {
+    // First check sessionStorage for recent tracking state
+    const storedTracking = sessionStorage.getItem('currentTracking');
+    if (storedTracking) {
+        try {
+            const trackingData = JSON.parse(storedTracking);
+            updateTrackingPanel(trackingData);
+        } catch (e) {
+            console.log('Could not parse tracking data from sessionStorage');
+        }
+    }
+    
+    // Also fetch from server to get the authoritative state
+    fetch('/get_tracking_status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.tracking && data.object) {
+                updateTrackingPanel(data.object);
+            }
+        })
+        .catch(error => console.log('Could not fetch tracking status from server'));
+}
+

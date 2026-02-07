@@ -2047,7 +2047,6 @@ document.addEventListener('click', (e) => {
 function hideLoading() {
     loading.style.display = "none";
 }
-
 // Function to track a celestial object
 function trackObject(name, ra, dec, mag) {
     // First fetch star info to get friendly name if available
@@ -2074,13 +2073,24 @@ function trackObject(name, ra, dec, mag) {
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'tracking') {
-                    document.getElementById('info').innerHTML = 
-                        `<b>${displayName}</b><br>RA: ${ra.toFixed(2)}°<br>DEC: ${dec.toFixed(2)}°<br>Mag: ${mag}<br>
-                         <span style="color: #4CAF50; font-weight: bold;">✓ Tracking ${displayName}</span>`;
-                    console.log(`Successfully started tracking ${name}`);
+                    console.log(`Successfully started tracking ${name} on telescope ${data.telescope_id}`);
+                    
+                    // Store tracking state in sessionStorage so it can be displayed on interface page
+                    sessionStorage.setItem('currentTracking', JSON.stringify({
+                        name: name,
+                        ra: ra,
+                        dec: dec,
+                        mag: mag
+                    }));
+                    
+                    // Always redirect to interface immediately
+                    window.location.href = '/interface';
+                } else if (data.redirect) {
+                    // No telescope selected - redirect to interface
+                    window.location.href = '/interface';
                 } else {
                     console.error('Tracking failed:', data);
-                    alert('Failed to start tracking. Please try again.');
+                    alert(data.message || 'Failed to start tracking. Please try again.');
                 }
             })
             .catch(error => {
@@ -2105,13 +2115,24 @@ function trackObject(name, ra, dec, mag) {
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'tracking') {
-                    document.getElementById('info').innerHTML = 
-                        `<b>${name}</b><br>RA: ${ra.toFixed(2)}°<br>DEC: ${dec.toFixed(2)}°<br>Mag: ${mag}<br>
-                         <span style="color: #4CAF50; font-weight: bold;">✓ Tracking ${name}</span>`;
-                    console.log(`Successfully started tracking ${name}`);
+                    console.log(`Successfully started tracking ${name} on telescope ${data.telescope_id}`);
+                    
+                    // Store tracking state in sessionStorage so it can be displayed on interface page
+                    sessionStorage.setItem('currentTracking', JSON.stringify({
+                        name: name,
+                        ra: ra,
+                        dec: dec,
+                        mag: mag
+                    }));
+                    
+                    // Always redirect to interface immediately
+                    window.location.href = '/interface';
+                } else if (data.redirect) {
+                    // No telescope selected - redirect to interface
+                    window.location.href = '/interface';
                 } else {
                     console.error('Tracking failed:', data);
-                    alert('Failed to start tracking. Please try again.');
+                    alert(data.message || 'Failed to start tracking. Please try again.');
                 }
             })
             .catch(error => {

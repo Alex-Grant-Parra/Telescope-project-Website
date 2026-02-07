@@ -289,7 +289,13 @@ def start_ws_server():
     asyncio.set_event_loop(loop)
     async def run_server():
         try:
-            async with websockets.serve(handle_client, WS_IP, WS_PORT):
+            async with websockets.serve(
+                handle_client,
+                WS_IP,
+                WS_PORT,
+                ping_interval=20,      # Send ping every 20 seconds
+                ping_timeout=10        # Wait 10 seconds for pong response
+            ):
                 # print(f"Command WebSocket server running locally at ws://{WS_IP}:{WS_PORT} \n")
                 # print(f"Public access via: wss://ws.telescopes.dev \n")
                 await asyncio.Future()
@@ -307,7 +313,14 @@ def start_liveview_ws_server():
     asyncio.set_event_loop(loop)
     async def run_server():
         try:
-            async with websockets.serve(handle_liveview_client, WS_IP, LIVEVIEW_WS_PORT, max_size=2*1024*1024):
+            async with websockets.serve(
+                handle_liveview_client,
+                WS_IP,
+                LIVEVIEW_WS_PORT,
+                max_size=2*1024*1024,
+                ping_interval=20,      # Send ping every 20 seconds
+                ping_timeout=10        # Wait 10 seconds for pong response
+            ):
                 # print(f"LiveView WebSocket server running locally at ws://{WS_IP}:{LIVEVIEW_WS_PORT}")
                 # print(f"Public access via: wss://liveview.telescopes.dev")
                 await asyncio.Future()

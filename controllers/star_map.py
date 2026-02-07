@@ -7,6 +7,7 @@ from sqlalchemy import func
 
 from algorithms.convert import convert
 from algorithms.astroTools import getAllCelestialData
+from app.telescopeLink import Telescope
 
 star_map_bp = Blueprint("star_map", __name__)
 
@@ -346,13 +347,123 @@ def track_star():
         print("Missing RA/DEC in request")
         return jsonify({"error": "Missing RA/DEC"}), 400
 
-    print(f"\n[TRACKING] {name} at RA: {ra}°, DEC: {dec}° with magnitude {mag}.\n", flush=True)
+    # Check if a telescope is selected
+    selected_telescope = session.get('selected_telescope')
+    telescope_id = selected_telescope.get('telescopeId') if selected_telescope else None
+    
+    if not telescope_id:
+        # No telescope selected - client should redirect to interface
+        print(f"[TRACKING] No telescope selected for {name}")
+        return jsonify({
+            "status": "error",
+            "error": "No telescope selected",
+            "redirect": True,
+            "message": "Please select a telescope in the Interface page to begin tracking"
+        }), 422
+    
+    try:
+        # Create telescope instance and send coordinates
+        t = Telescope(telescope_id)
+        print(f"\n[TRACKING] Sending {name} coordinates to telescope {telescope_id}")
+        print(f"[TRACKING] RA: {ra}°, DEC: {dec}°, Mag: {mag}\n", flush=True)
+        
+        # Send track command with coordinates to the telescope
+        result = t.send_command("trackCoordinates", kwargs={
+            "name": name,
+            "ra": ra,
+            "dec": dec,
+            "mag": mag
+        })
+        
+        # Store in sesh
+        session["selectedObject"] = {
+            "name": name,
+            "ra": ra,
+            "dec": dec,
+            "mag": mag
+        }
+        
+        return jsonify({
+            "status": "tracking",
+            "ra": ra,
+            "dec": dec,
+            "telescope_id": telescope_id,
+            "result": result,
+            "redirect": True
+        })
+        
+    except Exception as e:
+        print(f"[TRACKING ERROR] Failed to send coordinates: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "message": f"Failed to send tracking command: {str(e)}"
+        }), 500
 
-    session["selectedObject"] = {
-        "name": name,
-        "ra": ra,
-        "dec": dec,
-        "mag": mag
-    }
+@star_map_bp.route("/get_tracking_status", methods=["GET"])
+def get_tracking_status():
+    """Get the current tracking status from the session"""
+    selected_object = session.get("selectedObject")
+    
+    if selected_object:
+        return jsonify({
+            "status": "success",
+            "tracking": True,
+            "object": {
+                "name": selected_object.get("name"),
+                "ra": selected_object.get("ra"),
+                "dec": selected_object.get("dec"),
+                "mag": selected_object.get("mag")
+            }
+        })
+    else:
+        return jsonify({
+            "status": "success",
+            "tracking": False,
+            "object": None
+        })
 
-    return jsonify({"status": "tracking", "ra": ra, "dec": dec})
+@star_map_bp.route("/stop_tracking", methods=["POST"])
+def stop_tracking():
+    """Stop tracking the current object"""
+    # Check if a telescope is selected
+    selected_telescope = session.get('selected_telescope')
+    telescope_id = selected_telescope.get('telescopeId') if selected_telescope else None
+    
+    if not telescope_id:
+        print(f"[TRACKING] No telescope selected for stop command")
+        return jsonify({
+            "status": "error",
+            "error": "No telescope selected",
+            "message": "No telescope selected"
+        }), 422
+    
+    try:
+        # Create telescope instance and send stop tracking command
+        t = Telescope(telescope_id)
+        print(f"\n[TRACKING] Stopping tracking on telescope {telescope_id}\n", flush=True)
+        
+        # Send stop tracking command to the telescope
+        result = t.send_command("stopTracking")
+        
+        # Clear session tracking data
+        session.pop("selectedObject", None)
+        
+        print(f"[TRACKING] Tracking stopped successfully")
+        
+        return jsonify({
+            "status": "stopped",
+            "message": "Tracking stopped successfully",
+            "telescope_id": telescope_id,
+            "result": result
+        })
+        
+    except Exception as e:
+        print(f"[TRACKING ERROR] Failed to stop tracking: {str(e)}")
+        # Still clear session even if command failed
+        session.pop("selectedObject", None)
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "message": f"Failed to stop tracking: {str(e)}"
+        }), 500

@@ -3,8 +3,135 @@
 {% block title %}Privacy Policy{% endblock %}
 
 {% block content %}
-<div class="container text-center mt-5">
-    <h1 class="display-4 fw-bold">Privacy Policy</h1>
-    <p class="lead">Your privacy policy content goes here.</p>
+<div class="container mt-5 mb-5">
+    <h1 class="display-4 fw-bold text-center mb-4">Privacy Policy</h1>
+    
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <section class="mb-5">
+                <h2>1. Information We Collect</h2>
+                
+                <h3>1.1 Information You Provide</h3>
+                <ul>
+                    <li><strong>Email address</strong> – used for account creation, authentication, and communication.</li>
+                    <li><strong>Account preferences</strong> – such as light/dark mode and account level.</li>
+                    <li><strong>Photos captured through your telescope</strong> – including metadata embedded in the image file.</li>
+                    <li><strong>User‑submitted forms</strong> – including account deletion or data requests.</li>
+                </ul>
+                
+                <h3>1.2 Information Collected Automatically</h3>
+                <ul>
+                    <li><strong>Device information</strong> – such as device type, operating system, and basic technical identifiers.</li>
+                    <li><strong>Usage analytics</strong> – collected through our infrastructure and internal logs.</li>
+                    <li><strong>Location data (used but not stored)</strong> – required for telescope positioning and functionality, but not retained.</li>
+                </ul>
+                
+                <h3>1.3 Information from Third‑Party Services</h3>
+                <ul>
+                    <li><strong>Cloudflare network logs</strong> – Cloudflare may collect IP addresses and security‑related request data as part of providing network protection and performance services.</li>
+                </ul>
+            </section>
+            
+            <section class="mb-5">
+                <h2>2. How We Use Your Information</h2>
+                <p>We process your data for the following purposes:</p>
+                <ul>
+                    <li><strong>To provide the service</strong> – including telescope control, account management, and photo storage.</li>
+                    <li><strong>To maintain platform security</strong> – including abuse detection and enforcement of our Terms of Service.</li>
+                    <li><strong>To improve performance and reliability</strong> – through usage analytics and system diagnostics.</li>
+                    <li><strong>To communicate with you</strong> – regarding your account, updates, or support requests.</li>
+                    <li><strong>To moderate content</strong> – photos may be scanned by locally‑run AI models to detect prohibited content.</li>
+                </ul>
+                <p>We do not use your photos to train AI models, and we do not sell or share your data for advertising.</p>
+            </section>
+            
+            <section class="mb-5">
+                <h2>3. Legal Basis for Processing (UK/EU GDPR)</h2>
+                <p>We rely on the following legal bases:</p>
+                <ul>
+                    <li><strong>Contract</strong> – processing necessary to provide the Telescope Project service you agreed to.</li>
+                    <li><strong>Legitimate interests</strong> – platform security, fraud prevention, analytics, and service improvement.</li>
+                    <li><strong>Legal obligations</strong> – retaining information when required by law or in response to lawful requests.</li>
+                </ul>
+            </section>
+            
+            <section class="mb-5">
+                <h2>4. How We Store and Protect Your Data</h2>
+                <ul>
+                    <li>All data is stored on servers hosted on an OVHcloud VPS.</li>
+                    <li>Photos and account data are stored indefinitely unless deleted by the user or the account is closed.</li>
+                    <li>We use industry‑standard security measures, including encryption where appropriate.</li>
+                    <li>AI moderation is performed locally using Ollama models; no photo data is sent to external AI providers.</li>
+                </ul>
+            </section>
+            
+            <section class="mb-5">
+                <h2>5. Data Retention</h2>
+                <p>We retain data according to the following rules:</p>
+                <ul>
+                    <li><strong>Account data</strong> – kept for as long as your account is active.</li>
+                    <li><strong>Photos</strong> – kept indefinitely unless you delete them manually.</li>
+                    <li><strong>Logs and analytics</strong> – retained as long as necessary for security and operational purposes.</li>
+                    <li><strong>TOS violations</strong> – if a user breaches our Terms of Service, we retain identifying information and records of the infringement even after account deletion.</li>
+                </ul>
+                <p>All other data is deleted when your account is deleted.</p>
+            </section>
+            
+            <section class="mb-5">
+                <h2>6. Sharing Your Information</h2>
+                <p>We only share data in the following circumstances:</p>
+                <ul>
+                    <li><strong>Service providers</strong> – such as Cloudflare, for security and network performance.</li>
+                    <li><strong>Legal compliance</strong> – if required by law or law enforcement.</li>
+                    <li><strong>TOS violations</strong> – if content or behaviour breaches our Terms of Service, relevant information may be shared with authorities.</li>
+                </ul>
+                <p>We do not share your data with advertisers or unrelated third parties.</p>
+            </section>
+            
+            <section class="mb-5">
+                <h2>7. Your Rights</h2>
+                <p>You have the right to:</p>
+                <ul>
+                    <li>Access your data</li>
+                    <li>Correct inaccurate information</li>
+                    <li>Delete your data</li>
+                    <li>Object to certain processing</li>
+                    <li>Request data portability</li>
+                </ul>
+                <p>You can update some information directly from your dashboard. For deletion or access requests, you may use our account deletion forms or contact system.</p>
+            </section>
+            
+            <section class="mb-5">
+                <h2>8. Children's Privacy</h2>
+                <p>Telescope Project is not intended for children. We do not knowingly collect data from individuals under the age required by applicable law. If we discover such data, it will be deleted.</p>
+            </section>
+            
+            <section class="mb-5">
+                <h2>9. Cookies and Tracking</h2>
+                <p>We do not use cookies. All data is stored in our internal systems (e.g., SQLite databases) and not through browser‑based tracking.</p>
+            </section>
+            
+            <section class="mb-5">
+                <h2>10. Photo Handling and Moderation</h2>
+                <ul>
+                    <li>Photos captured through your telescope are stored on our servers.</li>
+                    <li>You may delete your photos at any time.</li>
+                    <li>Photos are not used to train AI models.</li>
+                    <li>AI moderation is performed locally to detect prohibited content.</li>
+                    <li>We do not share photos unless required by law or in cases of Terms of Service violations.</li>
+                </ul>
+            </section>
+            
+            <section class="mb-5">
+                <h2>11. International Users</h2>
+                <p>We operate globally, but primarily in the UK and EU. Your data may be processed in the UK or EU depending on server location.</p>
+            </section>
+            
+            <section class="mb-5">
+                <h2>12. Contact Us</h2>
+                <p>If you have questions, concerns, or requests regarding your data, you can contact us through the support system provided in the app or website.</p>
+            </section>
+        </div>
+    </div>
 </div>
 {% endblock %}

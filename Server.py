@@ -1,4 +1,4 @@
-FlaskServerPort = 8080
+FlaskServerPort = 5000
 ifOnline = True
 
 from utility.setupLibs import ensure_requirements
@@ -36,50 +36,35 @@ else:
     print(f".env not found at {env_path}")
     
 
-# Startup caddy (now located in infrastructure/)
-caddyPath = os.path.join(BASE_DIR, "infrastructure", "Caddy.exe")
-caddyConfigPath = os.path.join(BASE_DIR, "infrastructure", "Caddyfile")
-# Redirect Caddy stdout/stderr to log files instead of piping (prevents blocking if not read)
-try:
-    caddy_out = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cadd_stdout.log"), "a", encoding="utf-8")
-    caddy_err = open(os.path.join(BASE_DIR, "infrastructure", "logs", "caddy_stderr.log"), "a", encoding="utf-8")
-    caddyProc = subprocess.Popen([caddyPath, "run", "--config", caddyConfigPath], stdout=caddy_out, stderr=caddy_err, cwd=os.path.join(BASE_DIR, "infrastructure"))
-    print("Caddy started in the background (using config:", caddyConfigPath, ")")
-except Exception as e:
-    print(f"Failed to start Caddy: {e}")
+# # Startup Cloudflare Tunnel
+# try:
+#     # Redirect cloudflared stdout/stderr to log files to avoid console output
+#     cf_out = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cloudflared_stdout.log"), "a", encoding="utf-8")
+#     cf_err = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cloudflared_stderr.log"), "a", encoding="utf-8")
+#     cloudflaredProc = subprocess.Popen([
+#         "cloudflared",
+#         "tunnel",
+#         "--config",
+#         "/home/alex/Server/infrastructure/config.yml",
+#         "run",
+#         "server",
+#     ], stdout=cf_out, stderr=cf_err, cwd=os.path.join(BASE_DIR, "infrastructure"))
+#     print("Cloudflare Tunnel started in background (logs: infrastructure/logs)")
+# except Exception as e:
+#     print(f"Failed to start cloudflared: {e}")
 
-# Startup Cloudflare Tunnel
-cloudflaredPath = os.path.join(BASE_DIR, "infrastructure", "cloudflared.exe")
-configPath = os.path.join(BASE_DIR, "infrastructure", "config.yml")
-# Redirect cloudflared output to logs as well
-try:
-    cf_out = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cloudflared_stdout.log"), "a", encoding="utf-8")
-    cf_err = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cloudflared_stderr.log"), "a", encoding="utf-8")
-    cloudflaredProc = subprocess.Popen([cloudflaredPath, "tunnel", "--config", configPath, "run", "telescope-websockets"],
-                                    stdout=cf_out, stderr=cf_err, cwd=os.path.join(BASE_DIR, "infrastructure"))
-    print("Cloudflare Tunnel started in the background (using config:", configPath, ")")
-except Exception as e:
-    print(f"Failed to start cloudflared: {e}")
+# # Cleanup function for shutting down processes
+# def cleanup_processes():
+#     """Clean up Cloudflare Tunnel process on exit"""
+#     try:
+#         if 'cloudflaredProc' in globals() and cloudflaredProc.poll() is None:
+#             print("Terminating Cloudflare Tunnel process...")
+#             cloudflaredProc.terminate()
+#     except Exception as e:
+#         print(f"Error terminating Cloudflare Tunnel: {e}")
 
-# Cleanup function for shutting down processes
-def cleanup_processes():
-    """Clean up Caddy and Cloudflare Tunnel processes on exit"""
-    try:
-        if 'caddyProc' in globals() and caddyProc.poll() is None:
-            print("Terminating Caddy process...")
-            caddyProc.terminate()
-    except Exception as e:
-        print(f"Error terminating Caddy: {e}")
-    
-    try:
-        if 'cloudflaredProc' in globals() and cloudflaredProc.poll() is None:
-            print("Terminating Cloudflare Tunnel process...")
-            cloudflaredProc.terminate()
-    except Exception as e:
-        print(f"Error terminating Cloudflare Tunnel: {e}")
-
-# Register cleanup function
-atexit.register(cleanup_processes)
+# # Register cleanup function
+# atexit.register(cleanup_processes)
 
 # Flask App Initialization
 
