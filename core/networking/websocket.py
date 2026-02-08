@@ -219,11 +219,16 @@ async def authenticate_liveview(ws):
 
 async def send_frames():
     """Send live camera frames via WebSocket with automatic reconnection"""
+    import fcntl
+    import os as os_module
+    
     JPEG_START = b'\xff\xd8'
     JPEG_END = b'\xff\xd9'
     proc = None
     last_frame_time = 0
     frame_interval = 1 / 10  # 10 FPS
+    last_process_check_time = 0
+    process_check_interval = 1.0  # Check process health every 1 second
 
     while True:  # Outer reconnection loop
         connection_start_time = time.time()
@@ -261,6 +266,15 @@ async def send_frames():
                         proc = subprocess.Popen([
                             "gphoto2", "--capture-movie", "--stdout"
                         ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                        
+                        # Set non-blocking mode on stdout
+                        flags = fcntl.fcntl(proc.stdout, fcntl.F_GETFL)
+                        fcntl.fcntl(proc.stdout, fcntl.F_SETFL, flags | os_module.O_NONBLOCK)
+                        
+                        # Reset process check timer when we start a new process
+                        last_process_check_time = time.time()
+                        
+                        print(f"[send_frames] Started gphoto2 process (PID: {proc.pid})")
                     except Exception as proc_error:
                         print(f"[send_frames] Failed to start gphoto2: {proc_error}")
                         await asyncio.sleep(1)
@@ -270,37 +284,60 @@ async def send_frames():
                 try:
                     while is_liveview_enabled() and ws.close_code is None:
                         try:
-                            chunk = proc.stdout.read(4096)
-                            if not chunk:
-                                break
-                            buffer += chunk
-                            
-                            while True:
-                                start = buffer.find(JPEG_START)
-                                end = buffer.find(JPEG_END, start)
-                                if start != -1 and end != -1 and end > start:
-                                    now = time.time()
-                                    if now - last_frame_time >= frame_interval:
-                                        jpeg = buffer[start:end+2]
-                                        try:
-                                            await asyncio.wait_for(ws.send(jpeg), timeout=1.0)
-                                            last_frame_time = now
-                                        except (websockets.exceptions.ConnectionClosed, 
-                                               websockets.exceptions.ConnectionClosedError,
-                                               asyncio.TimeoutError) as send_error:
-                                            print(f"[send_frames] WebSocket send failed: {type(send_error).__name__}")
-                                            raise send_error
-                                        except Exception as send_error:
-                                            error_type = type(send_error).__name__
-                                            error_msg = str(send_error)
-                                            print(f"[send_frames] WebSocket send failed: {error_type} - {error_msg}")
-                                            raise send_error
-                                    buffer = buffer[end+2:]
-                                else:
+                            # Check if process is still running periodically
+                            current_time = time.time()
+                            if current_time - last_process_check_time >= process_check_interval:
+                                if proc.poll() is not None:
+                                    print(f"[send_frames] Camera process terminated unexpectedly (exit code: {proc.returncode})")
                                     break
+                                last_process_check_time = current_time
+                            
+                            # Non-blocking read with timeout handling
+                            try:
+                                chunk = proc.stdout.read(4096)
+                                if not chunk:
+                                    # Empty read may mean no data available (non-blocking) or EOF
+                                    if proc.poll() is not None:
+                                        print(f"[send_frames] Camera process ended (reached EOF)")
+                                        break
+                                    # No data available right now, yield to event loop
+                                    await asyncio.sleep(0.01)
+                                    continue
+                                    
+                                buffer += chunk
+                                
+                                while True:
+                                    start = buffer.find(JPEG_START)
+                                    end = buffer.find(JPEG_END, start)
+                                    if start != -1 and end != -1 and end > start:
+                                        now = time.time()
+                                        if now - last_frame_time >= frame_interval:
+                                            jpeg = buffer[start:end+2]
+                                            try:
+                                                await asyncio.wait_for(ws.send(jpeg), timeout=2.0)
+                                                last_frame_time = now
+                                            except (websockets.exceptions.ConnectionClosed, 
+                                                   websockets.exceptions.ConnectionClosedError,
+                                                   asyncio.TimeoutError) as send_error:
+                                                print(f"[send_frames] WebSocket send failed: {type(send_error).__name__}")
+                                                raise send_error
+                                            except Exception as send_error:
+                                                error_type = type(send_error).__name__
+                                                error_msg = str(send_error)
+                                                print(f"[send_frames] WebSocket send failed: {error_type} - {error_msg}")
+                                                raise send_error
+                                        buffer = buffer[end+2:]
+                                    else:
+                                        break
+                            except BlockingIOError:
+                                # Non-blocking read returned no data, that's OK
+                                await asyncio.sleep(0.01)
+                                continue
+                                
                         except Exception as read_error:
-                            if 'broken pipe' in str(read_error).lower():
-                                print(f"[send_frames] Camera process broken pipe, restarting...")
+                            error_str = str(read_error).lower()
+                            if 'broken pipe' in error_str or 'bad file descriptor' in error_str:
+                                print(f"[send_frames] Camera process error (broken pipe), restarting...")
                                 break
                             else:
                                 raise read_error
