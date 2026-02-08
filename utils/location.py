@@ -15,7 +15,7 @@ def get_gps_from_hardware():
     Returns: dict with lat, lon, timestamp if successful, None otherwise
     """
     try:
-        from gps import gps, WATCH_ENABLE
+        from gps import gps, WATCH_ENABLE # type: ignore
         
         # Connect to gpsd
         session = gps(mode=WATCH_ENABLE)
