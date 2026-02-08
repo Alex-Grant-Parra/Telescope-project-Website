@@ -48,16 +48,19 @@
         </div>
     </section>
 
-    <!-- Section 4: About -->
+    <!-- Section 4: More -->
     <section class="video-section" id="section-about">
         <video class="hero-video lazy-video" muted loop playsinline preload="none">
             <source data-src="{{ url_for('static', filename='videos/n11.mp4') }}" type="video/mp4">
         </video>
         <div class="section-overlay">
             <div class="overlay-content">
-                <h2>About</h2>
-                <p>Learn more about this project and contributors.</p>
-                <a class="btn btn-outline-light" href="{{ url_for('about.about') }}">About</a>
+                <h2>More</h2>
+                <p>Learn more about the project or grab the latest release.</p>
+                <div class="d-flex flex-wrap gap-2">
+                    <a class="btn btn-outline-light" href="{{ url_for('about.about') }}">About</a>
+                    <a class="btn btn-outline-light" href="{{ url_for('downloads.downloads_home') }}">Downloads</a>
+                </div>
             </div>
         </div>
     </section>

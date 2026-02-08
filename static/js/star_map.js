@@ -4,7 +4,7 @@
 function checkAuthResponse(response) {
     if (response.status === 401) {
         alert('You must be logged in to control the telescope.');
-        window.location.href = '/auth/login';
+        window.location.href = '/login';
         throw new Error('Not authenticated');
     }
     return response;
