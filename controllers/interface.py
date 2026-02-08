@@ -13,6 +13,9 @@ interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
 @interface_bp.route("/")
 def interface():
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return render_template("errors/401.html"), 401
     return render_template("interface.html")
 
 @interface_bp.route("/update_camera", methods=["POST"])

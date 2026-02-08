@@ -262,14 +262,18 @@ class SecurityMiddleware:
         """
         from .config import RATE_LIMITS
         
+        # Rate limiting disabled for normal users
+        if not is_suspicious:
+            return False  # Allow all requests for normal users
+        
         now = datetime.now()
         window = timedelta(minutes=1)
         
         # Determine limit based on request type
         if is_suspicious:
             limit = RATE_LIMITS.get('suspicious', 10)
-        else:
-            limit = RATE_LIMITS.get('default', 60)
+        # else:
+        #     limit = RATE_LIMITS.get('default', 60)
         
         # Initialize tracking for this IP
         if client_ip not in self.request_history:

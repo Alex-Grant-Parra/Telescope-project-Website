@@ -66,23 +66,26 @@ def get_ws_client_ip(ws):
 
 def check_rate_limit(client_ip):
     """Simple rate limiting check"""
-    current_time = time.time()
-    minute_key = int(current_time // 60)
+    # Rate limiting disabled for normal users
+    # current_time = time.time()
+    # minute_key = int(current_time // 60)
+    # 
+    # if client_ip not in client_request_counts:
+    #     client_request_counts[client_ip] = {}
+    # 
+    # if minute_key not in client_request_counts[client_ip]:
+    #     client_request_counts[client_ip][minute_key] = 0
+    # 
+    # client_request_counts[client_ip][minute_key] += 1
+    # 
+    # # Clean old entries
+    # old_keys = [k for k in client_request_counts[client_ip].keys() if k < minute_key - 1]
+    # for k in old_keys:
+    #     del client_request_counts[client_ip][k]
+    # 
+    # return client_request_counts[client_ip][minute_key] <= REQUEST_LIMIT_PER_MINUTE
     
-    if client_ip not in client_request_counts:
-        client_request_counts[client_ip] = {}
-    
-    if minute_key not in client_request_counts[client_ip]:
-        client_request_counts[client_ip][minute_key] = 0
-    
-    client_request_counts[client_ip][minute_key] += 1
-    
-    # Clean old entries
-    old_keys = [k for k in client_request_counts[client_ip].keys() if k < minute_key - 1]
-    for k in old_keys:
-        del client_request_counts[client_ip][k]
-    
-    return client_request_counts[client_ip][minute_key] <= REQUEST_LIMIT_PER_MINUTE
+    return True  # Allow all requests for normal users
 
 def generate_token():
     """Generate a secure token for new clients"""
