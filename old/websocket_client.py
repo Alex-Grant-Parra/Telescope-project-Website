@@ -8,43 +8,77 @@ import re
 import signal
 import os
 from datetime import datetime
-from function_handlers import function_map, is_liveview_enabled
+from function_handlers import function_map
+from liveview_state import is_liveview_enabled
 
-CLIENT_ID_FILE = "client_id.json"
-CONFIG_FILE = "client_config.json"
-SERVER_URI = "wss://ws.telescopes.dev"
-CLIENT_ID = "pi-001"
 
-def load_config():
-    """Load client configuration including API token"""
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"[config] Error loading config: {e}")
-    
-    # Return default config
-    return {
-        "client_id": CLIENT_ID,
-        "server_uri": SERVER_URI,
-        "api_token": None
-    }
+def _to_ws_uri(raw: str, default_subdomain: str | None = None) -> str:
+    """Normalize a configured URI to a WebSocket URI.
+
+    - If `raw` already starts with ws:// or wss:// it's returned unchanged.
+    - If `raw` starts with http:// or https:// the scheme is converted to ws:// or wss://.
+    - If `raw` contains no scheme and `default_subdomain` is provided, the subdomain is prepended
+      and `wss://` is used.
+    """
+    if not raw:
+        return raw
+    raw = raw.strip()
+    if raw.startswith("ws://") or raw.startswith("wss://"):
+        return raw
+    if raw.startswith("http://"):
+        return "ws://" + raw[len("http://"):]
+    if raw.startswith("https://"):
+        return "wss://" + raw[len("https://"):]
+    # No scheme provided; assume secure websocket and optionally add subdomain
+    if default_subdomain:
+        return f"wss://{default_subdomain}.{raw}"
+    return f"wss://{raw}"
+
+# Configuration values are provided via `client_config.json` at runtime.
+# No hard-coded defaults are kept here.
+
+# Module-level placeholders (populated from the config passed into websocketClient)
+CLIENT_ID = None
+SERVER_URI = None
+LIVEVIEW_URI = None
+SERVER_HTTP_URL = None
+
+def load_config(allow_missing: bool = False):
+    """Load client configuration from `client_config.json`.
+
+    If `allow_missing` is False (default) this will raise FileNotFoundError when
+    the config file does not exist. When `allow_missing` is True an empty dict
+    is returned to allow interactive setup to proceed.
+    """
+    config_path = "client_config.json"
+    if not os.path.exists(config_path):
+        if allow_missing:
+            return {}
+        raise FileNotFoundError(
+            f"Configuration file '{config_path}' not found. Run 'python websocket_client.py setup' to create it."
+        )
+
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        # Propagate the error to make failures explicit
+        raise
 
 def save_config(config):
     """Save client configuration"""
     try:
-        with open(CONFIG_FILE, 'w') as f:
+        with open("client_config.json", 'w') as f:
             json.dump(config, f, indent=2)
-        print(f"[config] Configuration saved to {CONFIG_FILE}")
+        print(f"[config] Configuration saved to client_config.json")
     except Exception as e:
         print(f"[config] Error saving config: {e}")
 
-# Load configuration
-config = load_config()
-CLIENT_ID = config.get("client_id", CLIENT_ID)
-SERVER_URI = config.get("server_uri", SERVER_URI)
-API_TOKEN = config.get("api_token")
+# Note: configuration is now loaded at runtime inside `websocketClient()` so
+# that the `setup` command can create the config file when it doesn't exist.
+# There are no hard-coded defaults — the values must come from
+# `client_config.json`.
+API_TOKEN = None
 
 async def authenticate_with_server(ws):
     """Send authentication message to server"""
@@ -79,12 +113,31 @@ async def handle_server(ws):
             try:
                 last_message_time = time.time()
                 data = json.loads(message)
+                print(f"[received] Command: {json.dumps(data)}")
                 function_name = data.get("function")
 
                 if function_name in function_map:
                     func = function_map[function_name]
                     args = data.get("args", [])
-                    result = func(*args)
+                    kwargs = data.get("kwargs", {})
+                    
+                    # Enhanced handling for ESP32 commands with motor_id
+                    # If motor_id is in the top-level data, add it to kwargs
+                    if "motor_id" in data:
+                        kwargs["motor_id"] = data["motor_id"]
+                    
+                    # Log the function call
+                    args_str = ", ".join(repr(arg) for arg in args) if args else ""
+                    kwargs_str = ", ".join(f"{k}={repr(v)}" for k, v in kwargs.items()) if kwargs else ""
+                    all_args = ", ".join(filter(None, [args_str, kwargs_str]))
+                    print(f"[function_call] Calling {function_name}({all_args})")
+                    
+                    # Call function with both args and kwargs
+                    if kwargs:
+                        result = func(*args, **kwargs)
+                    else:
+                        result = func(*args)
+                    
                     response = json.dumps({"result": result, "id": data.get("id")})
                 else:
                     response = json.dumps({"error": f"Function '{function_name}' not found", "id": data.get("id")})
@@ -166,7 +219,6 @@ async def authenticate_liveview(ws):
 
 async def send_frames():
     """Send live camera frames via WebSocket with automatic reconnection"""
-    uri = "wss://liveview.telescopes.dev"
     JPEG_START = b'\xff\xd8'
     JPEG_END = b'\xff\xd9'
     proc = None
@@ -177,8 +229,8 @@ async def send_frames():
         connection_start_time = time.time()
         ws = None
         try:
-            print(f"[send_frames] Connecting to {uri} at {datetime.now()}...")
-            ws = await websockets.connect(uri, max_size=2*1024*1024, ping_interval=20, ping_timeout=10)
+            print(f"[send_frames] Connecting to {LIVEVIEW_URI} at {datetime.now()}...")
+            ws = await websockets.connect(LIVEVIEW_URI, max_size=2*1024*1024, ping_interval=20, ping_timeout=10)
             print(f"[send_frames] Connected successfully at {datetime.now()}")
             # Send authentication as first message
             await authenticate_liveview(ws)
@@ -338,7 +390,8 @@ def setup_client_config():
     print("=== Telescope Client Configuration Setup ===")
     print()
     
-    current_config = load_config()
+    # Allow setup to run even if the config file doesn't exist yet
+    current_config = load_config(allow_missing=True)
     
     print(f"Current client ID: {current_config.get('client_id', 'Not set')}")
     new_client_id = input("Enter client ID (press Enter to keep current): ").strip()
@@ -359,19 +412,51 @@ def setup_client_config():
     print("\nConfiguration saved! You can now run the client.")
     return current_config
 
-async def main():
+async def websocketClient(cfg: dict = None):
     """Main async function that runs both WebSocket client and frame sender"""
     # Check if we need to run setup
     if len(sys.argv) > 1 and sys.argv[1] == "setup":
         setup_client_config()
         return
+    # If no config was passed in, load it from disk (this errors if missing)
+    if cfg is None:
+        cfg = load_config()
+
+    # Ensure required keys are present in the config (no defaults)
+    # Accept either `server_url` (host) or `server_uri` (full ws host) in config.
+    required_keys = ["client_id", "api_token"]
+    missing = [k for k in required_keys if k not in cfg]
+    if missing:
+        raise KeyError(f"Missing keys in client_config.json: {', '.join(missing)}. Run 'python websocket_client.py setup' to create or fix the config.")
+
+    # Export values to module-level globals used by other functions
+    global CLIENT_ID, SERVER_URI, LIVEVIEW_URI, SERVER_HTTP_URL, API_TOKEN
+
+    CLIENT_ID = cfg["client_id"]
+    API_TOKEN = cfg["api_token"]
+
+    # Determine HTTP host (server_url or http_uri)
+    SERVER_HTTP_URL = cfg.get("server_url") or cfg.get("http_uri") or cfg.get("http")
+
+    # If the config already provides full websocket/liveview hosts, use them.
+    # Otherwise construct secure websocket addresses from the HTTP host.
+    if cfg.get("server_uri"):
+        SERVER_URI = _to_ws_uri(cfg["server_uri"], default_subdomain="ws")
+    elif SERVER_HTTP_URL:
+        host = re.sub(r"^https?://", "", SERVER_HTTP_URL)
+        SERVER_URI = f"wss://ws.{host}"
+    else:
+        raise KeyError("No server host configured. Provide 'server_url' or 'server_uri' in client_config.json")
+
+    if cfg.get("liveview_uri"):
+        LIVEVIEW_URI = _to_ws_uri(cfg["liveview_uri"], default_subdomain="liveview")
+    elif SERVER_HTTP_URL:
+        host = re.sub(r"^https?://", "", SERVER_HTTP_URL)
+        LIVEVIEW_URI = f"wss://liveview.{host}"
+    else:
+        LIVEVIEW_URI = None
     
-    # Check if API token is configured
-    if not API_TOKEN:
-        print("ERROR: No API token configured!")
-        print("Run 'python websocket_client.py setup' to configure the client.")
-        print("Or manually create client_config.json with your API token.")
-        return
+    
     
     # Set up signal handlers
     signal.signal(signal.SIGTERM, handle_exit)
@@ -390,11 +475,4 @@ async def main():
     except Exception as e:
         print(f"[main] Unexpected exception: {e}")
     finally:
-        cleanup_camera()
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("[global] KeyboardInterrupt received, exiting and releasing camera...")
         cleanup_camera()
