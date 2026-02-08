@@ -9,7 +9,7 @@
       "serialPort": 2,
       "tmcAddress": "0x00",
       "enabled": true,
-      "description": "Main azimuth motor"
+      "description": "Main RA motor"
     },
     {
       "id": "motor2",
@@ -20,7 +20,7 @@
       "serialPort": 1,
       "tmcAddress": "0x01",
       "enabled": false,
-      "description": "Altitude motor (disabled by default)"
+      "description": "Declination motor (disabled by default)"
     }
   ],
   "defaults": {
