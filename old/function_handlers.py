@@ -7,6 +7,7 @@ from cameraController import Camera # type: ignore
 from csrf import get_csrf_token, SESSION
 from liveview_state import load_liveview_state, save_liveview_state
 from esp32.esp32 import ESP32Motor, ESP32Config, ESP32MotorArray
+from trackManager import trackCoordinates
 
 CONFIG_FILE = "client_config.json"
 
@@ -469,7 +470,10 @@ def espCommand(command_data: Dict[str, Any]) -> Dict[str, Any]:
 
 # Function mapping dictionary
 function_map = {
+    # Degub
     "echo": echo,
+    # Main track requests
+    "trackCoordinates": trackCoordinates,
     "getCameraChoices": get_camera_choices,
     "setCameraSetting": setCameraSetting,
     "capturePhoto": capturePhoto,

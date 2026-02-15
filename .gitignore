@@ -1,6 +1,4 @@
 photos
 venv
 __pycache__
-client_config.json
-client_id.json
-liveview_state.json
+config

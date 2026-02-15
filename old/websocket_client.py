@@ -11,6 +11,29 @@ from datetime import datetime
 from function_handlers import function_map
 from liveview_state import is_liveview_enabled
 
+
+def _to_ws_uri(raw: str, default_subdomain: str | None = None) -> str:
+    """Normalize a configured URI to a WebSocket URI.
+
+    - If `raw` already starts with ws:// or wss:// it's returned unchanged.
+    - If `raw` starts with http:// or https:// the scheme is converted to ws:// or wss://.
+    - If `raw` contains no scheme and `default_subdomain` is provided, the subdomain is prepended
+      and `wss://` is used.
+    """
+    if not raw:
+        return raw
+    raw = raw.strip()
+    if raw.startswith("ws://") or raw.startswith("wss://"):
+        return raw
+    if raw.startswith("http://"):
+        return "ws://" + raw[len("http://"):]
+    if raw.startswith("https://"):
+        return "wss://" + raw[len("https://"):]
+    # No scheme provided; assume secure websocket and optionally add subdomain
+    if default_subdomain:
+        return f"wss://{default_subdomain}.{raw}"
+    return f"wss://{raw}"
+
 # Configuration values are provided via `client_config.json` at runtime.
 # No hard-coded defaults are kept here.
 
@@ -90,6 +113,7 @@ async def handle_server(ws):
             try:
                 last_message_time = time.time()
                 data = json.loads(message)
+                print(f"[received] Command: {json.dumps(data)}")
                 function_name = data.get("function")
 
                 if function_name in function_map:
@@ -101,6 +125,12 @@ async def handle_server(ws):
                     # If motor_id is in the top-level data, add it to kwargs
                     if "motor_id" in data:
                         kwargs["motor_id"] = data["motor_id"]
+                    
+                    # Log the function call
+                    args_str = ", ".join(repr(arg) for arg in args) if args else ""
+                    kwargs_str = ", ".join(f"{k}={repr(v)}" for k, v in kwargs.items()) if kwargs else ""
+                    all_args = ", ".join(filter(None, [args_str, kwargs_str]))
+                    print(f"[function_call] Calling {function_name}({all_args})")
                     
                     # Call function with both args and kwargs
                     if kwargs:
@@ -393,18 +423,40 @@ async def websocketClient(cfg: dict = None):
         cfg = load_config()
 
     # Ensure required keys are present in the config (no defaults)
-    required_keys = ["client_id", "server_uri", "liveview_uri", "server_http_url", "api_token"]
+    # Accept either `server_url` (host) or `server_uri` (full ws host) in config.
+    required_keys = ["client_id", "api_token"]
     missing = [k for k in required_keys if k not in cfg]
     if missing:
         raise KeyError(f"Missing keys in client_config.json: {', '.join(missing)}. Run 'python websocket_client.py setup' to create or fix the config.")
 
     # Export values to module-level globals used by other functions
     global CLIENT_ID, SERVER_URI, LIVEVIEW_URI, SERVER_HTTP_URL, API_TOKEN
+
     CLIENT_ID = cfg["client_id"]
-    SERVER_URI = cfg["server_uri"]
-    LIVEVIEW_URI = cfg["liveview_uri"]
-    SERVER_HTTP_URL = cfg["server_http_url"]
     API_TOKEN = cfg["api_token"]
+
+    # Determine HTTP host (server_url or http_uri)
+    SERVER_HTTP_URL = cfg.get("server_url") or cfg.get("http_uri") or cfg.get("http")
+
+    # If the config already provides full websocket/liveview hosts, use them.
+    # Otherwise construct secure websocket addresses from the HTTP host.
+    if cfg.get("server_uri"):
+        SERVER_URI = _to_ws_uri(cfg["server_uri"], default_subdomain="ws")
+    elif SERVER_HTTP_URL:
+        host = re.sub(r"^https?://", "", SERVER_HTTP_URL)
+        SERVER_URI = f"wss://ws.{host}"
+    else:
+        raise KeyError("No server host configured. Provide 'server_url' or 'server_uri' in client_config.json")
+
+    if cfg.get("liveview_uri"):
+        LIVEVIEW_URI = _to_ws_uri(cfg["liveview_uri"], default_subdomain="liveview")
+    elif SERVER_HTTP_URL:
+        host = re.sub(r"^https?://", "", SERVER_HTTP_URL)
+        LIVEVIEW_URI = f"wss://liveview.{host}"
+    else:
+        LIVEVIEW_URI = None
+    
+    
     
     # Set up signal handlers
     signal.signal(signal.SIGTERM, handle_exit)
