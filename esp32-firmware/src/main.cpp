@@ -7,19 +7,22 @@
 
 class Motor {
 private:
+  bool enabled;
+  volatile bool stopRequested;
+
+public:
   int stepPin;
   int dirPin;
   int enPin;
-  bool enabled;
   bool moving;
-  volatile bool stopRequested;
   uint32_t stepsPerRevolution;
   uint32_t stepDelayUs;
+  TaskHandle_t stepTaskHandle;
 
-public:
   Motor(int step, int dir, int en, uint32_t stepsPerRev = STEPS_PER_REVOLUTION)
     : stepPin(step), dirPin(dir), enPin(en), enabled(false), moving(false),
-      stopRequested(false), stepsPerRevolution(stepsPerRev), stepDelayUs(1250) {
+      stopRequested(false), stepsPerRevolution(stepsPerRev), stepDelayUs(1250),
+      stepTaskHandle(nullptr) {
   }
 
   void initialize() {
@@ -32,10 +35,17 @@ public:
   }
 
   void cleanup() {
+    // Stop the motor task if running
+    if (stepTaskHandle != nullptr) {
+      stopRequested = true;
+      vTaskDelete(stepTaskHandle);
+      stepTaskHandle = nullptr;
+    }
     // Set pins to safe states before deletion
     digitalWrite(enPin, HIGH);  // Disable driver
     digitalWrite(stepPin, LOW);
     digitalWrite(dirPin, LOW);
+    moving = false;
   }
 
   void setSpeed(uint32_t delayUs) {
@@ -78,33 +88,61 @@ public:
 
   void turnDegrees(float degrees, bool forward = true) {
     if (!enabled) {
-      Serial.println("ERROR: Motor is not engaged!");
       return;
+    }
+    if (moving) {
+      return;  // Already moving, ignore
     }
 
     stopRequested = false;
     moving = true;
 
     uint32_t stepsNeeded = (uint32_t)((degrees / 360.0) * stepsPerRevolution);
-
     digitalWrite(dirPin, forward ? HIGH : LOW);
 
+    // Run stepping in FreeRTOS task so serial can still be processed
+    struct StepParams {
+      Motor* motor;
+      uint32_t stepsNeeded;
+    };
+    
+    StepParams* params = new StepParams{this, stepsNeeded};
+    
+    xTaskCreatePinnedToCore(
+      stepTask,           // Task function
+      "MotorStep",        // Name
+      2048,               // Stack size
+      params,             // Parameters
+      1,                  // Priority (0=lowest)
+      &stepTaskHandle,    // Handle
+      1                   // Core 1 (leave core 0 for serial)
+    );
+  }
+
+  static void stepTask(void* pvParameters) {
+    struct StepParams {
+      Motor* motor;
+      uint32_t stepsNeeded;
+    };
+    
+    StepParams* params = (StepParams*)pvParameters;
+    Motor* motor = params->motor;
+    uint32_t stepsNeeded = params->stepsNeeded;
+    delete params;
+
     for (uint32_t i = 0; i < stepsNeeded; i++) {
-      if (stopRequested) {
+      if (motor->stopRequested) {
         break;
       }
 
-      digitalWrite(stepPin, HIGH);
+      digitalWrite(motor->stepPin, HIGH);
       delayMicroseconds(PULSE_WIDTH_US);
-      digitalWrite(stepPin, LOW);
-      delayMicroseconds(stepDelayUs - PULSE_WIDTH_US);
-
-      if ((i + 1) % 1000 == 0) {
-        // Progress callback hook reserved for future use.
-      }
+      digitalWrite(motor->stepPin, LOW);
+      delayMicroseconds(motor->stepDelayUs - PULSE_WIDTH_US);
     }
 
-    moving = false;
+    motor->moving = false;
+    vTaskDelete(nullptr);
   }
 };
 
