@@ -50,5 +50,36 @@ def set_telescope_coords(hour_angle: float, declination: float, source: str = "m
         "source": source,
         "updated_at": datetime.utcnow().isoformat(),
     }
+    # Preserve slew_config if it exists
+    if _STATE_CACHE and "slew_config" in _STATE_CACHE:
+        state["slew_config"] = _STATE_CACHE["slew_config"]
     _STATE_CACHE = state
     _write_state_to_disk(state)
+
+
+def get_slew_config() -> Dict[str, float]:
+    """Return slewing configuration (speeds and thresholds)."""
+    global _STATE_CACHE
+    if _STATE_CACHE is None:
+        _STATE_CACHE = _load_state_from_disk()
+    if not _STATE_CACHE:
+        # Return defaults if no config found
+        return {
+            "slew_speed_sps": 800.0,
+            "refine_speed_sps": 400.0,
+            "tracking_speed_sps": 100.0,
+            "slew_threshold_degrees": 1.0,
+            "center_threshold_degrees": 0.1,
+            "centered_threshold_degrees": 0.01,
+        }
+    config = _STATE_CACHE.get("slew_config", {})
+    # Return with defaults for any missing keys
+    return {
+        "slew_speed_sps": float(config.get("slew_speed_sps", 800.0)),
+        "refine_speed_sps": float(config.get("refine_speed_sps", 400.0)),
+        "tracking_speed_sps": float(config.get("tracking_speed_sps", 100.0)),
+        "slew_threshold_degrees": float(config.get("slew_threshold_degrees", 1.0)),
+        "center_threshold_degrees": float(config.get("center_threshold_degrees", 0.1)),
+        "centered_threshold_degrees": float(config.get("centered_threshold_degrees", 0.01)),
+    }
+

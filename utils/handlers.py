@@ -6,8 +6,8 @@ from typing import Optional, Any, Dict
 from core.camera.controller import Camera # type: ignore
 from core.networking.csrf import get_csrf_token, SESSION
 from utils.liveview_state import load_liveview_state, save_liveview_state
-from core.hardware.esp32_motor import ESP32Motor, ESP32Config, ESP32MotorArray
-from utils.tracking import trackCoordinates
+from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig
+from core.hardware.tracking import trackCoordinates
 
 CONFIG_FILE = "config/client_config.json"
 
@@ -151,145 +151,204 @@ def stopLiveView():
 
 # ESP32 motor control handlers
 
-# Global motor array instance
-_MOTOR_ARRAY: Optional[ESP32MotorArray] = None
+# Global ESP32 connection instance
+_ESP32_CONN: Optional[ESP32Connection] = None
 
-def _load_motor_config() -> list[dict]:
+def _load_motor_config() -> dict:
     """Load motor configuration from config/client_config.json"""
     try:
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, 'r') as f:
                 config = json.load(f)
-                motor_configs = config.get('motors', [])
-                if motor_configs:
-                    print(f"[MOTORS] Loaded {len(motor_configs)} motor configurations from {CONFIG_FILE}")
-                    return motor_configs
+                esp32_config = config.get('esp32', {})
+                if esp32_config:
+                    print(f"[MOTORS] Loaded ESP32 configuration from {CONFIG_FILE}")
+                    return esp32_config
     except Exception as e:
-        print(f"[MOTORS] Warning: Could not load motor config: {e}")
+        print(f"[MOTORS] Warning: Could not load ESP32 config: {e}")
     
     # Return default configuration if none found
-    print("[MOTORS] Using default single motor configuration")
-    return [{"motor_id": "motor1", "port": "/dev/ttyUSB0", "baudrate": 115200, "timeout": 0.2}]
+    print("[MOTORS] Using default ESP32 configuration")
+    return {
+        "port": "/dev/ttyUSB0",
+        "baudrate": 115200,
+        "timeout": 0.5
+    }
 
-def _get_motor_array() -> ESP32MotorArray:
-    global _MOTOR_ARRAY
-    if _MOTOR_ARRAY is None:
-        # Load motor configuration from file
-        motor_configs = _load_motor_config()
-        _MOTOR_ARRAY = ESP32MotorArray(motor_configs)
-        print(f"[MOTORS] Initialized ESP32MotorArray with {len(_MOTOR_ARRAY.motors)} motor(s)")
-        for motor in _MOTOR_ARRAY.motors:
-            print(f"[MOTORS] - {motor.motor_id} on {motor.cfg.port}")
-    return _MOTOR_ARRAY
-
-def _get_motor(motor_id: str = "motor1") -> ESP32Motor:
-    """Get a specific motor by ID"""
-    motor_array = _get_motor_array()
-    try:
-        return motor_array.get_by_id(motor_id)
-    except ValueError:
-        # Fall back to first motor if specified motor not found
-        if len(motor_array.motors) > 0:
-            print(f"[MOTORS] Warning: Motor '{motor_id}' not found, using first motor '{motor_array.motors[0].motor_id}'")
-            return motor_array.motors[0]
-        raise RuntimeError(f"No motors available and motor '{motor_id}' not found")
+def _get_esp32_connection() -> Optional[ESP32Connection]:
+    """Get or initialize the ESP32 connection (lazy loading)."""
+    global _ESP32_CONN
+    if _ESP32_CONN is None:
+        try:
+            config = _load_motor_config()
+            cfg = ESP32SerialConfig(
+                port=config.get("port", "/dev/ttyUSB0"),
+                baudrate=config.get("baudrate", 115200),
+                timeout=float(config.get("timeout", 0.5))
+            )
+            _ESP32_CONN = ESP32Connection(cfg)
+            print("[MOTORS] ESP32 connection established")
+        except Exception as e:
+            print(f"[MOTORS] Error connecting to ESP32: {e}")
+            _ESP32_CONN = False  # Mark as failed to avoid retry
+    return _ESP32_CONN if _ESP32_CONN else None
 
 def espEnable(on: Any, motor_id: str = "motor1") -> Dict[str, Any]:
     """Enable/disable the stepper driver."""
     try:
-        motor = _get_motor(motor_id)
-        return motor.enable(bool(on))
+        conn = _get_esp32_connection()
+        if not conn:
+            return {"error": "ESP32 connection not available"}
+        return conn.send({"cmd": "enable", "motor": motor_id, "value": bool(on)})
     except Exception as e:
         return {"error": str(e)}
 
 def espSetDirection(forward: Any, motor_id: str = "motor1") -> Dict[str, Any]:
     """Set motor direction: True=forward, False=reverse."""
     try:
-        motor = _get_motor(motor_id)
-        return motor.set_direction(bool(forward))
+        conn = _get_esp32_connection()
+        if not conn:
+            return {"error": "ESP32 connection not available"}
+        # Note: The new interface doesn't have a separate set_direction command
+        # Direction is controlled via the forward parameter in turn_degrees
+        return {"status": "ok", "message": "Direction is controlled via forward parameter in movement commands"}
     except Exception as e:
         return {"error": str(e)}
 
 def espSetSpeed(sps: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set continuous target speed in steps/sec (does not auto-enable)."""
+    """Set speed in steps/sec."""
     try:
-        motor = _get_motor(motor_id)
-        return motor.set_speed(float(sps))
+        conn = _get_esp32_connection()
+        if not conn:
+            return {"error": "ESP32 connection not available"}
+        return conn.send({"cmd": "set_speed", "motor": motor_id, "sps": float(sps)})
     except Exception as e:
         return {"error": str(e)}
 
 def espStart(sps: Any, forward: Optional[Any] = None, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Start continuous rotation at speed; optional direction; auto-enables."""
+    """Start continuous rotation at speed with optional direction.
+    
+    Note: The new interface doesn't support true continuous motion without a target.
+    This will start indefinite motion by moving a very large number of degrees.
+    """
     try:
-        motor = _get_motor(motor_id)
-        fwd = None if forward is None else bool(forward)
-        return motor.start(float(sps), fwd)
+        conn = _get_esp32_connection()
+        if not conn:
+            return {"error": "ESP32 connection not available"}
+        
+        # Set speed first
+        conn.send({"cmd": "set_speed", "motor": motor_id, "sps": float(sps)})
+        
+        # Move a very large distance to simulate continuous motion
+        # Using 10000 degrees with no explicit timeout to keep motors running
+        fwd = forward if forward is not None else True
+        return conn.send({
+            "cmd": "turn_degrees",
+            "motor": motor_id,
+            "degrees": 10000.0,
+            "forward": bool(fwd)
+        })
     except Exception as e:
         return {"error": str(e)}
 
 def espMoveSteps(steps: Any, sps: Optional[Any] = None, forward: Optional[Any] = None, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Move a finite number of steps; optional speed and direction override."""
+    """Move a finite number of steps with optional speed and direction override.
+    
+    Note: The new interface uses degrees instead of steps, so this converts steps to degrees
+    assuming STEPS_PER_DEGREE = 8.889 (typical for common stepper configs)
+    """
     try:
-        motor = _get_motor(motor_id)
-        spd = None if sps is None else float(sps)
-        fwd = None if forward is None else bool(forward)
-        return motor.move_steps(int(steps), spd, fwd)
+        conn = _get_esp32_connection()
+        if not conn:
+            return {"error": "ESP32 connection not available"}
+        
+        # Convert steps to degrees (8.889 steps/degree is a common default)
+        STEPS_PER_DEGREE = 8.889
+        degrees = float(steps) / STEPS_PER_DEGREE
+        
+        if sps is not None:
+            conn.send({"cmd": "set_speed", "motor": motor_id, "sps": float(sps)})
+        
+        fwd = forward if forward is not None else True
+        return conn.send({
+            "cmd": "turn_degrees",
+            "motor": motor_id,
+            "degrees": degrees,
+            "forward": bool(fwd)
+        })
     except Exception as e:
         return {"error": str(e)}
 
 def espStop(motor_id: str = "motor1") -> Dict[str, Any]:
-    """Stop motion and disable driver."""
+    """Stop motion."""
     try:
-        motor = _get_motor(motor_id)
-        return motor.stop()
+        conn = _get_esp32_connection()
+        if not conn:
+            return {"error": "ESP32 connection not available"}
+        return conn.send({"cmd": "stop", "motor": motor_id})
     except Exception as e:
         return {"error": str(e)}
 
 def espSetMicrosteps(value: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set TMC2209 microstepping value (e.g., 16, 32)."""
-    try:
-        motor = _get_motor(motor_id)
-        return motor.set_microsteps(int(value))
-    except Exception as e:
-        return {"error": str(e)}
+    """Set TMC2209 microstepping value (e.g., 16, 32).
+    
+    NOT SUPPORTED in new interface - microstepping must be configured on the ESP32 firmware.
+    """
+    return {"error": "Microstepping configuration is not supported in this interface. Configure on ESP32 firmware instead."}
 
 def espSetCurrent(mA: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set RMS motor current in milliamps."""
-    try:
-        motor = _get_motor(motor_id)
-        return motor.set_current(int(mA))
-    except Exception as e:
-        return {"error": str(e)}
+    """Set RMS motor current in milliamps.
+    
+    NOT SUPPORTED in new interface - motor current must be configured on the ESP32 firmware.
+    """
+    return {"error": "Motor current configuration is not supported in this interface. Configure on ESP32 firmware instead."}
 
 def espSetMode(mode: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set chopper mode: 'stealth' or 'spread'."""
-    try:
-        motor = _get_motor(motor_id)
-        return motor.set_mode(str(mode))
-    except Exception as e:
-        return {"error": str(e)}
+    """Set chopper mode: 'stealth' or 'spread'.
+    
+    NOT SUPPORTED in new interface - chopper mode must be configured on the ESP32 firmware.
+    """
+    return {"error": "Chopper mode configuration is not supported in this interface. Configure on ESP32 firmware instead."}
 
 def espSetAccel(sps2: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set acceleration in steps/sec^2 for ramping."""
-    try:
-        motor = _get_motor(motor_id)
-        return motor.set_accel(float(sps2))
-    except Exception as e:
-        return {"error": str(e)}
+    """Set acceleration in steps/sec^2 for ramping.
+    
+    NOT SUPPORTED in new interface - acceleration must be configured on the ESP32 firmware.
+    """
+    return {"error": "Acceleration configuration is not supported in this interface. Configure on ESP32 firmware instead."}
 
 def espStatus(motor_id: str = "motor1") -> Dict[str, Any]:
-    """Query ESP32 firmware status."""
+    """Query motor status."""
     try:
-        motor = _get_motor(motor_id)
-        return motor.status()
+        conn = _get_esp32_connection()
+        if not conn:
+            return {"error": "ESP32 connection not available"}
+        return conn.send({"cmd": "status", "motor": motor_id})
     except Exception as e:
         return {"error": str(e)}
 
 def espStatusAll() -> Dict[str, Any]:
     """Query status of all motors."""
     try:
-        motor_array = _get_motor_array()
-        return motor_array.status_all()
+        conn = _get_esp32_connection()
+        if not conn:
+            return {"error": "ESP32 connection not available"}
+        return conn.list_motors()
+    except Exception as e:
+        return {"error": str(e)}
+
+def espTurnDegrees(degrees: Any, forward: Any = True, motor_id: str = "motor1") -> Dict[str, Any]:
+    """Move motor a specified number of degrees."""
+    try:
+        conn = _get_esp32_connection()
+        if not conn:
+            return {"error": "ESP32 connection not available"}
+        return conn.send({
+            "cmd": "turn_degrees",
+            "motor": motor_id,
+            "degrees": float(degrees),
+            "forward": bool(forward)
+        })
     except Exception as e:
         return {"error": str(e)}
 
@@ -439,6 +498,10 @@ def espCommand(command_data: Dict[str, Any]) -> Dict[str, Any]:
             sps = command_data.get('sps')
             forward = command_data.get('forward')
             return espMoveSteps(steps, sps, forward, motor_id)
+        elif cmd_type == 'turn_degrees':
+            degrees = command_data.get('degrees', 0)
+            forward = command_data.get('forward', True)
+            return espTurnDegrees(degrees, forward, motor_id)
         elif cmd_type == 'stop':
             return espStop(motor_id)
         elif cmd_type == 'set_speed':
@@ -470,7 +533,7 @@ def espCommand(command_data: Dict[str, Any]) -> Dict[str, Any]:
 
 # Function mapping dictionary
 function_map = {
-    # Degub
+    # Debug
     "echo": echo,
     # Main track requests
     "trackCoordinates": trackCoordinates,
@@ -485,6 +548,7 @@ function_map = {
     "espSetSpeed": espSetSpeed,
     "espStart": espStart,
     "espMoveSteps": espMoveSteps,
+    "espTurnDegrees": espTurnDegrees,
     "espStop": espStop,
     "espSetMicrosteps": espSetMicrosteps,
     "espSetCurrent": espSetCurrent,

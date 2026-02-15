@@ -1,9 +1,8 @@
 from interfaceESP32 import ESP32Connection, ESP32Motor, ESP32SerialConfig
 import time
 
-# Use /dev/ttyUSB1
-cfg = ESP32SerialConfig(port="/dev/ttyUSB1")
-conn = ESP32Connection(cfg)
+# Auto-detect available USB port
+conn = ESP32Connection()
 
 motor = ESP32Motor.create(
     conn=conn,
