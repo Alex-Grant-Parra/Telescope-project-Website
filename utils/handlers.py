@@ -7,7 +7,7 @@ from core.camera.controller import Camera # type: ignore
 from core.networking.csrf import get_csrf_token, SESSION
 from utils.liveview_state import load_liveview_state, save_liveview_state
 from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig
-from core.hardware.tracking import trackCoordinates
+from core.hardware.tracking import trackCoordinates, stop_tracking
 
 CONFIG_FILE = "config/client_config.json"
 
@@ -537,6 +537,7 @@ function_map = {
     "echo": echo,
     # Main track requests
     "trackCoordinates": trackCoordinates,
+    "stopTracking": stop_tracking,
     "getCameraChoices": get_camera_choices,
     "setCameraSetting": setCameraSetting,
     "capturePhoto": capturePhoto,

@@ -5,7 +5,7 @@ from utils.Tools import hour_angle
 from utils.telescope_state import set_telescope_coords, get_telescope_coords, get_slew_config
 
 # Motor control
-from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig
+from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig, ESP32Motor
 
 
 POLARIS_RA_DEG = 37.95456067
@@ -18,6 +18,9 @@ _esp32_conn = None
 _tracking_thread = None
 _tracking_active = False
 _target_object = None  # {"name": str, "ra": float, "dec": float, "mag": float}
+
+# Motor initialization flag
+_motors_initialized = False
 
 
 def _get_esp32_connection():
@@ -34,6 +37,76 @@ def _get_esp32_connection():
     return _esp32_conn if _esp32_conn else None
 
 
+def _initialize_motors():
+    """Initialize motors on the ESP32 if not already done."""
+    global _motors_initialized
+    
+    if _motors_initialized:
+        return True
+    
+    conn = _get_esp32_connection()
+    if not conn:
+        print("[tracking] Cannot initialize motors: ESP32 connection not available")
+        return False
+    
+    try:
+        print("[tracking] Initializing motors on ESP32...")
+        
+        # Check if motors already exist
+        try:
+            motors = conn.list_motors()
+            print(f"[tracking] Existing motors: {motors}")
+        except Exception as e:
+            print(f"[tracking] Could not list motors: {e}")
+            motors = {}
+        
+        # Create motor1 (RA) if it doesn't exist
+        if "motor1" not in str(motors):
+            print("[tracking] Creating motor1 (RA motor)...")
+            try:
+                ESP32Motor.create(
+                    conn=conn,
+                    motor_id="motor1",
+                    step_pin=27,
+                    dir_pin=14,
+                    en_pin=26,
+                    steps_per_rev=1600,
+                    engage=True,
+                    replace=True
+                )
+                print("[tracking] Motor1 (RA) created successfully")
+            except Exception as e:
+                print(f"[tracking] Error creating motor1: {e}")
+                return False
+        
+        # Create motor2 (DEC) if it doesn't exist
+        if "motor2" not in str(motors):
+            print("[tracking] Creating motor2 (DEC motor)...")
+            try:
+                ESP32Motor.create(
+                    conn=conn,
+                    motor_id="motor2",
+                    step_pin=33,
+                    dir_pin=32,
+                    en_pin=25,
+                    steps_per_rev=1600,
+                    engage=True,
+                    replace=True
+                )
+                print("[tracking] Motor2 (DEC) created successfully")
+            except Exception as e:
+                print(f"[tracking] Warning: Could not create motor2 (DEC): {e}")
+                # Continue even if motor2 fails - might only have 1 motor
+        
+        _motors_initialized = True
+        print("[tracking] Motor initialization complete")
+        return True
+        
+    except Exception as e:
+        print(f"[tracking] Error initializing motors: {e}")
+        return False
+
+
 def _move_motors(delta_ha: float, delta_dec: float) -> None:
     """Move motors to compensate for HA and Dec deltas using multi-phase slewing.
     
@@ -46,6 +119,11 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
     conn = _get_esp32_connection()
     if not conn:
         print("[tracking] Warning: ESP32 connection not available; cannot move motors")
+        return
+    
+    # Ensure motors are initialized before trying to move them
+    if not _initialize_motors():
+        print("[tracking] Warning: Motors not initialized; cannot move")
         return
     
     config = get_slew_config()
@@ -225,7 +303,7 @@ def _continuous_tracking_loop() -> None:
 
 
 def stop_tracking() -> None:
-    """Stop continuous tracking."""
+    """Stop continuous tracking and motors."""
     global _tracking_active, _tracking_thread, _target_object
     
     if _tracking_active:
@@ -240,6 +318,29 @@ def stop_tracking() -> None:
         _tracking_thread = None
         
         print("[tracking] Tracking stopped")
+    
+    # Stop all motors
+    conn = _get_esp32_connection()
+    if conn:
+        print("[tracking] Stopping motors...")
+        try:
+            # Stop motor1 (RA)
+            try:
+                conn.send({"cmd": "stop", "motor": "motor1"})
+                print("[tracking] Motor1 (RA) stopped")
+            except Exception as e:
+                print(f"[tracking] Error stopping motor1: {e}")
+            
+            # Stop motor2 (DEC)
+            try:
+                conn.send({"cmd": "stop", "motor": "motor2"})
+                print("[tracking] Motor2 (DEC) stopped")
+            except Exception as e:
+                print(f"[tracking] Error stopping motor2: {e}")
+        except Exception as e:
+            print(f"[tracking] Error stopping motors: {e}")
+    else:
+        print("[tracking] Warning: ESP32 connection not available to stop motors")
 
 
 def _set_polaris_alignment(location: dict) -> None:
@@ -263,11 +364,19 @@ def trackCoordinates(name, ra, dec, mag):
     
     Args:
         name: Object name
-        ra: Right ascension in degrees
-        dec: Declination in degrees
+        ra: Right ascension in degrees (can be string or float)
+        dec: Declination in degrees (can be string or float)
         mag: Magnitude
     """
     global _tracking_active, _tracking_thread, _target_object
+    
+    # Convert string inputs to floats if needed
+    try:
+        ra = float(ra)
+        dec = float(dec)
+    except (ValueError, TypeError) as e:
+        print(f"[tracking] Error: Invalid RA or Dec format: {e}")
+        return
     
     print(f"[tracking] Acquiring target: {name}, RA: {ra}, Dec: {dec}, Mag: {mag}")
     
@@ -280,22 +389,27 @@ def trackCoordinates(name, ra, dec, mag):
     # Extract longitude and latitude from location JSON
     longitude = location.get('longitude')
     latitude = location.get('latitude')
+    print(f"[tracking] Observer location: Longitude={longitude}, Latitude={latitude}")
 
     # Convert RA to hour angle using current location
     TargetHA = hour_angle(ra, longitude)
     TargetDec = dec
+    print(f"[tracking] Target coordinates: HA={TargetHA:.4f}°, Dec={TargetDec:.4f}°")
 
     # Read current telescope coordinates from state
     coords = get_telescope_coords() or {}
     CurrentHA = coords.get('hour_angle', 0.0)
     CurrentDec = coords.get('declination', 0.0)
+    print(f"[tracking] Current telescope position: HA={CurrentHA:.4f}°, Dec={CurrentDec:.4f}°")
 
     # Calculate the difference between target and current coordinates
     DeltaHA = TargetHA - CurrentHA
     DeltaDec = TargetDec - CurrentDec
+    print(f"[tracking] Delta: HA={DeltaHA:.4f}°, Dec={DeltaDec:.4f}°")
 
     # Slew, refine, and center on target
     if abs(DeltaHA) > 0.001 or abs(DeltaDec) > 0.001:
+        print(f"[tracking] Movement required, calling _move_motors...")
         _move_motors(DeltaHA, DeltaDec)
         set_telescope_coords(TargetHA, TargetDec, source="tracking")
         print(f"[tracking] Telescope slewing to HA={TargetHA:.4f}°, Dec={TargetDec:.4f}°")
@@ -311,9 +425,9 @@ def trackCoordinates(name, ra, dec, mag):
         _tracking_thread = threading.Thread(target=_continuous_tracking_loop, daemon=True)
         _tracking_thread.start()
         print(f"[tracking] Continuous tracking started for {name}")
-
-    if ifAligned():
-        _set_polaris_alignment(location)
+    
+    # Note: ifAligned() check removed here - it was overwriting target coordinates with Polaris
+    # Polaris alignment should be done separately via a dedicated alignment command
 
 
 def ifAligned():
