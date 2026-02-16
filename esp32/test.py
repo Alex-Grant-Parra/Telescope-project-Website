@@ -16,6 +16,6 @@ motor = ESP32Motor.create(
 )
 
 
-motor.set_speed_sps(1)  # 200 steps per second
+motor.set_speed_sps(1600)  # 200 steps per second
 motor.turn_degrees(360)
 

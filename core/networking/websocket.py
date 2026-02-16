@@ -10,6 +10,7 @@ import os
 from datetime import datetime
 from utils.handlers import function_map
 from utils.liveview_state import is_liveview_enabled
+from utils.camera_state import camera_state, camera_scanner_task
 
 
 def _to_ws_uri(raw: str, default_subdomain: str | None = None) -> str:
@@ -221,6 +222,7 @@ async def send_frames():
     """Send live camera frames via WebSocket with automatic reconnection"""
     import fcntl
     import os as os_module
+    from core.camera.controller import Camera
     
     JPEG_START = b'\xff\xd8'
     JPEG_END = b'\xff\xd9'
@@ -229,6 +231,8 @@ async def send_frames():
     frame_interval = 1 / 10  # 10 FPS
     last_process_check_time = 0
     process_check_interval = 1.0  # Check process health every 1 second
+    consecutive_failures = 0  # Track consecutive camera start failures
+    process_start_time = 0  # Track when process was started
 
     while True:  # Outer reconnection loop
         connection_start_time = time.time()
@@ -255,12 +259,45 @@ async def send_frames():
                 
                 # Start camera capture process
                 if proc is None or proc.poll() is not None:
+                    # Check if camera is available before attempting to start
+                    if not camera_state.is_available():
+                        # Camera not available, wait and retry
+                        if proc is not None:
+                            try:
+                                proc.terminate()
+                                proc.wait(timeout=2)
+                            except:
+                                pass
+                            proc = None
+                        await asyncio.sleep(2)
+                        continue
+                    
                     if proc is not None:
                         try:
                             proc.terminate()
                             proc.wait(timeout=2)
                         except:
                             pass
+                        
+                        # Check if process failed quickly (within 3 seconds = likely startup failure)
+                        if time.time() - process_start_time < 3:
+                            consecutive_failures += 1
+                            print(f"[send_frames] Camera process failed quickly (failure #{consecutive_failures})")
+                            
+                            # After 3 consecutive quick failures, do deep cleanup
+                            if consecutive_failures >= 3:
+                                print(f"[send_frames] Multiple failures detected, performing camera reset...")
+                                cleanup_camera()
+                                await asyncio.sleep(2)
+                                Camera.releaseViewfinder()
+                                await asyncio.sleep(2)
+                                consecutive_failures = 0  # Reset counter after cleanup
+                            else:
+                                # Short delay for temporary issues
+                                await asyncio.sleep(1)
+                        else:
+                            # Process ran for a while before failing - reset failure counter
+                            consecutive_failures = 0
                     
                     try:
                         proc = subprocess.Popen([
@@ -271,13 +308,15 @@ async def send_frames():
                         flags = fcntl.fcntl(proc.stdout, fcntl.F_GETFL)
                         fcntl.fcntl(proc.stdout, fcntl.F_SETFL, flags | os_module.O_NONBLOCK)
                         
-                        # Reset process check timer when we start a new process
+                        # Track when process started and reset check timer
+                        process_start_time = time.time()
                         last_process_check_time = time.time()
                         
                         print(f"[send_frames] Started gphoto2 process (PID: {proc.pid})")
                     except Exception as proc_error:
                         print(f"[send_frames] Failed to start gphoto2: {proc_error}")
-                        await asyncio.sleep(1)
+                        consecutive_failures += 1
+                        await asyncio.sleep(2)
                         continue
                 
                 buffer = b''
@@ -500,12 +539,13 @@ async def websocketClient(cfg: dict = None):
     signal.signal(signal.SIGINT, handle_exit)
     
     try:
-        # Both tasks now handle their own reconnection logic
+        # Start all background tasks (each handles their own reconnection/error logic)
         task1 = asyncio.create_task(run_client())
         task2 = asyncio.create_task(send_frames())
+        task3 = asyncio.create_task(camera_scanner_task(check_interval=2.0))
         
-        # Wait for both tasks to complete (which should be never, unless interrupted)
-        await asyncio.gather(task1, task2)
+        # Wait for all tasks to complete (which should be never, unless interrupted)
+        await asyncio.gather(task1, task2, task3)
         
     except KeyboardInterrupt:
         print("[main] KeyboardInterrupt received, exiting and releasing camera...")

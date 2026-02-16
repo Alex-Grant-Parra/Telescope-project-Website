@@ -2,14 +2,46 @@ import time
 import requests
 import os
 import json
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Callable
+from functools import wraps
 from core.camera.controller import Camera # type: ignore
 from core.networking.csrf import get_csrf_token, SESSION
 from utils.liveview_state import load_liveview_state, save_liveview_state
+from utils.camera_state import camera_state
 from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig
 from core.hardware.tracking import trackCoordinates, stop_tracking
 
 CONFIG_FILE = "config/client_config.json"
+
+# Decorator for camera operations
+def requires_camera(operation_name: str = "operation"):
+    """Decorator that checks camera availability and handles errors for camera operations.
+    
+    Args:
+        operation_name: Name of the operation for error messages (e.g., "capture photo", "get settings")
+    
+    Returns:
+        Decorated function that returns error dict if camera unavailable or operation fails
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Check if camera is available
+            if not camera_state.is_available():
+                error_msg = f"Camera not connected - cannot {operation_name}"
+                print(f"[{func.__name__}] {error_msg}")
+                return {"error": error_msg}
+            
+            # Execute function with error handling
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                error_msg = f"Failed to {operation_name}: {str(e)}"
+                print(f"[{func.__name__}] {error_msg}")
+                return {"error": error_msg}
+        
+        return wrapper
+    return decorator
 
 # Default server URL; will be overridden by config if present
 SERVER_URL = "https://telescopes.dev"
@@ -28,6 +60,7 @@ liveview_enabled = load_liveview_state()
 def echo(message):
     return f"Echo: {message}"
 
+@requires_camera("get camera settings")
 def get_camera_choices():
     # Map setting names to gphoto2 config paths
     settings = {
@@ -43,10 +76,12 @@ def get_camera_choices():
     print(f"get_camera_choices took {time.time() - start:.2f} seconds")
     return choices
 
+@requires_camera("set camera setting")
 def setCameraSetting(label, value):
     Camera.setSetting(label, value)
     return f"Set {label} to {value}"
 
+@requires_camera("capture photo")
 def capturePhoto(currentid):
     files = Camera.capturePhoto(currentid=currentid) # Returns a list of two file names, one raw, one jpeg
 
@@ -54,7 +89,7 @@ def capturePhoto(currentid):
 
     if not isinstance(files, list) or len(files) < 2:
         print("[ERROR] Camera.capturePhoto() did not return two valid files")
-        return
+        return {"error": "Camera did not return valid files"}
 
     current_dir = os.getcwd()
     photos_dir = os.path.join(current_dir, "photos/default")
@@ -131,6 +166,7 @@ def capturePhoto(currentid):
         for f in file_data.values():
             f.close()
 
+@requires_camera("start live view")
 def startLiveView():
     global liveview_enabled
     liveview_enabled = True
@@ -143,8 +179,12 @@ def stopLiveView():
     liveview_enabled = False
     save_liveview_state(False)
     
-    # Release camera viewfinder using the Camera class
-    Camera.releaseViewfinder()
+    # Release camera viewfinder using the Camera class (if camera available)
+    if camera_state.is_available():
+        try:
+            Camera.releaseViewfinder()
+        except Exception as e:
+            print(f"[stopLiveView] Warning: Failed to release viewfinder: {e}")
     
     print("[liveview] Live view stopped.")
     return "Live view stopped"

@@ -64,7 +64,7 @@ def _initialize_motors():
         if "motor1" not in str(motors):
             print("[tracking] Creating motor1 (RA motor)...")
             try:
-                ESP32Motor.create(
+                result = ESP32Motor.create(
                     conn=conn,
                     motor_id="motor1",
                     step_pin=27,
@@ -74,16 +74,20 @@ def _initialize_motors():
                     engage=True,
                     replace=True
                 )
-                print("[tracking] Motor1 (RA) created successfully")
+                print(f"[tracking] Motor1 (RA) created successfully: {result}")
             except Exception as e:
                 print(f"[tracking] Error creating motor1: {e}")
+                import traceback
+                traceback.print_exc()
                 return False
+        else:
+            print("[tracking] Motor1 (RA) already exists")
         
         # Create motor2 (DEC) if it doesn't exist
         if "motor2" not in str(motors):
             print("[tracking] Creating motor2 (DEC motor)...")
             try:
-                ESP32Motor.create(
+                result = ESP32Motor.create(
                     conn=conn,
                     motor_id="motor2",
                     step_pin=33,
@@ -93,10 +97,14 @@ def _initialize_motors():
                     engage=True,
                     replace=True
                 )
-                print("[tracking] Motor2 (DEC) created successfully")
+                print(f"[tracking] Motor2 (DEC) created successfully: {result}")
             except Exception as e:
                 print(f"[tracking] Warning: Could not create motor2 (DEC): {e}")
+                import traceback
+                traceback.print_exc()
                 # Continue even if motor2 fails - might only have 1 motor
+        else:
+            print("[tracking] Motor2 (DEC) already exists")
         
         _motors_initialized = True
         print("[tracking] Motor initialization complete")
@@ -121,6 +129,17 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
     if not conn:
         print("[tracking] Warning: ESP32 connection not available; cannot move motors")
         return
+    
+    # Verify motors exist on ESP32 and re-initialize if needed
+    try:
+        motors = conn.list_motors()
+        if "motor1" not in str(motors) or "motor2" not in str(motors):
+            print(f"[tracking] Motors not found on ESP32 (existing: {motors}), reinitializing...")
+            global _motors_initialized
+            _motors_initialized = False  # Force re-initialization
+    except Exception as e:
+        print(f"[tracking] Could not verify motors: {e}, attempting initialization...")
+        _motors_initialized = False
     
     # Ensure motors are initialized before trying to move them
     if not _initialize_motors():
@@ -155,16 +174,20 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
         if abs_motor_delta_ha > slew_threshold_motor:
             # Phase 1: Slew at high speed
             try:
-                conn.send({"cmd": "set_speed", "motor": "motor1", "sps": config["slew_speed_sps"]})
-                conn.send({
+                print(f"[tracking] RA motor slewing: {motor_delta_ha:.4f}° (motor) for {delta_ha:.4f}° (sky) at {config['slew_speed_sps']:.1f} sps")
+                speed_resp = conn.send({"cmd": "set_speed", "motor": "motor1", "sps": config["slew_speed_sps"]})
+                print(f"[tracking] RA set_speed response: {speed_resp}")
+                move_resp = conn.send({
                     "cmd": "turn_degrees",
                     "motor": "motor1",
                     "degrees": abs_motor_delta_ha,
                     "forward": delta_ha > 0
                 })
-                print(f"[tracking] RA motor slewing: {motor_delta_ha:.4f}° (motor) for {delta_ha:.4f}° (sky) at {config['slew_speed_sps']:.1f} sps")
+                print(f"[tracking] RA turn_degrees response: {move_resp}")
             except Exception as e:
                 print(f"[tracking] Error moving RA motor: {e}")
+                import traceback
+                traceback.print_exc()
         elif abs_motor_delta_ha > center_threshold_motor:
             # Phase 2: Refine at medium speed
             try:
@@ -190,16 +213,20 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
         if abs_motor_delta_dec > slew_threshold_motor:
             # Phase 1: Slew at high speed
             try:
-                conn.send({"cmd": "set_speed", "motor": "motor2", "sps": config["slew_speed_sps"]})
-                conn.send({
+                print(f"[tracking] DEC motor slewing: {motor_delta_dec:.4f}° (motor) for {delta_dec:.4f}° (sky) at {config['slew_speed_sps']:.1f} sps")
+                speed_resp = conn.send({"cmd": "set_speed", "motor": "motor2", "sps": config["slew_speed_sps"]})
+                print(f"[tracking] DEC set_speed response: {speed_resp}")
+                move_resp = conn.send({
                     "cmd": "turn_degrees",
                     "motor": "motor2",
                     "degrees": abs_motor_delta_dec,
                     "forward": delta_dec > 0
                 })
-                print(f"[tracking] DEC motor slewing: {motor_delta_dec:.4f}° (motor) for {delta_dec:.4f}° (sky) at {config['slew_speed_sps']:.1f} sps")
+                print(f"[tracking] DEC turn_degrees response: {move_resp}")
             except Exception as e:
                 print(f"[tracking] Error moving DEC motor: {e}")
+                import traceback
+                traceback.print_exc()
         elif abs_motor_delta_dec > center_threshold_motor:
             # Phase 2: Refine at medium speed
             try:
