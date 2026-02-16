@@ -209,3 +209,12 @@ class ESP32Motor:
 	def status(self) -> Dict[str, Any]:
 		return self.conn.send({"cmd": "status", "motor": self.motor_id})
 
+	def get_position(self) -> int:
+		"""Get the current position of the motor in steps (signed integer)."""
+		result = self.conn.send({"cmd": "get_position", "motor": self.motor_id})
+		return result.get("position", 0)
+
+	def reset_position(self) -> Dict[str, Any]:
+		"""Reset the motor position counter to zero."""
+		return self.conn.send({"cmd": "reset_position", "motor": self.motor_id})
+

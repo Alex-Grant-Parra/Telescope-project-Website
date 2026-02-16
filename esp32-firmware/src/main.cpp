@@ -9,6 +9,7 @@ class Motor {
 private:
   bool enabled;
   volatile bool stopRequested;
+  volatile int32_t position;  // Position tracker in steps (signed for direction)
 
 public:
   int stepPin;
@@ -21,7 +22,7 @@ public:
 
   Motor(int step, int dir, int en, uint32_t stepsPerRev = STEPS_PER_REVOLUTION)
     : stepPin(step), dirPin(dir), enPin(en), enabled(false), moving(false),
-      stopRequested(false), stepsPerRevolution(stepsPerRev), stepDelayUs(1250),
+      stopRequested(false), position(0), stepsPerRevolution(stepsPerRev), stepDelayUs(1250),
       stepTaskHandle(nullptr) {
   }
 
@@ -78,6 +79,14 @@ public:
     return stepsPerRevolution;
   }
 
+  int32_t getPosition() const {
+    return position;
+  }
+
+  void resetPosition() {
+    position = 0;
+  }
+
   void stop() {
     if (!moving) {
       return;
@@ -104,9 +113,10 @@ public:
     struct StepParams {
       Motor* motor;
       uint32_t stepsNeeded;
+      bool forward;
     };
     
-    StepParams* params = new StepParams{this, stepsNeeded};
+    StepParams* params = new StepParams{this, stepsNeeded, forward};
     
     xTaskCreatePinnedToCore(
       stepTask,           // Task function
@@ -123,12 +133,17 @@ public:
     struct StepParams {
       Motor* motor;
       uint32_t stepsNeeded;
+      bool forward;
     };
     
     StepParams* params = (StepParams*)pvParameters;
     Motor* motor = params->motor;
     uint32_t stepsNeeded = params->stepsNeeded;
+    bool forward = params->forward;
     delete params;
+
+    // Determine position increment based on direction
+    int32_t positionDelta = forward ? 1 : -1;
 
     for (uint32_t i = 0; i < stepsNeeded; i++) {
       if (motor->stopRequested) {
@@ -139,6 +154,9 @@ public:
       delayMicroseconds(PULSE_WIDTH_US);
       digitalWrite(motor->stepPin, LOW);
       delayMicroseconds(motor->stepDelayUs - PULSE_WIDTH_US);
+      
+      // Update position counter
+      motor->position += positionDelta;
     }
 
     motor->moving = false;
@@ -215,6 +233,7 @@ void sendOkStatus(const String& motorId, Motor* motor) {
   data["moving"] = motor->isMoving();
   data["step_delay_us"] = motor->getStepDelayUs();
   data["steps_per_rev"] = motor->getStepsPerRevolution();
+  data["position"] = motor->getPosition();
   serializeJson(resp, Serial);
   Serial.println();
 }
@@ -432,6 +451,21 @@ void handleCommand(const String& line) {
   }
   if (strcmp(cmd, "status") == 0) {
     sendOkStatus(motorId, motor);
+    return;
+  }
+  if (strcmp(cmd, "get_position") == 0) {
+    StaticJsonDocument<128> resp;
+    resp["status"] = "ok";
+    JsonObject data = resp.createNestedObject("data");
+    data["motor"] = motorId;
+    data["position"] = motor->getPosition();
+    serializeJson(resp, Serial);
+    Serial.println();
+    return;
+  }
+  if (strcmp(cmd, "reset_position") == 0) {
+    motor->resetPosition();
+    sendOkEmpty();
     return;
   }
 
