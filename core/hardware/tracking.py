@@ -484,6 +484,13 @@ def trackCoordinates(name, ra, dec, mag):
     print(f"[tracking] Delta to move: HA={DeltaHA:.4f}°, Dec={DeltaDec:.4f}°")
     print(f"[tracking] Absolute delta: HA={abs(DeltaHA):.4f}°, Dec={abs(DeltaDec):.4f}°")
 
+    # Poll ifAligned() until telescope is polar aligned
+    print(f"[tracking] Waiting for polar alignment before tracking...")
+    while not ifAligned():
+        print(f"[tracking] Telescope not aligned. Checking again in 1 second...")
+        time.sleep(1)
+    print(f"[tracking] Telescope is aligned. Proceeding with tracking.")
+
     # Slew, refine, and center on target
     if abs(DeltaHA) > 0.001 or abs(DeltaDec) > 0.001:
         print(f"[tracking] Movement required, calling _move_motors...")

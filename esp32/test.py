@@ -1,5 +1,6 @@
 from interfaceESP32 import ESP32Connection, ESP32Motor, ESP32SerialConfig
 import time
+import random
 
 # Auto-detect available USB port
 conn = ESP32Connection()
@@ -14,8 +15,4 @@ motor = ESP32Motor.create(
     engage=True,
     replace=True,
 )
-
-
-motor.set_speed_sps(1600)  # 200 steps per second
-motor.turn_degrees(360)
 
