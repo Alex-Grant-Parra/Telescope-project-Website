@@ -168,6 +168,20 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
     print(f"[tracking] Motor deltas (with gear ratios {ra_gear_ratio}:1, {dec_gear_ratio}:1): HA={motor_delta_ha:.4f}°, Dec={motor_delta_dec:.4f}°")
     
     try:
+        # Engage motors before movement (they may be disengaged for safety)
+        print("[tracking] Engaging motors before movement...")
+        try:
+            conn.send({"cmd": "engage", "motor": "motor1"})
+            print("[tracking] Motor1 (RA) engaged")
+        except Exception as e:
+            print(f"[tracking] Error engaging motor1: {e}")
+        
+        try:
+            conn.send({"cmd": "engage", "motor": "motor2"})
+            print("[tracking] Motor2 (DEC) engaged")
+        except Exception as e:
+            print(f"[tracking] Error engaging motor2: {e}")
+        
         # Each motor moves independently at the appropriate speed for its distance
         
         # RA Motor: Choose speed based on distance
