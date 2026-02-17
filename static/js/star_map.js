@@ -135,6 +135,79 @@ const clearSearchBtn = document.getElementById('clear-search-btn');
 let searchedObject = null;
 let highlightAnimation = 0;
 
+// Telescope position tracking
+let telescopePosition = null;
+let telescopePositionUpdateInterval = null;
+let telescopePositionAvailable = false; // Track if we've successfully fetched at least once
+const telescopeMarkerSize = 25;
+const telescopeMarkerColor = "#00ff00"; // Green for telescope position
+
+function updateTelescopePosition() {
+    fetch('/api/telescope_position')
+        .then(response => {
+            if (response.status === 401) {
+                // Not authenticated, stop polling
+                console.warn('Telescope position: Not authenticated');
+                if (telescopePositionUpdateInterval) clearInterval(telescopePositionUpdateInterval);
+                return null;
+            }
+            // For 422 (no telescope selected), keep polling in case one gets selected
+            if (response.status === 422) {
+                if (telescopePositionAvailable) {
+                    console.debug('Telescope position: No telescope currently selected (422)');
+                    telescopePositionAvailable = false;
+                }
+                telescopePosition = null;
+                return null;
+            }
+            if (!response.ok) {
+                console.debug('Telescope position API returned status:', response.status);
+                return null;
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data && data.status === 'success' && data.ra !== null && data.dec !== null) {
+                telescopePosition = {
+                    ra: data.ra,
+                    dec: data.dec,
+                    timestamp: Date.now()
+                };
+                if (!telescopePositionAvailable) {
+                    telescopePositionAvailable = true;
+                    console.log('%c✓ Telescope position now available!', 'color: green; font-weight: bold;', `RA: ${data.ra}°, DEC: ${data.dec}°`);
+                }
+                draw();
+            } else if (data && data.status === 'error') {
+                console.debug('Telescope position error:', data.message);
+                telescopePosition = null;
+                telescopePositionAvailable = false;
+            }
+        })
+        .catch(err => {
+            // Silently fail - just don't display telescope marker, but keep trying
+            console.debug('Telescope position update failed:', err.message);
+        });
+}
+
+function startTelescopePositionTracking() {
+    // Update immediately
+    updateTelescopePosition();
+    
+    // Then update every 5 seconds to reduce connection load
+    if (telescopePositionUpdateInterval) clearInterval(telescopePositionUpdateInterval);
+    telescopePositionUpdateInterval = setInterval(updateTelescopePosition, 5000);
+}
+
+function stopTelescopePositionTracking() {
+    if (telescopePositionUpdateInterval) {
+        clearInterval(telescopePositionUpdateInterval);
+        telescopePositionUpdateInterval = null;
+    }
+    telescopePosition = null;
+    telescopePositionAvailable = false;
+}
+
 // Controls inversion state (affects drag deltas only)
 let invertControls = false;
 
@@ -1299,6 +1372,67 @@ function draw() {
             }
         }
     }
+
+    // Draw telescope position marker
+    if (telescopePosition) {
+        const v = radecToXYZ(telescopePosition.ra, telescopePosition.dec);
+        const w0 = Mview[0], w1 = Mview[1], w2 = Mview[2];
+        const x = w0[0]*v[0] + w0[1]*v[1] + w0[2]*v[2];
+        const y = w1[0]*v[0] + w1[1]*v[1] + w1[2]*v[2];
+        const z = w2[0]*v[0] + w2[1]*v[1] + w2[2]*v[2];
+        if (z > 0) {
+            const [cx, cy] = project([x, y, z]);
+            const scaledMarkerSize = telescopeMarkerSize * zoom;
+            
+            // Draw a distinctive crosshair/scope marker
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = telescopeMarkerColor;
+            ctx.lineWidth = 2;
+            
+            // Outer circle
+            ctx.beginPath();
+            ctx.arc(cx, cy, scaledMarkerSize, 0, 2*Math.PI);
+            ctx.stroke();
+            
+            // Crosshairs
+            const crossSize = scaledMarkerSize * 1.3;
+            ctx.beginPath();
+            ctx.moveTo(cx - crossSize, cy);
+            ctx.lineTo(cx + crossSize, cy);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - crossSize);
+            ctx.lineTo(cx, cy + crossSize);
+            ctx.stroke();
+            
+            // Central dot
+            ctx.fillStyle = telescopeMarkerColor;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 3, 0, 2*Math.PI);
+            ctx.fill();
+            
+            // Label with coordinates
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = telescopeMarkerColor;
+            ctx.font = "12px monospace";
+            ctx.textAlign = "left";
+            const raHours = telescopePosition.ra / 15;
+            const raH = Math.floor(raHours);
+            const raM = Math.floor((raHours - raH) * 60);
+            const raS = ((raHours - raH) * 60 - raM) * 60;
+            
+            const decSign = telescopePosition.dec >= 0 ? '+' : '-';
+            const decAbs = Math.abs(telescopePosition.dec);
+            const decD = Math.floor(decAbs);
+            const decM = Math.floor((decAbs - decD) * 60);
+            const decS = ((decAbs - decD) * 60 - decM) * 60;
+            
+            const raStr = `${raH}h${raM}m${raS.toFixed(1)}s`;
+            const decStr = `${decSign}${decD}°${decM}'${decS.toFixed(1)}"`;
+            ctx.fillText(`Telescope: ${raStr}`, cx + crossSize + 10, cy - 10);
+            ctx.fillText(decStr, cx + crossSize + 10, cy + 5);
+        }
+    }
 }
 
 // Update cursor coordinate display
@@ -2163,6 +2297,39 @@ function searchObject() {
         return;
     }
 
+    // Check if searching for "telescope"
+    if (searchValue.toLowerCase() === 'telescope') {
+        if (!telescopePosition && !telescopePositionAvailable) {
+            // Try fetching once more before giving up
+            fetch('/api/telescope_position')
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.status === 'success' && data.ra !== null && data.dec !== null) {
+                        telescopePosition = {
+                            ra: data.ra,
+                            dec: data.dec,
+                            timestamp: Date.now()
+                        };
+                        telescopePositionAvailable = true;
+                        console.log('Telescope position fetched on demand:', data.ra, data.dec);
+                        performTelescopeSearch();
+                    } else {
+                        console.warn('Telescope position search failed:', data.message || 'Unknown error');
+                        alert(`Telescope position not available: ${data.message || 'No telescope selected or unable to contact telescope'}`);
+                    }
+                })
+                .catch(err => {
+                    console.error('Telescope search error:', err);
+                    alert('Error fetching telescope position. Check browser console for details.');
+                });
+        } else if (telescopePosition) {
+            performTelescopeSearch();
+        } else {
+            alert('Telescope position not available. Make sure a telescope is selected.');
+        }
+        return;
+    }
+
     fetch('/interface/search_object', {
         method: 'POST',
         headers: {
@@ -2380,6 +2547,43 @@ function clearSearch() {
     draw();
 }
 
+// Helper function to perform telescope search
+function performTelescopeSearch() {
+    if (!telescopePosition) {
+        console.error('performTelescopeSearch called but telescopePosition is null');
+        alert('Telescope position not available.');
+        return;
+    }
+    
+    // Create a searchedObject from telescopePosition
+    const telescopeObj = {
+        name: 'Telescope',
+        ra: telescopePosition.ra,
+        dec: telescopePosition.dec,
+        mag: -99, // Very bright so it shows up
+        type: 'telescope'
+    };
+    
+    // Set as searched object and move camera to it
+    searchedObject = telescopeObj;
+    highlightAnimation = 0;
+    moveToObject(telescopeObj);
+    
+    // Show info
+    const raHMS = decimalToHMS(telescopeObj.ra);
+    const decDMS = decimalToDMS(telescopeObj.dec);
+    
+    window.currentStarData = { ...telescopeObj };
+    
+    document.getElementById('info').innerHTML = 
+        `<b>🔍 Telescope Position</b><br>RA: ${raHMS}<br>DEC: ${decDMS}<br>
+         <div style="margin-top: 5px; display: flex; gap: 4px;">
+            <button onclick="clearSearch()" style="padding: 4px 8px; background: #999; color: white; border: none; border-radius: 3px; cursor: pointer; flex: 1;">Clear</button>
+         </div>`;
+    
+    draw();
+}
+
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
     console.log('%cStar Map JS loaded v2025-10-27-1', 'color:#0bf');
@@ -2447,6 +2651,8 @@ window.addEventListener('DOMContentLoaded', () => {
             setTimeout(hideLoading, 200);
             // Begin background staged prefetch so data is ready before user requests it
             stagedPrefetchAfterFirstDraw();
+            // Start telescope position tracking
+            startTelescopePositionTracking();
             // Start animation loop for search highlighting
             function animate() {
                 if (searchedObject) {

@@ -190,10 +190,16 @@ def search_object():
 
 
 def format_celestial_data(name, data):
+    ra_hours = convert.HrMinSecToDegrees(data['ra'][0], data['ra'][1], data['ra'][2])
+    ra_degrees = ra_hours * 15  # Convert hours to degrees (360°/24h = 15°/h)
+    
+    dec_degrees = convert.HrMinSecToDegrees(data['dec'][0], data['dec'][1], data['dec'][2])
+    # DEC doesn't need the *15 factor - it's already degrees:arcminutes:arcseconds
+    
     return {
         "Name": name.capitalize(),
-        "RA": convert.HrMinSecToDegrees(data['ra'][0], data['ra'][1], data['ra'][2]),  # Formatting RA
-        "DEC": convert.HrMinSecToDegrees(data['dec'][0], data['dec'][1], data['dec'][2]),  # Formatting DEC
+        "RA": ra_degrees,
+        "DEC": dec_degrees,
         "V-Mag": data["vmag"]
     }
 

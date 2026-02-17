@@ -475,3 +475,90 @@ def stop_tracking():
             "error": str(e),
             "message": f"Failed to stop tracking: {str(e)}"
         }), 500
+
+@star_map_bp.route("/api/telescope_position", methods=["GET"])
+def get_telescope_position():
+    """Get the current position (RA/DEC) of the telescope"""
+    # Check if a telescope is selected
+    selected_telescope = session.get('selected_telescope')
+    telescope_id = selected_telescope.get('telescope_id') if selected_telescope else None
+    
+    if not telescope_id:
+        return jsonify({
+            "status": "error",
+            "error": "No telescope selected",
+            "message": "No telescope selected"
+        }), 422
+    
+    try:
+        # Create telescope instance and get current coordinates
+        t = Telescope(telescope_id)
+        print(f"[TELESCOPE] Getting coordinates for {telescope_id}", flush=True)
+        coords = t.motor.get_current_coordinates()
+        
+        print(f"[TELESCOPE] Got response: {coords}", flush=True)
+        
+        # Extract RA and DEC from various possible response formats
+        ra = None
+        dec = None
+        
+        if coords and isinstance(coords, dict):
+            # Try nested "result" first (from /sendCommand wrapper)
+            if "result" in coords:
+                result = coords["result"]
+                if isinstance(result, dict):
+                    ra = result.get("current_right_ascension") or result.get("ra")
+                    dec = result.get("current_declination") or result.get("dec")
+            
+            # Fall back to top-level keys
+            if ra is None or dec is None:
+                ra = ra or coords.get("current_right_ascension") or coords.get("ra")
+                dec = dec or coords.get("current_declination") or coords.get("dec")
+        
+        print(f"[TELESCOPE] Extracted RA: {ra}, DEC: {dec}", flush=True)
+        
+        if ra is not None and dec is not None:
+            try:
+                ra_float = float(ra)
+                dec_float = float(dec)
+                print(f"[TELESCOPE] Success! RA: {ra_float}°, DEC: {dec_float}°", flush=True)
+                return jsonify({
+                    "status": "success",
+                    "ra": ra_float,
+                    "dec": dec_float,
+                    "telescope_id": telescope_id
+                })
+            except (ValueError, TypeError) as e:
+                return jsonify({
+                    "status": "error",
+                    "error": "Failed to parse coordinates as numbers",
+                    "message": f"RA: {ra}, DEC: {dec} - {str(e)}",
+                    "telescope_id": telescope_id
+                }), 500
+        else:
+            return jsonify({
+                "status": "error",
+                "error": "No coordinates in response",
+                "message": f"Response structure: {coords}",
+                "telescope_id": telescope_id
+            }), 500
+            
+    except Exception as e:
+        print(f"[TELESCOPE POSITION ERROR] Failed to get coordinates: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "message": f"Failed to get telescope position: {str(e)}"
+        }), 500
+
+@star_map_bp.route("/api/debug/session", methods=["GET"])
+def debug_session():
+    """Debug endpoint to check session state"""
+    selected_telescope = session.get('selected_telescope')
+    return jsonify({
+        "status": "success",
+        "selected_telescope": selected_telescope,
+        "session_keys": list(session.keys())
+    })
