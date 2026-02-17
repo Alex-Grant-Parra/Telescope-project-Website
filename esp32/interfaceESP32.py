@@ -190,6 +190,11 @@ class ESP32Motor:
 		return self.conn.send({"cmd": "set_speed", "motor": self.motor_id, "sps": float(steps_per_sec)})
 
 	def turn_degrees(self, degrees: float, forward: bool = True, timeout: Optional[float] = None, waitUntilFinished: bool = False) -> Dict[str, Any]:
+		# Handle negative degrees (flip direction)
+		if degrees < 0:
+			degrees = abs(degrees)
+			forward = not forward
+		
 		# Calculate expected duration
 		steps = int((degrees / 360.0) * self._steps_per_rev)
 		duration_s = (steps * self._current_speed_us) / 1_000_000

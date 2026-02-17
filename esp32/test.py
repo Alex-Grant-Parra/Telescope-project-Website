@@ -15,3 +15,6 @@ motor = ESP32Motor.create(
     engage=True,
     replace=True,
 )
+
+motor.stop()
+motor.disengage()
