@@ -228,6 +228,10 @@ class MotorController:
         """Query status of all motors on the ESP32."""
         return self.telescope.send_command("espStatusAll", args=[])
 
+    def get_current_coordinates(self):
+        """Get current telescope coordinates (right ascension and declination)."""
+        return self.telescope.send_command("getCurrentCoordinates", args=[])
+
 
 # Convenience helper
 def current_telescope() -> Telescope:

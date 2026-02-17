@@ -1,3 +1,4 @@
 static/videos/*.mp4 filter=lfs diff=lfs merge=lfs -text
 infrastructure/*.exe filter=lfs diff=lfs merge=lfs -text
 infrastructure/cloudflared.exe filter=lfs diff=lfs merge=lfs -text
+*.moon linguist-language=Text
