@@ -196,7 +196,7 @@ function startTelescopePositionTracking() {
     
     // Then update every 5 seconds to reduce connection load
     if (telescopePositionUpdateInterval) clearInterval(telescopePositionUpdateInterval);
-    telescopePositionUpdateInterval = setInterval(updateTelescopePosition, 5000);
+    telescopePositionUpdateInterval = setInterval(updateTelescopePosition, 1000);
 }
 
 function stopTelescopePositionTracking() {
@@ -2229,11 +2229,9 @@ function trackObject(name, ra, dec, mag) {
                         mag: mag
                     }));
                     
-                    // Always redirect to interface immediately
-                    window.location.href = '/interface';
                 } else if (data.redirect) {
-                    // No telescope selected - redirect to interface
-                    window.location.href = '/interface';
+                    // No telescope selected - inform user
+                    alert('Please select a telescope in the Interface page to begin tracking');
                 } else {
                     console.error('Tracking failed:', data);
                     alert(data.message || 'Failed to start tracking. Please try again.');
@@ -2272,11 +2270,11 @@ function trackObject(name, ra, dec, mag) {
                         mag: mag
                     }));
                     
-                    // Always redirect to interface immediately
-                    window.location.href = '/interface';
+                    // Show success message instead of redirecting
+                    alert(`✓ Now tracking ${name}`);
                 } else if (data.redirect) {
-                    // No telescope selected - redirect to interface
-                    window.location.href = '/interface';
+                    // No telescope selected - inform user
+                    alert('Please select a telescope in the Interface page to begin tracking');
                 } else {
                     console.error('Tracking failed:', data);
                     alert(data.message || 'Failed to start tracking. Please try again.');
