@@ -420,6 +420,9 @@ def _continuous_tracking_loop() -> None:
     
     print("[tracking] Continuous tracking thread started")
     
+    # Track whether we've started sidereal tracking
+    sidereal_tracking_active = False
+    
     while _tracking_active:
         try:
             if _target_object is None:
@@ -433,6 +436,69 @@ def _continuous_tracking_loop() -> None:
             
             # Update hour angle to reflect Earth's rotation
             update_hour_angle()
+            
+            # Check if we're close enough to target to start sidereal tracking
+            coords = get_telescope_coords() or {}
+            target_coords = get_target_coords() or {}
+            current_ra = coords.get('right_ascension', 0.0)
+            current_dec = coords.get('declination', 0.0)
+            target_ra = target_coords.get('right_ascension', 0.0)
+            target_dec = target_coords.get('declination', 0.0)
+            
+            # Get location for HA calculation
+            from utils.location import get_current_location
+            from utils.Tools import hour_angle
+            location = get_current_location()
+            
+            if location:
+                longitude = location.get('longitude', 0)
+                current_ha = hour_angle(current_ra, longitude)
+                target_ha = hour_angle(target_ra, longitude)
+                
+                delta_ha = target_ha - current_ha  # Keep sign for direction
+                delta_dec = target_dec - current_dec
+                abs_delta_ha = abs(delta_ha)
+                abs_delta_dec = abs(delta_dec)
+                
+                config = get_slew_config()
+                centered_threshold = config.get("centered_threshold_degrees", 0.01)
+                refine_threshold = config.get("center_threshold_degrees", 0.1)
+                
+                # If we're centered on target and not yet tracking, start sidereal tracking
+                if abs_delta_ha < centered_threshold and abs_delta_dec < centered_threshold and not sidereal_tracking_active:
+                    print("[tracking] Target reached - starting sidereal tracking")
+                    try:
+                        conn = _get_esp32_connection()
+                        if conn:
+                            motor1 = ESP32Motor(conn, "motor1")
+                            motor1.set_speed_sps(config["tracking_speed_sps"])
+                            # Command RA motor to turn continuously east (forward) at sidereal rate
+                            # Use a large angle value so it keeps turning
+                            motor1.turn_degrees(360000.0, forward=True)  # 1000 revolutions worth
+                            print(f"[tracking] RA motor set to sidereal tracking at {config['tracking_speed_sps']:.1f} sps")
+                            sidereal_tracking_active = True
+                    except Exception as e:
+                        print(f"[tracking] Error starting sidereal tracking: {e}")
+                
+                # If we're significantly off target and not moving, issue a correction slew
+                elif abs_delta_ha > refine_threshold or abs_delta_dec > refine_threshold:
+                    # Check if motors are idle (position not changing)
+                    # If so, we need to correct - previous slew was based on bad starting position
+                    print(f"[tracking] Off target: HA error={delta_ha:.4f}°, Dec error={delta_dec:.4f}°")
+                    print(f"[tracking] Issuing correction slew...")
+                    try:
+                        conn = _get_esp32_connection()
+                        if conn:
+                            motor1 = ESP32Motor(conn, "motor1")
+                            motor2 = ESP32Motor(conn, "motor2")
+                            # Reset motor positions to establish new baseline
+                            motor1.reset_position()
+                            motor2.reset_position()
+                            # Move by the current error
+                            _move_motors(delta_ha, delta_dec)
+                            print(f"[tracking] Correction slew commanded")
+                    except Exception as e:
+                        print(f"[tracking] Error issuing correction slew: {e}")
             
             time.sleep(1.0)  # Update every second for live feedback
         
