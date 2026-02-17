@@ -2,7 +2,7 @@ import threading
 import time
 from utils.location import get_current_location
 from utils.Tools import hour_angle
-from utils.telescope_state import set_telescope_coords, get_telescope_coords, get_slew_config
+from utils.telescope_state import set_telescope_coords, get_telescope_coords, get_slew_config, set_target_coords, get_target_coords, update_hour_angle
 
 # Motor control
 from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig, ESP32Motor
@@ -18,6 +18,10 @@ _esp32_conn = None
 _tracking_thread = None
 _tracking_active = False
 _target_object = None  # {"name": str, "ra": float, "dec": float, "mag": float}
+
+# Hour angle updater thread (keeps hour angle in sync with Earth's rotation)
+_hour_angle_thread = None
+_hour_angle_updater_active = False
 
 # Motor initialization flag
 _motors_initialized = False
@@ -113,6 +117,65 @@ def _initialize_motors():
     except Exception as e:
         print(f"[tracking] Error initializing motors: {e}")
         return False
+
+
+def _hour_angle_updater_loop() -> None:
+    """Background thread that continuously updates hour angle to reflect Earth's rotation.
+    
+    This runs independently and keeps the current_hour_angle in sync with Earth's rotation,
+    even when the telescope is not actively tracking a target.
+    Runs every second to ensure accurate hour angle at all times.
+    """
+    global _hour_angle_updater_active
+    
+    print("[tracking] Hour angle updater thread started")
+    
+    while _hour_angle_updater_active:
+        try:
+            # Update the hour angle in state to reflect Earth's rotation
+            # RA stays constant, but HA changes as Earth rotates
+            updated_ha = update_hour_angle()
+            
+            # Update every second to keep HA current
+            time.sleep(1.0)
+        
+        except Exception as e:
+            print(f"[tracking] Error in hour angle updater loop: {e}")
+            time.sleep(1.0)
+    
+    print("[tracking] Hour angle updater thread stopped")
+
+
+def _start_hour_angle_updater() -> None:
+    """Start the background hour angle updater thread."""
+    global _hour_angle_thread, _hour_angle_updater_active
+    
+    if _hour_angle_updater_active:
+        return  # Already running
+    
+    if _hour_angle_thread and _hour_angle_thread.is_alive():
+        return  # Thread still alive
+    
+    _hour_angle_updater_active = True
+    _hour_angle_thread = threading.Thread(target=_hour_angle_updater_loop, daemon=True)
+    _hour_angle_thread.start()
+    print("[tracking] Hour angle updater started")
+
+
+def _stop_hour_angle_updater() -> None:
+    """Stop the background hour angle updater thread."""
+    global _hour_angle_thread, _hour_angle_updater_active
+    
+    if not _hour_angle_updater_active:
+        return
+    
+    _hour_angle_updater_active = False
+    
+    if _hour_angle_thread and _hour_angle_thread.is_alive():
+        _hour_angle_thread.join(timeout=5)
+    
+    _hour_angle_thread = None
+    print("[tracking] Hour angle updater stopped")
 
 
 def _move_motors(delta_ha: float, delta_dec: float) -> None:
@@ -362,6 +425,9 @@ def _continuous_tracking_loop() -> None:
             # Include target HA for live tracking display (HA changes as Earth rotates)
             set_telescope_coords(target_ra, target_dec, source="tracking", hour_angle=target_ha)
             
+            # Also update hour angle for non-tracking periods (Earth's rotation)
+            update_hour_angle()
+            
             time.sleep(1.0)  # Update every second for live feedback
         
         except Exception as e:
@@ -504,11 +570,15 @@ def trackCoordinates(name, ra, dec, mag):
     # Store target for continuous tracking
     _target_object = {"name": name, "ra": ra, "dec": dec, "mag": mag}
     
+    # Update target coordinates in state
+    set_target_coords(ra, dec, source="tracking")
+    
     # Start continuous tracking thread if not already running
     if not _tracking_active:
         _tracking_active = True
         _tracking_thread = threading.Thread(target=_continuous_tracking_loop, daemon=True)
         _tracking_thread.start()
+        _start_hour_angle_updater()  # Also start the background hour angle updater
         print(f"[tracking] Continuous tracking started for {name}")
     
     # Note: ifAligned() check removed here - it was overwriting target coordinates with Polaris
@@ -520,4 +590,7 @@ def ifAligned():
     # will return true if the telescope is polar aligned, otherwise false
     return True
 
+
+# Automatically start the hour angle updater when the module is loaded
+_start_hour_angle_updater()
 
