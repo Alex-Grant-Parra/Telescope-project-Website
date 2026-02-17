@@ -97,7 +97,8 @@ class ESP32Connection:
 		except json.JSONDecodeError as exc:
 			raise RuntimeError(f"Invalid JSON from ESP32: {resp}") from exc
 		if data.get("status") != "ok":
-			raise RuntimeError(data.get("message", "ESP32 error"))
+			error_msg = data.get("message", "ESP32 error")
+			raise RuntimeError(f"ESP32 error: {error_msg} | Full response: {data}")
 		return data.get("data", {})
 
 	def list_motors(self) -> Dict[str, Any]:
@@ -212,13 +213,21 @@ class ESP32Motor:
 			timeout=timeout,
 		)
 		
-		# Wait for the calculated duration, then verify with single query
+		# Poll until motor reaches target position
 		if waitUntilFinished:
-			time.sleep(duration_s)
-			final_position = self.get_position_degrees()
-			result["final_position"] = final_position
+			tolerance = 0.5  # degrees
+			poll_interval = 0.1  # seconds
+			
+			while True:
+				current_position = self.get_position_degrees()
+				if abs(current_position - target_position) <= tolerance:
+					break
+				
+				time.sleep(poll_interval)
+			
+			result["final_position"] = current_position
 			result["target_position"] = target_position
-			result["position_error"] = abs(final_position - target_position)
+			result["position_error"] = abs(current_position - target_position)
 		
 		return result
 

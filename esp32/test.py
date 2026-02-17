@@ -15,8 +15,3 @@ motor = ESP32Motor.create(
     engage=True,
     replace=True,
 )
-
-motor.stop()
-motor.set_speed_sps(2800)
-motor.turn_degrees(720, forward=True)
-motor.turn_degrees(720, forward=False)
