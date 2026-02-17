@@ -1,6 +1,7 @@
 """Camera availability state management"""
 import asyncio
 import time
+import subprocess
 from threading import Lock
 
 class CameraState:
@@ -21,6 +22,7 @@ class CameraState:
             return
         self._available = False
         self._last_check_time = 0
+        self._command_lock = Lock()
         self._initialized = True
     
     def is_available(self) -> bool:
@@ -42,6 +44,25 @@ class CameraState:
         """Get timestamp of last availability check"""
         with self._lock:
             return self._last_check_time
+    
+    def pause_liveview_for_command(self):
+        """Temporarily pause live view to execute a camera command.
+        
+        This kills any running gphoto2 processes and waits for them to fully terminate.
+        Live view will automatically restart after the command completes.
+        """
+        try:
+            # Kill any running gphoto2 processes
+            print("[camera_state] Pausing live view for camera command...")
+            subprocess.run(["pkill", "-9", "gphoto2"], capture_output=True, timeout=2)
+            # Wait for processes to fully terminate and camera to be released
+            time.sleep(0.5)
+        except Exception as e:
+            print(f"[camera_state] Error pausing live view: {e}")
+    
+    def get_command_lock(self):
+        """Get the lock for executing camera commands"""
+        return self._command_lock
 
 
 # Global singleton instance

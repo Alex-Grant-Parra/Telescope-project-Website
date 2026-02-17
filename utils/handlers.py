@@ -69,21 +69,42 @@ def get_camera_choices():
         # Add more settings as needed
     }
     choices = {}
-    start = time.time()
-    for label, path in settings.items():
-        result = Camera.getSettingChoices(label, path)
-        choices[label] = result if result else []
-    print(f"get_camera_choices took {time.time() - start:.2f} seconds")
+    
+    # Use camera lock to prevent conflicts with live view
+    with camera_state.get_command_lock():
+        # Check if live view is enabled and pause it
+        if load_liveview_state():
+            camera_state.pause_liveview_for_command()
+        
+        start = time.time()
+        for label, path in settings.items():
+            result = Camera.getSettingChoices(label, path)
+            choices[label] = result if result else []
+        print(f"get_camera_choices took {time.time() - start:.2f} seconds")
+    
     return choices
 
 @requires_camera("set camera setting")
 def setCameraSetting(label, value):
-    Camera.setSetting(label, value)
+    # Use camera lock to prevent conflicts with live view
+    with camera_state.get_command_lock():
+        # Check if live view is enabled and pause it
+        if load_liveview_state():
+            camera_state.pause_liveview_for_command()
+        
+        Camera.setSetting(label, value)
+    
     return f"Set {label} to {value}"
 
 @requires_camera("capture photo")
 def capturePhoto(currentid):
-    files = Camera.capturePhoto(currentid=currentid) # Returns a list of two file names, one raw, one jpeg
+    # Use camera lock to prevent conflicts with live view
+    with camera_state.get_command_lock():
+        # Check if live view is enabled and pause it
+        if load_liveview_state():
+            camera_state.pause_liveview_for_command()
+        
+        files = Camera.capturePhoto(currentid=currentid) # Returns a list of two file names, one raw, one jpeg
 
     print(files)
 

@@ -9,7 +9,7 @@ import signal
 import os
 from datetime import datetime
 from utils.handlers import function_map
-from utils.liveview_state import is_liveview_enabled
+from utils.liveview_state import is_liveview_enabled, save_liveview_state
 from utils.camera_state import camera_state, camera_scanner_task
 
 
@@ -300,6 +300,9 @@ async def send_frames():
                             consecutive_failures = 0
                     
                     try:
+                        # Small delay before starting gphoto2 to allow any pending camera commands to complete
+                        await asyncio.sleep(0.3)
+                        
                         proc = subprocess.Popen([
                             "gphoto2", "--capture-movie", "--stdout"
                         ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -450,6 +453,8 @@ async def send_frames():
 def cleanup_camera():
     """Clean up camera processes"""
     print("[cleanup] Releasing camera and killing all gphoto2 processes...")
+    print("[cleanup] Setting liveview state to false...")
+    save_liveview_state(False)
     try:
         subprocess.run(["pkill", "-9", "gphoto2"])
     except Exception as e:
