@@ -24,6 +24,9 @@ def _write_state_to_disk(state: Dict[str, Any]) -> None:
     try:
         with open(TELESCOPE_STATE_FILE, "w") as f:
             json.dump(state, f, indent=2)
+            f.flush()  # Force write to disk
+            os.fsync(f.fileno())  # Ensure OS writes to disk
+        # print(f"[telescope_state] State written to disk")  # Uncomment for debugging
     except Exception as e:
         print(f"[telescope_state] Failed to write state: {e}")
 
@@ -115,6 +118,7 @@ def set_telescope_coords(right_ascension: float, declination: float, source: str
     
     _STATE_CACHE = state
     _write_state_to_disk(state)
+    print(f"[telescope_state] Current coords set: RA={right_ascension:.4f}°, Dec={declination:.4f}°")
 
 
 def set_target_coords(right_ascension: float, declination: float, source: str = "manual") -> None:
@@ -140,6 +144,7 @@ def set_target_coords(right_ascension: float, declination: float, source: str = 
     
     _STATE_CACHE = state
     _write_state_to_disk(state)
+    print(f"[telescope_state] Target coords set: RA={right_ascension:.4f}°, Dec={declination:.4f}°")
 
 
 def update_hour_angle() -> Optional[float]:
