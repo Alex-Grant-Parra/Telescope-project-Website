@@ -10,6 +10,7 @@ from utils.liveview_state import load_liveview_state, save_liveview_state
 from utils.camera_state import camera_state
 from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig
 from core.hardware.tracking import trackCoordinates, stop_tracking
+from utils.telescope_state import get_telescope_coords
 
 CONFIG_FILE = "config/client_config.json"
 
@@ -209,6 +210,22 @@ def stopLiveView():
     
     print("[liveview] Live view stopped.")
     return "Live view stopped"
+
+def get_current_coordinates():
+    """Returns the current telescope coordinates (right ascension and declination).
+    
+    Returns:
+        dict: Dictionary containing 'current_right_ascension' and 'current_declination'
+              or error dict if coordinates are unavailable
+    """
+    coords = get_telescope_coords()
+    if coords is None:
+        return {"error": "Telescope coordinates not available"}
+    
+    return {
+        "current_right_ascension": coords["right_ascension"],
+        "current_declination": coords["declination"]
+    }
 
 # ESP32 motor control handlers
 
@@ -599,6 +616,7 @@ function_map = {
     # Main track requests
     "trackCoordinates": trackCoordinates,
     "stopTracking": stop_tracking,
+    "getCurrentCoordinates": get_current_coordinates,
     "getCameraChoices": get_camera_choices,
     "setCameraSetting": setCameraSetting,
     "capturePhoto": capturePhoto,
