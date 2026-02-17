@@ -188,12 +188,21 @@ class ESP32Motor:
 		self._current_speed_us = int(1_000_000 / steps_per_sec)
 		return self.conn.send({"cmd": "set_speed", "motor": self.motor_id, "sps": float(steps_per_sec)})
 
-	def turn_degrees(self, degrees: float, forward: bool = True, timeout: Optional[float] = None) -> Dict[str, Any]:
+	def turn_degrees(self, degrees: float, forward: bool = True, timeout: Optional[float] = None, waitUntilFinished: bool = False) -> Dict[str, Any]:
+		# Calculate expected duration
+		steps = int((degrees / 360.0) * self._steps_per_rev)
+		duration_s = (steps * self._current_speed_us) / 1_000_000
+		
 		if timeout is None:
-			steps = int((degrees / 360.0) * self._steps_per_rev)
-			duration_s = (steps * self._current_speed_us) / 1_000_000
 			timeout = duration_s + 2.0
-		return self.conn.send(
+		
+		# Get initial position if we need to wait and verify
+		if waitUntilFinished:
+			initial_position = self.get_position_degrees()
+			target_position = initial_position + degrees if forward else initial_position - degrees
+		
+		# Send the turn command
+		result = self.conn.send(
 			{
 				"cmd": "turn_degrees",
 				"motor": self.motor_id,
@@ -202,6 +211,16 @@ class ESP32Motor:
 			},
 			timeout=timeout,
 		)
+		
+		# Wait for the calculated duration, then verify with single query
+		if waitUntilFinished:
+			time.sleep(duration_s)
+			final_position = self.get_position_degrees()
+			result["final_position"] = final_position
+			result["target_position"] = target_position
+			result["position_error"] = abs(final_position - target_position)
+		
+		return result
 
 	def stop(self) -> Dict[str, Any]:
 		return self.conn.send({"cmd": "stop", "motor": self.motor_id})
@@ -213,6 +232,28 @@ class ESP32Motor:
 		"""Get the current position of the motor in steps (signed integer)."""
 		result = self.conn.send({"cmd": "get_position", "motor": self.motor_id})
 		return result.get("position", 0)
+
+	def get_position_degrees(self, gear_ratio: float = 360.0) -> float:
+		"""Get the current position in degrees (polar alignment deviation).
+		
+		Args:
+			gear_ratio: Sky degrees per motor revolution (default: 360 for RA, 144 for DEC)
+		
+		Returns:
+			Angular deviation in degrees
+		"""
+		steps = self.get_position()
+		return (steps * gear_ratio) / self._steps_per_rev
+
+	def get_position_arcmin(self, gear_ratio: float = 360.0) -> float:
+		"""Get the current position in arcminutes (fine alignment precision)."""
+		degrees = self.get_position_degrees(gear_ratio)
+		return degrees * 60
+
+	def get_position_arcsec(self, gear_ratio: float = 360.0) -> float:
+		"""Get the current position in arcseconds (highest precision)."""
+		arcmin = self.get_position_arcmin(gear_ratio)
+		return arcmin * 60
 
 	def reset_position(self) -> Dict[str, Any]:
 		"""Reset the motor position counter to zero."""
