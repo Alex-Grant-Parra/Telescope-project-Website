@@ -360,53 +360,49 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
         if abs_motor_delta_ha > slew_threshold_motor:
             # Phase 1: Slew at high speed
             try:
-                print(f"[tracking] RA motor slewing: {motor_delta_ha:.4f}° (motor) for {delta_ha:.4f}° (sky) at {config['slew_speed_sps']:.1f} sps")
+                direction = "EAST/forward" if delta_ha > 0 else "WEST/backward"
+                print(f"[tracking] RA motor slewing: {motor_delta_ha:.4f}° (motor) for {delta_ha:.4f}° (sky) {direction} at {config['slew_speed_sps']:.1f} sps")
                 motor1.set_speed_sps(config["slew_speed_sps"])
                 motor1.turn_degrees(abs_motor_delta_ha, forward=delta_ha > 0)  # Non-blocking
-                print(f"[tracking] RA motor slew command sent")
+                print(f"[tracking] RA motor slew command sent (forward={delta_ha > 0})")
             except Exception as e:
                 print(f"[tracking] Error moving RA motor: {e}")
-        elif abs_motor_delta_ha > center_threshold_motor:
-            # Phase 2: Refine at medium speed
+        elif abs_motor_delta_ha > 0.001:  # Any meaningful movement uses refine speed
+            # Phase 2: Refine at medium speed (also used for fine corrections)
             try:
+                direction = "EAST/forward" if delta_ha > 0 else "WEST/backward"
+                print(f"[tracking] RA motor refining: {motor_delta_ha:.4f}° (motor) {direction} at {config['refine_speed_sps']:.1f} sps")
                 motor1.set_speed_sps(config["refine_speed_sps"])
                 motor1.turn_degrees(abs_motor_delta_ha, forward=delta_ha > 0)  # Non-blocking
-                print(f"[tracking] RA motor refine command sent")
+                print(f"[tracking] RA motor refine command sent (forward={delta_ha > 0})")
             except Exception as e:
                 print(f"[tracking] Error refining RA motor: {e}")
         else:
-            # Phase 3: Already centered, set to tracking speed
-            try:
-                motor1.set_speed_sps(config["tracking_speed_sps"])
-                print(f"[tracking] RA already centered, tracking at {config['tracking_speed_sps']:.1f} sps")
-            except Exception as e:
-                print(f"[tracking] Error setting RA tracking speed: {e}")
+            print(f"[tracking] RA already at target (delta={motor_delta_ha:.6f}° motor)")
         
         # DEC Motor: Choose speed based on distance (non-blocking)
         if abs_motor_delta_dec > slew_threshold_motor:
             # Phase 1: Slew at high speed
             try:
-                print(f"[tracking] DEC motor slewing: {motor_delta_dec:.4f}° (motor) for {delta_dec:.4f}° (sky) at {config['slew_speed_sps']:.1f} sps")
+                direction = "NORTH/forward" if delta_dec > 0 else "SOUTH/backward"
+                print(f"[tracking] DEC motor slewing: {motor_delta_dec:.4f}° (motor) for {delta_dec:.4f}° (sky) {direction} at {config['slew_speed_sps']:.1f} sps")
                 motor2.set_speed_sps(config["slew_speed_sps"])
                 motor2.turn_degrees(abs_motor_delta_dec, forward=delta_dec > 0)  # Non-blocking
-                print(f"[tracking] DEC motor slew command sent")
+                print(f"[tracking] DEC motor slew command sent (forward={delta_dec > 0})")
             except Exception as e:
                 print(f"[tracking] Error moving DEC motor: {e}")
-        elif abs_motor_delta_dec > center_threshold_motor:
-            # Phase 2: Refine at medium speed
+        elif abs_motor_delta_dec > 0.001:  # Any meaningful movement uses refine speed
+            # Phase 2: Refine at medium speed (also used for fine corrections)
             try:
+                direction = "NORTH/forward" if delta_dec > 0 else "SOUTH/backward"
+                print(f"[tracking] DEC motor refining: {motor_delta_dec:.4f}° (motor) {direction} at {config['refine_speed_sps']:.1f} sps")
                 motor2.set_speed_sps(config["refine_speed_sps"])
                 motor2.turn_degrees(abs_motor_delta_dec, forward=delta_dec > 0)  # Non-blocking
-                print(f"[tracking] DEC motor refine command sent")
+                print(f"[tracking] DEC motor refine command sent (forward={delta_dec > 0})")
             except Exception as e:
                 print(f"[tracking] Error refining DEC motor: {e}")
         else:
-            # Phase 3: Already centered, set to tracking speed
-            try:
-                motor2.set_speed_sps(config["tracking_speed_sps"])
-                print(f"[tracking] DEC already centered, tracking at {config['tracking_speed_sps']:.1f} sps")
-            except Exception as e:
-                print(f"[tracking] Error setting DEC tracking speed: {e}")
+            print(f"[tracking] DEC already at target (delta={motor_delta_dec:.6f}° motor)")
         
         print("[tracking] Motor movement commands sent (non-blocking)")
     
@@ -414,14 +410,59 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
         print(f"[tracking] Error in motor movement: {e}")
 
 
+def _start_ra_tracking() -> None:
+    """Start RA motor in continuous tracking mode at the configured sidereal rate.
+    
+    This is called once when the telescope has slewed to the target.
+    The motor will run indefinitely until stopped, automatically compensating
+    for Earth's rotation at the sidereal rate.
+    """
+    try:
+        conn = _get_esp32_connection()
+        if not conn:
+            print("[tracking] Error: ESP32 connection not available; cannot start tracking")
+            return
+        
+        config = get_slew_config()
+        tracking_speed_sps = config.get("tracking_speed_sps", 6.7)
+        
+        motor1 = ESP32Motor(conn, "motor1")
+        
+        # Stop any existing movement first
+        print(f"[tracking] Stopping RA motor before starting continuous tracking")
+        motor1.stop()
+        time.sleep(0.2)  # Brief pause to ensure motor stops
+        
+        # Set speed to configured tracking rate
+        print(f"[tracking] Setting RA motor speed to {tracking_speed_sps:.1f} sps")
+        motor1.set_speed_sps(tracking_speed_sps)
+        
+        # Start continuous motion at sidereal rate (forward = tracking east)
+        print(f"[tracking] ⭐ Starting continuous RA tracking EASTWARD (forward=True) at sidereal rate")
+        motor1.start_continuous(forward=True)
+        
+        print(f"[tracking] ✓ RA motor now tracking continuously at {tracking_speed_sps:.1f} sps")
+    
+    except Exception as e:
+        print(f"[tracking] Error starting RA tracking: {e}")
+
+
 def _continuous_tracking_loop() -> None:
-    """Background thread that maintains tracking speed and updates coordinates."""
+    """Background thread that monitors tracking and updates coordinates.
+    
+    Once slew is complete, this thread:
+    1. Monitors motor status to detect when slew is complete
+    2. Verifies we're at the target position
+    3. Starts continuous tracking at the configured speed
+    """
     global _tracking_active, _target_object
     
     print("[tracking] Continuous tracking thread started")
     
     # Track whether we've started sidereal tracking
     sidereal_tracking_active = False
+    # Track if we've already logged waiting state (to avoid spam)
+    waiting_logged = False
     
     while _tracking_active:
         try:
@@ -430,74 +471,88 @@ def _continuous_tracking_loop() -> None:
                 continue
             
             # Update current position from actual motor movements
-            # This allows coordinates to update while motors are still slewing
-            # Motor positions are reset after reading to track only incremental changes
             _update_current_coords_from_motors()
             
             # Update hour angle to reflect Earth's rotation
             update_hour_angle()
             
-            # Check if we're close enough to target to start sidereal tracking
-            coords = get_telescope_coords() or {}
-            target_coords = get_target_coords() or {}
-            current_ra = coords.get('right_ascension', 0.0)
-            current_dec = coords.get('declination', 0.0)
-            target_ra = target_coords.get('right_ascension', 0.0)
-            target_dec = target_coords.get('declination', 0.0)
-            
-            # Get location for HA calculation
-            from utils.location import get_current_location
-            from utils.Tools import hour_angle
-            location = get_current_location()
-            
-            if location:
-                longitude = location.get('longitude', 0)
-                current_ha = hour_angle(current_ra, longitude)
-                target_ha = hour_angle(target_ra, longitude)
-                
-                delta_ha = target_ha - current_ha  # Keep sign for direction
-                delta_dec = target_dec - current_dec
-                abs_delta_ha = abs(delta_ha)
-                abs_delta_dec = abs(delta_dec)
-                
-                config = get_slew_config()
-                centered_threshold = config.get("centered_threshold_degrees", 0.01)
-                refine_threshold = config.get("center_threshold_degrees", 0.1)
-                
-                # If we're centered on target and not yet tracking, start sidereal tracking
-                if abs_delta_ha < centered_threshold and abs_delta_dec < centered_threshold and not sidereal_tracking_active:
-                    print("[tracking] Target reached - starting sidereal tracking")
+            # Check if we should start sidereal tracking
+            if not sidereal_tracking_active:
+                conn = _get_esp32_connection()
+                if conn:
                     try:
-                        conn = _get_esp32_connection()
-                        if conn:
-                            motor1 = ESP32Motor(conn, "motor1")
-                            motor1.set_speed_sps(config["tracking_speed_sps"])
-                            # Command RA motor to turn continuously east (forward) at sidereal rate
-                            motor1.start_continuous(forward=True)
-                            print(f"[tracking] RA motor set to sidereal tracking at {config['tracking_speed_sps']:.1f} sps")
-                            sidereal_tracking_active = True
+                        # Check both motors' status
+                        motor1 = ESP32Motor(conn, "motor1")
+                        motor2 = ESP32Motor(conn, "motor2")
+                        motor1_status = motor1.status()
+                        motor2_status = motor2.status()
+                        motor1_moving = motor1_status.get("moving", False)
+                        motor2_moving = motor2_status.get("moving", False)
+                        
+                        # Debug: Log if only one motor is moving (only once to avoid spam)
+                        if motor1_moving or motor2_moving:
+                            if not waiting_logged:
+                                if motor1_moving and not motor2_moving:
+                                    print(f"[tracking] RA motor still moving, Dec stopped - waiting for RA to finish")
+                                elif motor2_moving and not motor1_moving:
+                                    print(f"[tracking] Dec motor still moving, RA stopped - waiting for Dec to finish")
+                                elif motor1_moving and motor2_moving:
+                                    print(f"[tracking] Both motors still moving - waiting...")
+                                waiting_logged = True
+                        
+                        # Only proceed if BOTH motors have stopped
+                        if not motor1_moving and not motor2_moving:
+                            waiting_logged = False  # Reset for next slew
+                            print(f"[tracking] Both motors stopped - checking position")
+                            
+                            # Verify we're actually at the target
+                            coords = get_telescope_coords() or {}
+                            target_coords = get_target_coords() or {}
+                            current_ra = coords.get('right_ascension', 0.0)
+                            current_dec = coords.get('declination', 0.0)
+                            target_ra = target_coords.get('right_ascension', 0.0)
+                            target_dec = target_coords.get('declination', 0.0)
+                            
+                            # Get location for HA calculation
+                            from utils.location import get_current_location
+                            from utils.Tools import hour_angle
+                            location = get_current_location()
+                            
+                            if location:
+                                longitude = location.get('longitude', 0)
+                                current_ha = hour_angle(current_ra, longitude)
+                                target_ha = hour_angle(target_ra, longitude)
+                                
+                                delta_ha = target_ha - current_ha
+                                delta_dec = target_dec - current_dec
+                                abs_delta_ha = abs(delta_ha)
+                                abs_delta_dec = abs(delta_dec)
+                                
+                                config = get_slew_config()
+                                centered_threshold = config.get("centered_threshold_degrees", 0.01)
+                                refine_threshold = config.get("center_threshold_degrees", 0.1)
+                                
+                                print(f"[tracking] Position check: HA error={delta_ha:.6f}°, Dec error={delta_dec:.6f}°")
+                                print(f"[tracking] Thresholds: centered={centered_threshold}°, refine={refine_threshold}°")
+                                
+                                # If we're centered on target, start sidereal tracking
+                                if abs_delta_ha < centered_threshold and abs_delta_dec < centered_threshold:
+                                    print(f"[tracking] ✓ Within centered threshold - starting sidereal tracking")
+                                    _start_ra_tracking()
+                                    sidereal_tracking_active = True
+                                # If we're off target but motors stopped, issue correction slew
+                                else:
+                                    print(f"[tracking] ⚠ Off target - issuing fine correction slew")
+                                    print(f"[tracking]   HA correction: {delta_ha:.6f}° ({'EAST/forward' if delta_ha > 0 else 'WEST/backward'})")
+                                    print(f"[tracking]   Dec correction: {delta_dec:.6f}° ({'NORTH/forward' if delta_dec > 0 else 'SOUTH/backward'})")
+                                    # Reset motor positions to establish new baseline
+                                    motor1.reset_position()
+                                    motor2.reset_position()
+                                    # Move by the current error
+                                    _move_motors(delta_ha, delta_dec)
+                                    waiting_logged = False  # Reset for next wait cycle
                     except Exception as e:
-                        print(f"[tracking] Error starting sidereal tracking: {e}")
-                
-                # If we're significantly off target and not moving, issue a correction slew
-                elif abs_delta_ha > refine_threshold or abs_delta_dec > refine_threshold:
-                    # Check if motors are idle (position not changing)
-                    # If so, we need to correct - previous slew was based on bad starting position
-                    print(f"[tracking] Off target: HA error={delta_ha:.4f}°, Dec error={delta_dec:.4f}°")
-                    print(f"[tracking] Issuing correction slew...")
-                    try:
-                        conn = _get_esp32_connection()
-                        if conn:
-                            motor1 = ESP32Motor(conn, "motor1")
-                            motor2 = ESP32Motor(conn, "motor2")
-                            # Reset motor positions to establish new baseline
-                            motor1.reset_position()
-                            motor2.reset_position()
-                            # Move by the current error
-                            _move_motors(delta_ha, delta_dec)
-                            print(f"[tracking] Correction slew commanded")
-                    except Exception as e:
-                        print(f"[tracking] Error issuing correction slew: {e}")
+                        print(f"[tracking] Error checking motor status: {e}")
             
             time.sleep(1.0)  # Update every second for live feedback
         
