@@ -427,11 +427,17 @@ def _start_ra_tracking() -> None:
         tracking_speed_sps = config.get("tracking_speed_sps", 6.7)
         
         motor1 = ESP32Motor(conn, "motor1")
+        motor2 = ESP32Motor(conn, "motor2")
         
-        # Stop any existing movement first
-        print(f"[tracking] Stopping RA motor before starting continuous tracking")
-        motor1.stop()
-        time.sleep(0.2)  # Brief pause to ensure motor stops
+        # Stop any existing movement on both motors first
+        print(f"[tracking] Stopping all motors before starting continuous tracking")
+        try:
+            motor1.stop()
+            motor2.stop()
+        except Exception as e:
+            print(f"[tracking] Warning: Error stopping motors: {e}")
+        
+        time.sleep(0.3)  # Brief pause to ensure motors fully stop
         
         # Set speed to configured tracking rate
         print(f"[tracking] Setting RA motor speed to {tracking_speed_sps:.1f} sps")
@@ -618,10 +624,11 @@ def trackCoordinates(name, ra, dec, mag):
     """Start tracking a celestial object with continuous sky rotation compensation.
     
     The telescope will:
-    1. Slew to the target at high speed
-    2. Refine approach at medium speed
-    3. Center on target at slow speed
-    4. Continuously track the object as the sky rotates
+    1. Stop any existing tracking
+    2. Slew to the target at high speed
+    3. Refine approach at medium speed
+    4. Center on target at slow speed
+    5. Continuously track the object as the sky rotates
     
     Args:
         name: Object name
@@ -630,6 +637,12 @@ def trackCoordinates(name, ra, dec, mag):
         mag: Magnitude
     """
     global _tracking_active, _tracking_thread, _target_object
+    
+    # If already tracking, stop the previous tracking session first
+    if _tracking_active:
+        print(f"[tracking] ⚠ Already tracking - stopping previous session before acquiring new target")
+        stop_tracking()
+        time.sleep(0.5)  # Brief pause to ensure tracking fully stops
     
     # Convert string inputs to floats if needed
     try:
