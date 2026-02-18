@@ -330,12 +330,13 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
     abs_motor_delta_ha = abs(motor_delta_ha)
     abs_motor_delta_dec = abs(motor_delta_dec)
     
-    # Thresholds are in sky degrees, so we need to scale them too
-    slew_threshold_motor = config["slew_threshold_degrees"] * ra_gear_ratio
-    center_threshold_motor = config["center_threshold_degrees"] * ra_gear_ratio
+    # Thresholds are in sky degrees, so we need to scale them by EACH motor's gear ratio
+    slew_threshold_motor_ra = config["slew_threshold_degrees"] * ra_gear_ratio
+    slew_threshold_motor_dec = config["slew_threshold_degrees"] * dec_gear_ratio
     
     print(f"[tracking] Sky deltas: HA={delta_ha:.4f}°, Dec={delta_dec:.4f}°")
     print(f"[tracking] Motor deltas (with gear ratios {ra_gear_ratio}:1, {dec_gear_ratio}:1): HA={motor_delta_ha:.4f}°, Dec={motor_delta_dec:.4f}°")
+    print(f"[tracking] Slew thresholds (motor °): RA={slew_threshold_motor_ra:.4f}°, Dec={slew_threshold_motor_dec:.4f}°")
     
     try:
         # Create motor instances
@@ -357,7 +358,7 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
             print(f"[tracking] Error engaging motor2: {e}")
         
         # RA Motor: Choose speed based on distance (non-blocking)
-        if abs_motor_delta_ha > slew_threshold_motor:
+        if abs_motor_delta_ha > slew_threshold_motor_ra:
             # Phase 1: Slew at high speed
             try:
                 direction = "EAST/forward" if delta_ha > 0 else "WEST/backward"
@@ -367,7 +368,7 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
                 print(f"[tracking] RA motor slew command sent (forward={delta_ha > 0})")
             except Exception as e:
                 print(f"[tracking] Error moving RA motor: {e}")
-        elif abs_motor_delta_ha > 0.001:  # Any meaningful movement uses refine speed
+        elif abs_motor_delta_ha > 0.01:  # Minimum 0.01° motor movement (prevents tiny movements)
             # Phase 2: Refine at medium speed (also used for fine corrections)
             try:
                 direction = "EAST/forward" if delta_ha > 0 else "WEST/backward"
@@ -381,7 +382,7 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
             print(f"[tracking] RA already at target (delta={motor_delta_ha:.6f}° motor)")
         
         # DEC Motor: Choose speed based on distance (non-blocking)
-        if abs_motor_delta_dec > slew_threshold_motor:
+        if abs_motor_delta_dec > slew_threshold_motor_dec:
             # Phase 1: Slew at high speed
             try:
                 direction = "NORTH/forward" if delta_dec > 0 else "SOUTH/backward"
@@ -391,7 +392,7 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
                 print(f"[tracking] DEC motor slew command sent (forward={delta_dec > 0})")
             except Exception as e:
                 print(f"[tracking] Error moving DEC motor: {e}")
-        elif abs_motor_delta_dec > 0.001:  # Any meaningful movement uses refine speed
+        elif abs_motor_delta_dec > 0.01:  # Minimum 0.01° motor movement (prevents tiny movements)
             # Phase 2: Refine at medium speed (also used for fine corrections)
             try:
                 direction = "NORTH/forward" if delta_dec > 0 else "SOUTH/backward"
