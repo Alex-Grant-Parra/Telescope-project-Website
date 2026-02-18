@@ -473,8 +473,7 @@ def _continuous_tracking_loop() -> None:
                             motor1 = ESP32Motor(conn, "motor1")
                             motor1.set_speed_sps(config["tracking_speed_sps"])
                             # Command RA motor to turn continuously east (forward) at sidereal rate
-                            # Use a large angle value so it keeps turning
-                            motor1.turn_degrees(360000.0, forward=True)  # 1000 revolutions worth
+                            motor1.start_continuous(forward=True)
                             print(f"[tracking] RA motor set to sidereal tracking at {config['tracking_speed_sps']:.1f} sps")
                             sidereal_tracking_active = True
                     except Exception as e:

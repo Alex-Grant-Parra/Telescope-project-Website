@@ -16,5 +16,5 @@ motor = ESP32Motor.create(
     replace=True,
 )
 
-motor.stop()
-motor.disengage()
+motor.set_speed_sps(6.77)
+motor.turn_degrees(360)

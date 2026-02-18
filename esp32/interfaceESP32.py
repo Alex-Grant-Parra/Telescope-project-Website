@@ -236,6 +236,17 @@ class ESP32Motor:
 		
 		return result
 
+	def start_continuous(self, forward: bool = True) -> Dict[str, Any]:
+		#Start the motor spinning continuously until stopped.
+		
+		return self.conn.send(
+			{
+				"cmd": "start_continuous",
+				"motor": self.motor_id,
+				"forward": bool(forward),
+			}
+		)
+
 	def stop(self) -> Dict[str, Any]:
 		return self.conn.send({"cmd": "stop", "motor": self.motor_id})
 

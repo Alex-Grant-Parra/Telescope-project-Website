@@ -129,6 +129,38 @@ public:
     );
   }
 
+  void startContinuous(bool forward = true) {
+    if (!enabled) {
+      return;
+    }
+    if (moving) {
+      return;  // Already moving, ignore
+    }
+
+    stopRequested = false;
+    moving = true;
+
+    digitalWrite(dirPin, forward ? HIGH : LOW);
+
+    // Run stepping in FreeRTOS task with continuous motion
+    struct StepParams {
+      Motor* motor;
+      bool forward;
+    };
+    
+    StepParams* params = new StepParams{this, forward};
+    
+    xTaskCreatePinnedToCore(
+      continuousStepTask, // Task function
+      "MotorContinuous",  // Name
+      2048,               // Stack size
+      params,             // Parameters
+      1,                  // Priority (0=lowest)
+      &stepTaskHandle,    // Handle
+      1                   // Core 1 (leave core 0 for serial)
+    );
+  }
+
   static void stepTask(void* pvParameters) {
     struct StepParams {
       Motor* motor;
@@ -150,6 +182,34 @@ public:
         break;
       }
 
+      digitalWrite(motor->stepPin, HIGH);
+      delayMicroseconds(PULSE_WIDTH_US);
+      digitalWrite(motor->stepPin, LOW);
+      delayMicroseconds(motor->stepDelayUs - PULSE_WIDTH_US);
+      
+      // Update position counter
+      motor->position += positionDelta;
+    }
+
+    motor->moving = false;
+    vTaskDelete(nullptr);
+  }
+
+  static void continuousStepTask(void* pvParameters) {
+    struct StepParams {
+      Motor* motor;
+      bool forward;
+    };
+    
+    StepParams* params = (StepParams*)pvParameters;
+    Motor* motor = params->motor;
+    delete params;
+
+    // Determine position increment based on direction
+    int32_t positionDelta = motor->position >= 0 ? 1 : -1;
+
+    // Run continuously until stopRequested is set
+    while (!motor->stopRequested) {
       digitalWrite(motor->stepPin, HIGH);
       delayMicroseconds(PULSE_WIDTH_US);
       digitalWrite(motor->stepPin, LOW);
@@ -441,6 +501,12 @@ void handleCommand(const String& line) {
     float degrees = req["degrees"].as<float>();
     bool forward = req["forward"] | true;
     motor->turnDegrees(degrees, forward);
+    sendOkEmpty();
+    return;
+  }
+  if (strcmp(cmd, "start_continuous") == 0) {
+    bool forward = req["forward"] | true;
+    motor->startContinuous(forward);
     sendOkEmpty();
     return;
   }
