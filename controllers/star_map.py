@@ -263,7 +263,8 @@ def get_planets():
 def star_map():
     # For fast initial load, render without embedding the entire star dataset
     # The client will fetch stars and planets via APIs progressively
-    return render_template("star_map.html", stars=[])
+    selected_telescope = session.get('selected_telescope')
+    return render_template("star_map.html", stars=[], selected_telescope=selected_telescope)
 
 def extract_friendly_common_name(common_names_field: str) -> str:
     """

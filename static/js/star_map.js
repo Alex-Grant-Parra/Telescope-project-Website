@@ -142,7 +142,27 @@ let telescopePositionAvailable = false; // Track if we've successfully fetched a
 const telescopeMarkerSize = 25;
 const telescopeMarkerColor = "#00ff00"; // Green for telescope position
 
+// Get telescope data from embedded template
+let telescopeDataFromSession = null;
+try {
+    const telescopeDataElement = document.getElementById('telescope-data');
+    if (telescopeDataElement && telescopeDataElement.textContent) {
+        telescopeDataFromSession = JSON.parse(telescopeDataElement.textContent);
+    }
+} catch (e) {
+    console.debug('Could not parse telescope data from template:', e);
+}
+
+function isTelescopeSelected() {
+    return telescopeDataFromSession && telescopeDataFromSession.telescope_id;
+}
+
 function updateTelescopePosition() {
+    // Only fetch telescope position if one is selected in the session
+    if (!isTelescopeSelected()) {
+        return;
+    }
+    
     fetch('/api/telescope_position')
         .then(response => {
             if (response.status === 401) {
@@ -2297,6 +2317,11 @@ function searchObject() {
 
     // Check if searching for "telescope"
     if (searchValue.toLowerCase() === 'telescope') {
+        if (!isTelescopeSelected()) {
+            alert('No telescope selected. Please select a telescope first.');
+            return;
+        }
+        
         if (!telescopePosition && !telescopePositionAvailable) {
             // Try fetching once more before giving up
             fetch('/api/telescope_position')
