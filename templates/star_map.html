@@ -94,12 +94,64 @@
         #cursor-coords div {
             margin: 1px 0;
         }
+        #tracking-info {
+            position: absolute;
+            top: 80px;
+            left: 10px;
+            z-index: 20;
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-family: sans-serif;
+            display: none;
+            min-width: 250px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        #tracking-info .tracking-header {
+            background: #4CAF50;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 4px;
+            margin: -12px -16px 10px -16px;
+            font-weight: bold;
+            font-size: 0.95em;
+        }
+        #tracking-info .tracking-content {
+            font-size: 0.9em;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+        #tracking-info .tracking-content div {
+            margin: 4px 0;
+        }
+        #stop-tracking-btn {
+            width: 100%;
+            padding: 8px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        #stop-tracking-btn:hover {
+            background: #d32f2f;
+        }
     </style>
 </head>
 <body>
 <div id="loading">Loading planetarium...</div>
 <canvas id="planetarium"></canvas>
 <div id="info">Drag to rotate. Click a star/planet for info.</div>
+<div id="tracking-info">
+    <div class="tracking-header">🎯 Tracking Status</div>
+    <div class="tracking-content" id="tracking-content">
+        <em>No object being tracked</em>
+    </div>
+    <button id="stop-tracking-btn" onclick="stopTracking()">⏹️ Stop Tracking</button>
+</div>
 <div id="controls">
     <label>
         Mag ≤ <span id="mag-value">6</span>

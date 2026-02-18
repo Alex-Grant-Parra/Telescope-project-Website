@@ -2158,6 +2158,7 @@ helpModal.addEventListener('click', (e) => {
 
 // Expose functions to global scope so inline onclick handlers work robustly
 window.trackObject = trackObject;
+window.stopTracking = stopTracking;
 window.searchObject = searchObject;
 window.clearSearch = clearSearch;
 
@@ -2212,6 +2213,62 @@ document.addEventListener('click', (e) => {
 function hideLoading() {
     loading.style.display = "none";
 }
+
+// Function to update the tracking info panel
+function updateTrackingPanel(trackingData) {
+    const trackingInfoDiv = document.getElementById('tracking-info');
+    const trackingContent = document.getElementById('tracking-content');
+    
+    if (!trackingData) {
+        // Hide panel when no tracking
+        trackingInfoDiv.style.display = 'none';
+        trackingContent.innerHTML = '<em>No object being tracked</em>';
+        return;
+    }
+    
+    // Show panel and update content
+    trackingInfoDiv.style.display = 'block';
+    trackingContent.innerHTML = `
+        <div><strong>Object:</strong> ${trackingData.name}</div>
+        <div><strong>RA:</strong> ${trackingData.ra.toFixed(4)}°</div>
+        <div><strong>DEC:</strong> ${trackingData.dec.toFixed(4)}°</div>
+        ${trackingData.mag !== undefined ? `<div><strong>Magnitude:</strong> ${trackingData.mag.toFixed(2)}</div>` : ''}
+    `;
+}
+
+// Function to stop tracking
+function stopTracking() {
+    console.log('=== stopTracking CALLED from star map ===');
+    
+    fetch("/stop_tracking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Stop tracking response:', data);
+        if (data.status === "stopped") {
+            // Clear tracking panel
+            updateTrackingPanel(null);
+            // Clear sessionStorage
+            sessionStorage.removeItem('currentTracking');
+            console.log('✓ Tracking stopped successfully');
+            alert('🛑 Tracking stopped successfully');
+        } else {
+            throw new Error(data.message || "Failed to stop tracking");
+        }
+    })
+    .catch(error => {
+        console.error('✗ Error stopping tracking:', error);
+        alert(`❌ Failed to stop tracking: ${error.message}`);
+        
+        // Still clear the panel even if command failed
+        updateTrackingPanel(null);
+        sessionStorage.removeItem('currentTracking');
+    });
+}
+
 // Function to track a celestial object
 function trackObject(name, ra, dec, mag) {
     // First fetch star info to get friendly name if available
@@ -2242,12 +2299,16 @@ function trackObject(name, ra, dec, mag) {
                     console.log(`Successfully started tracking ${name} on telescope ${data.telescope_id}`);
                     
                     // Store tracking state in sessionStorage so it can be displayed on interface page
-                    sessionStorage.setItem('currentTracking', JSON.stringify({
+                    const trackingData = {
                         name: name,
                         ra: ra,
                         dec: dec,
                         mag: mag
-                    }));
+                    };
+                    sessionStorage.setItem('currentTracking', JSON.stringify(trackingData));
+                    
+                    // Update tracking panel to show tracking info
+                    updateTrackingPanel(trackingData);
                     
                 } else if (data.redirect) {
                     // No telescope selected - inform user
@@ -2283,12 +2344,16 @@ function trackObject(name, ra, dec, mag) {
                     console.log(`Successfully started tracking ${name} on telescope ${data.telescope_id}`);
                     
                     // Store tracking state in sessionStorage so it can be displayed on interface page
-                    sessionStorage.setItem('currentTracking', JSON.stringify({
+                    const trackingData = {
                         name: name,
                         ra: ra,
                         dec: dec,
                         mag: mag
-                    }));
+                    };
+                    sessionStorage.setItem('currentTracking', JSON.stringify(trackingData));
+                    
+                    // Update tracking panel to show tracking info
+                    updateTrackingPanel(trackingData);
                     
                     // Show success message instead of redirecting
                     alert(`✓ Now tracking ${name}`);
@@ -2676,6 +2741,18 @@ window.addEventListener('DOMContentLoaded', () => {
             stagedPrefetchAfterFirstDraw();
             // Start telescope position tracking
             startTelescopePositionTracking();
+            
+            // Restore tracking state from sessionStorage if it exists
+            try {
+                const trackingState = sessionStorage.getItem('currentTracking');
+                if (trackingState) {
+                    const trackingData = JSON.parse(trackingState);
+                    updateTrackingPanel(trackingData);
+                }
+            } catch (e) {
+                console.log('No tracking state to restore');
+            }
+            
             // Start animation loop for search highlighting
             function animate() {
                 if (searchedObject) {
