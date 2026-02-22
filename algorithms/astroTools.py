@@ -345,6 +345,35 @@ def getAllCelestialData(year, month, day, hour: int = 0, minute: int = 0, second
         except Exception as e:
             print(f"mapping ephem position failed for {key}: {e}")
 
+    # Calculate moon position using findMoon() from astroTools.py
+    # This overrides any ephemeris moon data with our own calculation
+    try:
+        ra_moon, dec_moon = findMoon(year, month, day, hour=hour, minute=minute, second=second)
+        
+        # Calculate moon phase angle for magnitude calculation
+        if "sun" in results:
+            # Convert sun's ra/dec back to degrees for phase calculation
+            sun_ra_h, sun_ra_m, sun_ra_s = results["sun"]["ra"]
+            sun_dec_d, sun_dec_m, sun_dec_s = results["sun"]["dec"]
+            ra_sun_deg = (sun_ra_h + sun_ra_m/60 + sun_ra_s/3600) * 15
+            dec_sun_deg = sun_dec_d + (sun_dec_m/60 + sun_dec_s/3600) * (1 if sun_dec_d >= 0 else -1)
+            
+            # Convert moon's ra/dec to degrees
+            moon_ra_h, moon_ra_m, moon_ra_s = ra_moon
+            moon_dec_d, moon_dec_m, moon_dec_s = dec_moon
+            ra_moon_deg = (moon_ra_h + moon_ra_m/60 + moon_ra_s/3600) * 15
+            dec_moon_deg = moon_dec_d + (moon_dec_m/60 + moon_dec_s/3600) * (1 if moon_dec_d >= 0 else -1)
+            
+            # Calculate phase angle
+            phaseDeg = phase_angle(ra_moon_deg, dec_moon_deg, ra_sun_deg, dec_sun_deg)
+            vmag_moon = get_vmag_for_object("moon", phaseDeg=phaseDeg)
+        else:
+            vmag_moon = get_vmag_for_object("moon")
+        
+        results["moon"] = {"ra": ra_moon, "dec": dec_moon, "vmag": vmag_moon}
+    except Exception as e:
+        print(f"findMoon calculation failed: {e}")
+
     # If ephemeris didn't provide some bodies (fallback to previous implementation), keep old code commented
     # --- begin legacy (commented) ---
     # for planet_name in planets.keys():
