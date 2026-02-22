@@ -90,6 +90,8 @@ const timeControl = document.getElementById('time-control');
 const timeNowBtn = document.getElementById('time-now');
 const timeSegmentIndicator = document.getElementById('time-segment-indicator');
 let currentLSTDeg = 0; // updated per draw based on time and longitude
+let lastPlanetUpdateTime = 0; // Track when planets were last updated
+const PLANET_UPDATE_THROTTLE_MS = 60000; // Only update planets every 60 seconds max
 const resetBtn = document.getElementById('reset-view');
 const helpBtn = document.getElementById('help-btn');
 const helpModal = document.getElementById('help-modal');
@@ -188,14 +190,25 @@ function updateTelescopePosition() {
         })
         .then(data => {
             if (data && data.status === 'success' && data.ra !== null && data.dec !== null) {
+                // Get current observer position and time to convert RA/DEC to Alt/Az
+                const latDeg = parseFloat(latInput.value) || 0;
+                const lonDeg = parseFloat(lonInput.value) || 0;
+                let selectedDate = new Date();
+                try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
+                
+                // Convert RA/DEC to Alt/Az for fixed horizon-based positioning
+                const { altDeg, azDeg } = radecToAltAz(data.ra, data.dec, selectedDate, latDeg, lonDeg);
+                
                 telescopePosition = {
                     ra: data.ra,
                     dec: data.dec,
+                    alt: altDeg,
+                    az: azDeg,
                     timestamp: Date.now()
                 };
                 if (!telescopePositionAvailable) {
                     telescopePositionAvailable = true;
-                    console.log('%c✓ Telescope position now available!', 'color: green; font-weight: bold;', `RA: ${data.ra}°, DEC: ${data.dec}°`);
+                    console.log('%c✓ Telescope position now available!', 'color: green; font-weight: bold;', `RA: ${data.ra}°, DEC: ${data.dec}° (Alt: ${altDeg.toFixed(1)}°, Az: ${azDeg.toFixed(1)}°)`);
                 }
                 draw();
             } else if (data && data.status === 'error') {
@@ -665,13 +678,22 @@ function replacePlanetsInScene(newPlanets) {
     planetsList = newList;
 }
 
-async function refreshPlanetsForCurrentTime() {
+async function refreshPlanetsForCurrentTime(force = false) {
+    // Throttle planet updates to avoid excessive queries during live time mode
+    const now = Date.now();
+    if (!force && (now - lastPlanetUpdateTime) < PLANET_UPDATE_THROTTLE_MS) {
+        // Skip planet update but still trigger draw for sky rotation
+        draw();
+        return;
+    }
+    
     let selectedDate = new Date();
     try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
     selectedDate.setSeconds(0, 0);
     const updated = await fetchPlanetsForDate(new Date(selectedDate.toISOString()));
     if (updated) {
         replacePlanetsInScene(updated);
+        lastPlanetUpdateTime = now;
         draw();
     }
 }
@@ -680,7 +702,7 @@ function schedulePlanetsRefresh() {
     if (planetsRefreshTimer) clearTimeout(planetsRefreshTimer);
     planetsRefreshTimer = setTimeout(() => {
         planetsRefreshTimer = null;
-        refreshPlanetsForCurrentTime();
+        refreshPlanetsForCurrentTime(true); // Force update for manual keyboard adjustments
     }, 250); // debounce rapid keypresses
 }
 
@@ -1395,11 +1417,10 @@ function draw() {
 
     // Draw telescope position marker
     if (telescopePosition) {
-        const v = radecToXYZ(telescopePosition.ra, telescopePosition.dec);
-        const w0 = Mview[0], w1 = Mview[1], w2 = Mview[2];
-        const x = w0[0]*v[0] + w0[1]*v[1] + w0[2]*v[2];
-        const y = w1[0]*v[0] + w1[1]*v[1] + w1[2]*v[2];
-        const z = w2[0]*v[0] + w2[1]*v[1] + w2[2]*v[2];
+        // Use Alt/Az coordinates so telescope marker doesn't move with time changes
+        // Only moves when actual telescope position is updated from server
+        let [x, y, z] = altazToXYZ(telescopePosition.alt, telescopePosition.az);
+        [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
         if (z > 0) {
             const [cx, cy] = project([x, y, z]);
             const scaledMarkerSize = telescopeMarkerSize * zoom;
@@ -2680,7 +2701,12 @@ window.addEventListener('DOMContentLoaded', () => {
         const now = new Date();
         now.setSeconds(0, 0);
         timeControl.value = formatLocalDateTime(now);
-        timeControl.addEventListener('change', () => { refreshPlanetsForCurrentTime(); draw(); });
+        timeControl.addEventListener('change', () => { 
+            // During live time updates, refreshPlanetsForCurrentTime handles throttling
+            // For manual changes, force immediate planet update
+            const isLiveTimeActive = document.getElementById('live-time')?.checked;
+            refreshPlanetsForCurrentTime(!isLiveTimeActive); 
+        });
         // Add keyboard rollover handling for ArrowUp/ArrowDown
         timeControl.addEventListener('keydown', handleTimeControlKeydown);
         // Add click handler to support virtual caret segmentation on browsers without selectionStart
@@ -2694,7 +2720,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const now = new Date();
             now.setSeconds(0, 0);
             if (timeControl) timeControl.value = formatLocalDateTime(now);
-            refreshPlanetsForCurrentTime();
+            refreshPlanetsForCurrentTime(true); // Force update when clicking "Now" button
             draw();
         });
     }
