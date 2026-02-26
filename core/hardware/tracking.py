@@ -203,9 +203,27 @@ def _update_current_coords_from_motors() -> None:
         ra_gear_ratio = config.get("ra_gear_ratio", 360.0)
         dec_gear_ratio = config.get("dec_gear_ratio", 144.0)
         
-        # Get raw motor step positions
-        motor1_steps = motor1.get_position()
-        motor2_steps = motor2.get_position()
+        # Get raw motor step positions with error handling
+        motor1_steps = 0
+        motor2_steps = 0
+        
+        try:
+            motor1_steps = motor1.get_position()
+        except Exception as e:
+            # If we can't get position, use 0 and continue (coordinates won't update this cycle)
+            if "ESP32 error" not in str(e):
+                print(f"[tracking] Warning: Could not get motor1 position: {e}")
+            # Continue anyway - we'll just have no delta this cycle
+            
+        time.sleep(0.05)  # Small delay between commands to avoid overwhelming ESP32
+        
+        try:
+            motor2_steps = motor2.get_position()
+        except Exception as e:
+            # If we can't get position, use 0 and continue (coordinates won't update this cycle)
+            if "ESP32 error" not in str(e):
+                print(f"[tracking] Warning: Could not get motor2 position: {e}")
+            # Continue anyway - we'll just have no delta this cycle
         
         # Convert motor steps to sky degrees using gear ratios
         # A X:1 gearbox means X motor revolutions = 1 output revolution = 360° sky
@@ -488,13 +506,29 @@ def _continuous_tracking_loop() -> None:
                 conn = _get_esp32_connection()
                 if conn:
                     try:
-                        # Check both motors' status
+                        # Check both motors' status with delays between commands
                         motor1 = ESP32Motor(conn, "motor1")
                         motor2 = ESP32Motor(conn, "motor2")
-                        motor1_status = motor1.status()
-                        motor2_status = motor2.status()
-                        motor1_moving = motor1_status.get("moving", False)
-                        motor2_moving = motor2_status.get("moving", False)
+                        
+                        try:
+                            motor1_status = motor1.status()
+                            motor1_moving = motor1_status.get("moving", False)
+                        except Exception as e:
+                            # If we can't get status, assume still moving and skip this cycle
+                            if "ESP32 error" not in str(e):
+                                print(f"[tracking] Warning: Could not get motor1 status: {e}")
+                            motor1_moving = True  # Assume moving to be safe
+                        
+                        time.sleep(0.1)  # Delay between status commands
+                        
+                        try:
+                            motor2_status = motor2.status()
+                            motor2_moving = motor2_status.get("moving", False)
+                        except Exception as e:
+                            # If we can't get status, assume still moving and skip this cycle
+                            if "ESP32 error" not in str(e):
+                                print(f"[tracking] Warning: Could not get motor2 status: {e}")
+                            motor2_moving = True  # Assume moving to be safe
                         
                         # Debug: Log if only one motor is moving (only once to avoid spam)
                         if motor1_moving or motor2_moving:
@@ -561,11 +595,12 @@ def _continuous_tracking_loop() -> None:
                     except Exception as e:
                         print(f"[tracking] Error checking motor status: {e}")
             
-            time.sleep(1.0)  # Update every second for live feedback
+            # Sleep to reduce ESP32 load while still getting reasonable update frequency
+            time.sleep(1.5)  # Check every 1.5 seconds - balance between responsiveness and ESP32 load
         
         except Exception as e:
             print(f"[tracking] Error in tracking loop: {e}")
-            time.sleep(2)
+            time.sleep(2.0)  # Wait longer after errors
     
     print("[tracking] Continuous tracking thread stopped")
 
