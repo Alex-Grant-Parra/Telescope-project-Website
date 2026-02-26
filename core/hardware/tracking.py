@@ -564,7 +564,12 @@ def _continuous_tracking_loop() -> None:
                                 current_ha = hour_angle(current_ra, longitude)
                                 target_ha = hour_angle(target_ra, longitude)
                                 
+                                # Calculate shortest path around 360° circle
                                 delta_ha = target_ha - current_ha
+                                if delta_ha > 180:
+                                    delta_ha -= 360
+                                elif delta_ha < -180:
+                                    delta_ha += 360
                                 delta_dec = target_dec - current_dec
                                 abs_delta_ha = abs(delta_ha)
                                 abs_delta_dec = abs(delta_dec)
@@ -729,6 +734,11 @@ def trackCoordinates(name, ra, dec, mag):
 
     # Calculate the difference between target and current coordinates
     DeltaHA = TargetHA - CurrentHA
+    # Normalize to shortest path around 360° circle (especially important crossing 0°/360°)
+    if DeltaHA > 180:
+        DeltaHA -= 360
+    elif DeltaHA < -180:
+        DeltaHA += 360
     DeltaDec = TargetDec - CurrentDec
     print(f"[tracking] Delta to move: HA={DeltaHA:.4f}°, Dec={DeltaDec:.4f}°")
     print(f"[tracking] Absolute delta: HA={abs(DeltaHA):.4f}°, Dec={abs(DeltaDec):.4f}°")
