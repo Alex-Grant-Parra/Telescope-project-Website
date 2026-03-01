@@ -185,8 +185,8 @@ def capturePhoto(currentid):
         print(f"[ERROR] Failed to upload files: {e}")
     finally:
         # Ensure files are closed
-        for f in file_data.values():
-            f.close()
+        for file_tuple in file_data.values():
+            file_tuple[1].close()
 
 @requires_camera("start live view")
 def startLiveView():
