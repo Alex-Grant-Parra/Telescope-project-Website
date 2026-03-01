@@ -7,6 +7,7 @@ import tempfile
 import os
 import threading
 import secrets
+import logging
 from flask import jsonify, request, Response
 
 # WebSocket Configuration - using the same ports as defined in Server.py
@@ -49,6 +50,63 @@ clients = []
 clients = []
 heartbeat_tasks = {}  # Store heartbeat tasks by client_id
 ws_event_loop = None  # Store reference to WebSocket thread's event loop
+
+_handshake_log_lock = threading.Lock()
+_handshake_reject_count = 0
+_handshake_last_summary = 0.0
+_HANDSHAKE_LOG_WINDOW_SECONDS = 30
+
+
+def _log_handshake_reject_summary():
+    """Log throttled summary for invalid websocket handshake attempts."""
+    global _handshake_reject_count, _handshake_last_summary
+    now = time.time()
+
+    with _handshake_log_lock:
+        _handshake_reject_count += 1
+        if now - _handshake_last_summary >= _HANDSHAKE_LOG_WINDOW_SECONDS:
+            print(
+                f"[WebSocket] Ignored {_handshake_reject_count} invalid handshake request(s) "
+                f"in the last {_HANDSHAKE_LOG_WINDOW_SECONDS}s"
+            )
+            _handshake_reject_count = 0
+            _handshake_last_summary = now
+
+
+class _WebSocketHandshakeNoiseFilter(logging.Filter):
+    """Suppress noisy traceback logs for malformed/non-upgrade websocket probes."""
+
+    def filter(self, record):
+        message = record.getMessage().lower()
+
+        if "opening handshake failed" in message:
+            _log_handshake_reject_summary()
+            return False
+
+        if record.exc_info:
+            exc_text = str(record.exc_info[1]).lower() if record.exc_info[1] else ""
+            if (
+                "did not receive a valid http request" in exc_text
+                or "missing connection header" in exc_text
+            ):
+                _log_handshake_reject_summary()
+                return False
+
+        return True
+
+
+def _configure_websocket_logging():
+    """Attach filter to websockets loggers to reduce noisy handshake tracebacks."""
+    noise_filter = _WebSocketHandshakeNoiseFilter()
+
+    for logger_name in ("websockets.server", "websockets.asyncio.server"):
+        ws_logger = logging.getLogger(logger_name)
+
+        if not any(isinstance(existing, _WebSocketHandshakeNoiseFilter) for existing in ws_logger.filters):
+            ws_logger.addFilter(noise_filter)
+
+
+_configure_websocket_logging()
 
 def authenticate_token(token):
     """Validate client authentication token"""
@@ -572,9 +630,6 @@ def register_client_handler():
     # Generate a secure token for the client
     token = generate_token()
     
-    # For now, we'll allow registration but you should add your own authorization logic
-    # In production, you might want to require admin approval or other validation
-    
     clients.append(client_id)
     
     print(f"[+] New client registered: {client_id}")
@@ -589,9 +644,6 @@ def register_client_handler():
 def add_api_token_handler():
     """Handler for /admin/add_token route - for manually adding authorized tokens"""
     data = request.get_json()
-    
-    # Add your admin authentication here
-    # For example: check if request is from admin user
     
     token = data.get('token') or generate_token()
     client_type = data.get('client_type', 'observer')  # telescope, observer

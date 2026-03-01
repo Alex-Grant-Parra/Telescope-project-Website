@@ -237,6 +237,8 @@ print(f"Registered Blueprint: {user_bp.name}")
 # CSRF configuration for API/headless clients
 app.config['WTF_CSRF_TIME_LIMIT'] = int(os.getenv('WTF_CSRF_TIME_LIMIT', '3600'))  # 1 hour default
 app.config['WTF_CSRF_HEADERS'] = ['X-CSRFToken', 'X-CSRF-Token']
+# Limit upload size (default 8 MiB) to protect from large/malicious uploads
+app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_UPLOAD_BYTES', str(8 * 1024 * 1024)))
 
 try:
     from flask_wtf.csrf import generate_csrf
