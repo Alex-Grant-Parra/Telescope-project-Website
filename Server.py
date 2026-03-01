@@ -478,17 +478,17 @@ if __name__ == '__main__':
         if ssl_cert and ssl_key and os.path.exists(ssl_cert) and os.path.exists(ssl_key):
             print(f"Starting Flask with SSL on 0.0.0.0:{FlaskServerPort} using cert: {ssl_cert}")
             try:
-                app.run(host="0.0.0.0", port=FlaskServerPort, debug=False, ssl_context=(ssl_cert, ssl_key))
+                app.run(host="0.0.0.0", port=FlaskServerPort, debug=False, ssl_context=(ssl_cert, ssl_key), threaded=True)
             except Exception as e:
                 print(f"Failed to start Flask with SSL: {e}")
                 print("Falling back to plain HTTP on the same port")
-                app.run(host="0.0.0.0", port=FlaskServerPort, debug=False)
+                app.run(host="0.0.0.0", port=FlaskServerPort, debug=False, threaded=True)
         else:
             print("FLASK_USE_SSL is set but SSL_CERT_PATH/SSL_KEY_PATH are missing or files do not exist.")
             print("Starting without SSL. If you want HTTPS, set FLASK_USE_SSL=True and provide valid SSL_CERT_PATH and SSL_KEY_PATH.")
-            app.run(host="0.0.0.0", port=FlaskServerPort, debug=False)
+            app.run(host="0.0.0.0", port=FlaskServerPort, debug=False, threaded=True)
     else:
         # Plain HTTP
-        app.run(host="0.0.0.0", port=FlaskServerPort, debug=False)
+        app.run(host="0.0.0.0", port=FlaskServerPort, debug=False, threaded=True)
 
     

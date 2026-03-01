@@ -17,6 +17,8 @@ LiveViewPort = 8000
 WS_IP = os.getenv("WS_IP", "0.0.0.0")  # Use environment variable, default to all interfaces
 WS_PORT = commandPort
 LIVEVIEW_WS_PORT = LiveViewPort
+WS_PING_INTERVAL = int(os.getenv("WS_PING_INTERVAL", "20"))
+WS_PING_TIMEOUT = int(os.getenv("WS_PING_TIMEOUT", "120"))
 
 sec_logger = logging.getLogger('security')
 
@@ -656,8 +658,8 @@ def start_ws_server():
                 handle_client,
                 WS_IP,
                 WS_PORT,
-                ping_interval=20,      # Send ping every 20 seconds
-                ping_timeout=10        # Wait 10 seconds for pong response
+                ping_interval=WS_PING_INTERVAL,
+                ping_timeout=WS_PING_TIMEOUT
             ):
                 # print(f"Command WebSocket server running locally at ws://{WS_IP}:{WS_PORT} \n")
                 # print(f"Public access via: wss://ws.telescopes.dev \n")
@@ -681,8 +683,8 @@ def start_liveview_ws_server():
                 WS_IP,
                 LIVEVIEW_WS_PORT,
                 max_size=2*1024*1024,
-                ping_interval=20,      # Send ping every 20 seconds
-                ping_timeout=10        # Wait 10 seconds for pong response
+                ping_interval=WS_PING_INTERVAL,
+                ping_timeout=WS_PING_TIMEOUT
             ):
                 # print(f"LiveView WebSocket server running locally at ws://{WS_IP}:{LIVEVIEW_WS_PORT}")
                 # print(f"Public access via: wss://liveview.telescopes.dev")
