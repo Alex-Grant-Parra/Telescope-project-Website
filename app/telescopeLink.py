@@ -36,16 +36,13 @@ external_domain = f"https://{app_domain}"
 #         print("No clients to update with")
 
 def load_api_token():
-    """Load API token from api_tokens.json file"""
+    """Load API token from environment for local telescope client use."""
     try:
-        with open("security/api_tokens.json", "r") as f:
-            tokens = ujson.load(f)
-            # Return the first token found (assumes telescope has one token)
-            for token, info in tokens.items():
-                if info.get('client_type') == 'telescope':
-                    return token
-            # If no telescope token, return any token
-            return list(tokens.keys())[0] if tokens else None
+        token = os.getenv("TELESCOPE_API_TOKEN") or os.getenv("API_TOKEN")
+        if token:
+            return token.strip()
+        print("Warning: No telescope API token in environment (set TELESCOPE_API_TOKEN)")
+        return None
     except Exception as e:
         print(f"Warning: Could not load API token: {e}")
         return None

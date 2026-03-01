@@ -237,8 +237,8 @@ print(f"Registered Blueprint: {user_bp.name}")
 # CSRF configuration for API/headless clients
 app.config['WTF_CSRF_TIME_LIMIT'] = int(os.getenv('WTF_CSRF_TIME_LIMIT', '3600'))  # 1 hour default
 app.config['WTF_CSRF_HEADERS'] = ['X-CSRFToken', 'X-CSRF-Token']
-# Limit upload size (default 8 MiB) to protect from large/malicious uploads
-app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_UPLOAD_BYTES', str(8 * 1024 * 1024)))
+# Limit upload size (default 128 MiB) to protect from large/malicious uploads
+app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_UPLOAD_BYTES', str(128 * 1024 * 1024)))
 
 try:
     from flask_wtf.csrf import generate_csrf
@@ -378,6 +378,27 @@ with app.app_context():
     if expired_count > 0:
         print(f"Cleaned up {expired_count} expired trusted devices")
 
+    # Ensure token fields exist on telescopes, migrate old token stores, and drop api_token table
+    try:
+        from security.token_store import (
+            ensure_telescope_token_columns,
+            migrate_api_token_table_to_telescopes,
+            migrate_json_tokens_to_db,
+        )
+        ensure_telescope_token_columns()
+
+        table_migration = migrate_api_token_table_to_telescopes(drop_source_table=True)
+        if table_migration.get('imported', 0) > 0:
+            print(f"Migrated {table_migration.get('imported')} token(s) from api_token table to telescopes")
+        if table_migration.get('dropped'):
+            print("Dropped legacy api_token table")
+
+        json_migration = migrate_json_tokens_to_db()
+        if json_migration.get('imported', 0) > 0:
+            print(f"Imported {json_migration.get('imported')} API token(s) from JSON into telescopes")
+    except Exception as e:
+        print(f"[WARNING] Could not migrate API tokens to DB: {e}")
+
 # Homepage Redirection
 @app.route("/")
 def index():
@@ -388,7 +409,8 @@ from app.WebsocketServer import (
     start_websocket_servers,
     send_command_handler,
     liveview_handler,
-    register_client_handler
+    register_client_handler,
+    admin_disconnect_ws_client_handler,
 )
 
 # Flask routes that interface with websocket servers
@@ -410,6 +432,11 @@ def liveview(client_id):
 @app.route('/client/register', methods=['POST'])
 def register_client():
     return register_client_handler()
+
+
+@app.route('/admin/ws/disconnect/<client_id>', methods=['POST'])
+def admin_ws_disconnect(client_id):
+    return admin_disconnect_ws_client_handler(client_id)
 
 # Exempt client registration endpoint from CSRF checks (used by non-browser clients)
 try:

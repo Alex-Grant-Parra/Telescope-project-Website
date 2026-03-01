@@ -194,9 +194,24 @@ class Telescope(db.Model):
     ip_address = db.Column(db.String(45), nullable=True)  # IPv4 or IPv6
     type = db.Column(db.String(100), nullable=True)
     last_seen = db.Column(db.Float, nullable=True)  # Unix timestamp
+    token_hash = db.Column(db.String(64), nullable=True, index=True)
+    token_prefix = db.Column(db.String(16), nullable=True)
+    token_created_at = db.Column(db.DateTime, nullable=True)
     
     def __repr__(self):
         return f"<Telescope(id={self.id}, telescope_id='{self.telescope_id}', type='{self.type}')>"
+
+    @property
+    def name(self):
+        return self.telescope_id
+
+    @property
+    def client_type(self):
+        return self.type
+
+    @property
+    def created_at(self):
+        return self.token_created_at
     
     @staticmethod
     def get_all_telescopes():

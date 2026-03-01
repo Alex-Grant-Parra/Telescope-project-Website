@@ -15,17 +15,31 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 TOKENS_FILE = "security/api_tokens.json"
 
+
+def _with_app_context():
+    from Server import app
+    return app.app_context()
+
+
 def load_tokens():
-    """Load existing tokens from file"""
-    if os.path.exists(TOKENS_FILE):
-        with open(TOKENS_FILE, 'r') as f:
-            return json.load(f)
-    return {}
+    """Load tokens from DB and return display-safe mapping keyed by token ID."""
+    from security.token_store import list_tokens
+
+    view = {}
+    with _with_app_context():
+        for rec in list_tokens():
+            view[str(rec.id)] = {
+                "name": rec.name,
+                "client_type": rec.client_type,
+                "created": rec.created_at.isoformat() if rec.created_at else "Unknown",
+                "token_prefix": rec.token_prefix,
+            }
+    return view
+
 
 def save_tokens(tokens):
-    """Save tokens to file"""
-    with open(TOKENS_FILE, 'w') as f:
-        json.dump(tokens, f, indent=2)
+    """Legacy no-op: tokens are stored in DB."""
+    return tokens
 
 def generate_token():
     """Generate a secure token"""
@@ -33,16 +47,10 @@ def generate_token():
 
 def add_token(name, client_type="observer", telescope_type=None):
     """Add a new token for a client"""
-    tokens = load_tokens()
-    token = generate_token()
-    
-    tokens[token] = {
-        "client_type": client_type,
-        "name": name,
-        "created": datetime.now().isoformat()
-    }
-    
-    save_tokens(tokens)
+    from security.token_store import create_token_record
+
+    with _with_app_context():
+        token, _ = create_token_record(name, client_type)
     
     # If this is a telescope, add it to the database
     if client_type == "telescope":
@@ -77,8 +85,9 @@ def list_tokens():
     
     print("\nExisting API Tokens:")
     print("-" * 80)
-    for token, info in tokens.items():
-        print(f"Token: {token}")
+    for token_id, info in tokens.items():
+        print(f"Token ID: {token_id}")
+        print(f"  Prefix: {info.get('token_prefix', 'Unknown')}...")
         print(f"  Name: {info['name']}")
         print(f"  Type: {info['client_type']}")
         print(f"  Created: {info.get('created', 'Unknown')}")
@@ -86,13 +95,15 @@ def list_tokens():
 
 def revoke_token(token):
     """Revoke a token"""
-    tokens = load_tokens()
-    if token in tokens:
-        info = tokens.pop(token)
-        save_tokens(tokens)
-        print(f"Token for '{info['name']}' has been revoked.")
+    from security.token_store import revoke_token_by_id
+
+    with _with_app_context():
+        rec = revoke_token_by_id(token)
+
+    if rec:
+        print(f"Token for '{rec.name}' has been revoked.")
     else:
-        print("Token not found.")
+        print("Token not found (expected token ID).")
 
 def main():
     print("Telescope WebSocket Token Manager")
@@ -135,7 +146,7 @@ def main():
             list_tokens()
             
         elif choice == "3":
-            token = input("Enter token to revoke: ").strip()
+            token = input("Enter token ID to revoke: ").strip()
             if token:
                 revoke_token(token)
             else:

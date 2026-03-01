@@ -13,6 +13,26 @@
       {% endif %}
     {% endwith %}
 
+    {% if generated_token %}
+    <div class="card border-success mb-3">
+        <div class="card-header bg-success text-white">New Token Generated</div>
+        <div class="card-body">
+            <p class="mb-2">
+                {% if generated_token_name %}
+                    Token for <strong>{{ generated_token_name }}</strong>.
+                {% else %}
+                    New token generated.
+                {% endif %}
+                Copy and store this now — it won't be shown again.
+            </p>
+            <div class="input-group">
+                <input id="new-token-value" type="text" class="form-control" readonly value="{{ generated_token }}" />
+                <button class="btn btn-outline-success" type="button" onclick="copyGeneratedToken()">Copy</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="card mb-3">
         <div class="card-body">
             <form method="post" action="{{ url_for('admin.admin_generate_token') }}" class="row g-2" id="tokenForm">
@@ -21,13 +41,10 @@
                     <input name="name" class="form-control" placeholder="Client name" required />
                 </div>
                 <div class="col-sm-3">
-                    <select name="client_type" class="form-select" id="clientTypeSelect" onchange="toggleTelescopeType()">
+                    <select name="client_type" class="form-select" id="clientTypeSelect">
                         <option value="observer">Observer</option>
                         <option value="telescope">Telescope</option>
                     </select>
-                </div>
-                <div class="col-sm-3" id="telescopeTypeDiv" style="display:none;">
-                    <input name="telescope_type" class="form-control" placeholder="Telescope type/model" />
                 </div>
                 <div class="col-sm-2">
                     <button class="btn btn-primary">Generate</button>
@@ -57,7 +74,7 @@
                             <tr>
                                 <td>
                                     <code id="token-{{ loop.index }}">{{ t.truncated }}</code>
-                                    <button class="btn btn-sm btn-outline-secondary ms-2" data-token-id="{{ t.id }}" data-index="{{ loop.index }}" onclick="showToken(this)">Show Full</button>
+                                    <small class="text-muted ms-2">(stored hashed)</small>
                                 </td>
                                 <td>{{ t.name }}</td>
                                 <td>
@@ -100,41 +117,18 @@
 </div>
 
 <script>
-function toggleTelescopeType() {
-    const clientType = document.getElementById('clientTypeSelect').value;
-    const telescopeTypeDiv = document.getElementById('telescopeTypeDiv');
-    
-    if (clientType === 'telescope') {
-        telescopeTypeDiv.style.display = 'block';
-    } else {
-        telescopeTypeDiv.style.display = 'none';
-    }
+function showToken(button) {
+    alert('Full token display is unavailable after creation (stored hashed).');
 }
 
-function showToken(button) {
-    const tokenId = button.getAttribute('data-token-id');
-    const index = button.getAttribute('data-index');
-    
-    fetch('/admin/security/tokens/show', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({token_id: tokenId})
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.token) {
-            document.getElementById('token-' + index).innerHTML = data.token;
-            button.style.display = 'none'; // Hide the button after showing token
-        } else {
-            alert('Error: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Failed to show token');
-    });
+function copyGeneratedToken() {
+    const el = document.getElementById('new-token-value');
+    if (!el) return;
+    el.select();
+    el.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(el.value)
+        .then(() => alert('Token copied to clipboard.'))
+        .catch(() => alert('Copy failed. Please copy manually.'));
 }
 </script>
 {% endblock %}

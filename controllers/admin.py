@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, session
 from flask_login import login_required, current_user
 from models.user import User
 from app.db import db
@@ -377,26 +377,25 @@ def admin_security_tokens():
     if guard:
         return guard
 
-    import security.manage_tokens as token_utils
+    from security.token_store import list_tokens
     from models.tables import Telescope
-    
-    tokens = token_utils.load_tokens()
-    # Build mapping of identifier -> (token, info)
+
+    tokens = list_tokens()
     view_tokens = []
-    for token, info in tokens.items():
+    for rec in tokens:
         token_data = {
-            'id': token,  # Full token for identification
-            'truncated': token[:12] + '...',  # Truncated for display
-            'name': info.get('name'),
-            'client_type': info.get('client_type'),
-            'created': info.get('created'),
+            'id': rec.id,
+            'truncated': (rec.token_prefix or 'token') + '...',
+            'name': rec.name,
+            'client_type': rec.client_type,
+            'created': rec.created_at.isoformat() if rec.created_at else 'Unknown',
             'db_info': None
         }
         
         # If it's a telescope, get database info
-        if info.get('client_type') == 'telescope':
+        if rec.client_type == 'telescope':
             try:
-                telescope_name = info.get('name') or token
+                telescope_name = rec.name
                 telescope = Telescope.get_telescope_by_id(telescope_name)
                 if telescope:
                     token_data['db_info'] = {
@@ -410,7 +409,15 @@ def admin_security_tokens():
         
         view_tokens.append(token_data)
 
-    return render_template('security_tokens.html', tokens=view_tokens)
+    generated_token = session.pop('new_api_token', None)
+    generated_token_name = session.pop('new_api_token_name', None)
+
+    return render_template(
+        'security_tokens.html',
+        tokens=view_tokens,
+        generated_token=generated_token,
+        generated_token_name=generated_token_name,
+    )
 
 
 @admin_bp.route('/admin/security/tokens/generate', methods=['POST'])
@@ -420,20 +427,24 @@ def admin_generate_token():
     if guard:
         return guard
 
-    import security.manage_tokens as token_utils
+    from security.token_store import create_token_record, list_tokens
     name = request.form.get('name') or 'unnamed'
     client_type = request.form.get('client_type') or 'observer'
-    telescope_type = request.form.get('telescope_type') or None
+    request.form.get('telescope_type') or None
     
     # Check for duplicate names
-    tokens = token_utils.load_tokens()
-    for token, info in tokens.items():
-        if info.get('name') == name:
+    tokens = list_tokens()
+    for rec in tokens:
+        if rec.name == name:
             flash(f'Token with name "{name}" already exists. Please choose a different name.', 'danger')
             return redirect(url_for('admin.admin_security_tokens'))
-    
-    token = token_utils.add_token(name, client_type, client_type)
+
+    token, _ = create_token_record(name, client_type)
     sec_logger.info(f"token_generated: token={token[:12]}..., name={name}, type={client_type}, by={current_user.id}")
+
+    # One-time token reveal after redirect
+    session['new_api_token'] = token
+    session['new_api_token_name'] = name
     
     flash_msg = f'Generated token for {name}: {token} (store securely)'
     if client_type == 'telescope':
@@ -449,7 +460,7 @@ def admin_revoke_token():
     if guard:
         return guard
 
-    import security.manage_tokens as token_utils
+    from security.token_store import get_token_by_id, revoke_token_by_id
     from models.tables import Telescope
     
     identifier = request.form.get('token')
@@ -457,22 +468,21 @@ def admin_revoke_token():
         flash('No token specified.', 'danger')
         return redirect(url_for('admin.admin_security_tokens'))
 
-    tokens = token_utils.load_tokens()
-    if identifier in tokens:
-        token_info = tokens[identifier]
+    rec = get_token_by_id(identifier)
+    if rec:
         
         # If it's a telescope, remove from database too
-        if token_info.get('client_type') == 'telescope':
+        if rec.client_type == 'telescope':
             try:
-                telescope_name = token_info.get('name') or identifier
+                telescope_name = rec.name
                 result = Telescope.remove_telescope(telescope_name)
                 if result['status'] == 'success':
-                    sec_logger.info(f"telescope_removed: token={identifier[:12]}..., by={current_user.id}")
+                    sec_logger.info(f"telescope_removed: token_id={rec.id}, by={current_user.id}")
             except Exception as e:
                 logging.error(f"Error removing telescope from database: {e}")
-        
-        token_utils.revoke_token(identifier)
-        sec_logger.info(f"token_revoked: token={identifier[:12]}..., by={current_user.id}")
+
+        revoke_token_by_id(identifier)
+        sec_logger.info(f"token_revoked: token_id={rec.id}, by={current_user.id}")
         flash('Token revoked and telescope removed from database.', 'success')
     else:
         flash('Token not found.', 'danger')
@@ -487,13 +497,9 @@ def admin_show_token():
     if guard:
         return guard
 
-    import security.manage_tokens as token_utils
     token_id = request.json.get('token_id') if request.is_json else request.form.get('token_id')
     if not token_id:
         return jsonify({'error': 'Token ID required'}), 400
 
-    tokens = token_utils.load_tokens()
-    if token_id in tokens:
-        return jsonify({'token': token_id})
-    else:
-        return jsonify({'error': 'Token not found'}), 404
+    # Tokens are stored hashed in DB and cannot be recovered after creation.
+    return jsonify({'error': 'Full token display is unavailable after creation (stored hashed).'}), 410

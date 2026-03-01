@@ -50,6 +50,7 @@ The app will try to start optional infrastructure binaries (Caddy and cloudflare
 - The app loads `instance/.env` (if present).
 - Database: SQLite DB file is `instance/Data.db` by default. `Server.py` sets `SQLALCHEMY_DATABASE_URI` accordingly.
 - Email: configured in `Server.py`
+- Upload size limit: set `MAX_UPLOAD_BYTES` (defaults to `134217728`, i.e. 128 MiB).
 
 ## Infrastructure and deployment files
 

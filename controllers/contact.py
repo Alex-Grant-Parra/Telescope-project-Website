@@ -140,7 +140,7 @@ def submit_contact():
             file.save(tmp_path)
 
             # Enforce server-side max size
-            max_bytes = current_app.config.get('MAX_CONTENT_LENGTH') or (8 * 1024 * 1024)
+            max_bytes = current_app.config.get('MAX_CONTENT_LENGTH') or (128 * 1024 * 1024)
             size = os.path.getsize(tmp_path)
             if size > max_bytes:
                 try:

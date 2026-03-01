@@ -9,6 +9,7 @@ import threading
 import secrets
 import logging
 from flask import jsonify, request, Response
+from flask_login import current_user
 
 # WebSocket Configuration - using the same ports as defined in Server.py
 commandPort = 4000
@@ -17,26 +18,7 @@ WS_IP = os.getenv("WS_IP", "0.0.0.0")  # Use environment variable, default to al
 WS_PORT = commandPort
 LIVEVIEW_WS_PORT = LiveViewPort
 
-# Security Configuration
-def load_api_tokens():
-    """Load API tokens from file"""
-    tokens_file = "security/api_tokens.json"
-    if os.path.exists(tokens_file):
-        try:
-            with open(tokens_file, 'r') as f:
-                tokens = json.load(f)
-            print(f"[TOKENS] Loaded {len(tokens)} API tokens from {tokens_file}")
-            for token, info in tokens.items():
-                print(f"[TOKENS] - {info.get('name', 'Unknown')} ({info.get('client_type', 'unknown')})")
-            return tokens
-        except Exception as e:
-            print(f"[WARNING] Failed to load API tokens: {e}")
-    
-    # Return empty dict if no file or error
-    print(f"[WARNING] No API tokens file found. Create '{tokens_file}' or use manage_tokens.py")
-    return {}
-
-API_TOKENS = load_api_tokens()
+sec_logger = logging.getLogger('security')
 
 # Rate limiting
 client_request_counts = {}
@@ -109,8 +91,49 @@ def _configure_websocket_logging():
 _configure_websocket_logging()
 
 def authenticate_token(token):
-    """Validate client authentication token"""
-    return token in API_TOKENS
+    """Validate client token against DB-backed token store."""
+    from security.token_store import verify_token
+    from Server import app
+
+    with app.app_context():
+        rec, reason = verify_token(token)
+
+    return bool(rec)
+
+
+def authenticate_token_with_policy(token, *, client_id=None, client_ip=None, required_scope=None):
+    """Validate token against DB-backed token store."""
+    from security.token_store import verify_token
+    from Server import app
+
+    with app.app_context():
+        rec, reason = verify_token(
+            token,
+        )
+
+    if rec:
+        return {
+            'ok': True,
+            'name': rec.name,
+            'client_type': rec.client_type,
+            'token_id': rec.id,
+            'source': 'db',
+        }
+
+    return {'ok': False, 'reason': reason or 'authentication_failed'}
+
+
+def _security_log(event, **kwargs):
+    """Best-effort security event logging."""
+    try:
+        payload = {'event': event}
+        payload.update(kwargs)
+        sec_logger.warning(json.dumps(payload))
+    except Exception:
+        try:
+            print(f"[SECURITY] {event}: {kwargs}")
+        except Exception:
+            pass
 
 def get_ws_client_ip(ws):
     """Resolve client IP for WebSocket connections using forwarded headers when available."""
@@ -179,12 +202,23 @@ class Client:
 class ClientManager:
     def __init__(self):
         self.clients = {}
+        self._lock = threading.Lock()
 
     def add_client(self, client_id, ws):
-        self.clients[client_id] = Client(client_id, ws)
+        with self._lock:
+            self.clients[client_id] = Client(client_id, ws)
+
+    def try_add_client(self, client_id, ws):
+        """Atomically add client only if not currently connected."""
+        with self._lock:
+            if client_id in self.clients:
+                return False
+            self.clients[client_id] = Client(client_id, ws)
+            return True
 
     def remove_client(self, client_id):
-        self.clients.pop(client_id, None)
+        with self._lock:
+            self.clients.pop(client_id, None)
 
     def command(self, client_id, function_name, args=None, kwargs=None):
         """Send command to client using thread-safe asyncio.run_coroutine_threadsafe"""
@@ -205,6 +239,10 @@ class ClientManager:
             return result
         except Exception as e:
             raise Exception(f"Command execution failed: {str(e)}")
+
+    def get_client(self, client_id):
+        with self._lock:
+            return self.clients.get(client_id)
 
 # Global client manager instance
 client_manager = ClientManager()
@@ -263,8 +301,15 @@ async def handle_client(ws):
         token = auth_data.get('token')
         client_id = auth_data.get('client_id')
         
-        if not token or not authenticate_token(token):
-            print(f"[SECURITY] Authentication failed for {client_ip}")
+        auth_result = authenticate_token_with_policy(
+            token,
+            client_id=client_id,
+            client_ip=client_ip,
+        )
+
+        if not token or not auth_result.get('ok'):
+            reason = auth_result.get('reason', 'authentication_failed')
+            _security_log('ws_command_auth_failed', ip=client_ip, client_id=client_id, reason=reason)
             await ws.close(code=4001, reason='Authentication failed')
             return
             
@@ -286,11 +331,16 @@ async def handle_client(ws):
         await ws.close(code=4000, reason='Authentication error')
         return
     
-    # Authentication successful
-    client_manager.add_client(client_id, ws)
-    client_type = API_TOKENS[token].get('client_type', 'unknown')
-    client_name = API_TOKENS[token].get('name', client_id)
+    # Authentication successful; refuse silent replacement of existing client_id
+    if not client_manager.try_add_client(client_id, ws):
+        _security_log('ws_command_client_id_already_connected', ip=client_ip, client_id=client_id)
+        await ws.close(code=4009, reason='Client ID already connected')
+        return
+
+    client_type = auth_result.get('client_type', 'unknown')
+    client_name = auth_result.get('name', client_id)
     print(f"[+] {client_name} ({client_type}) connected from {client_ip}")
+    _security_log('ws_command_connected', ip=client_ip, client_id=client_id, client_name=client_name, client_type=client_type, token_source=auth_result.get('source'))
     
     # Handle telescope database operations
     if client_type == 'telescope':
@@ -372,6 +422,7 @@ async def handle_client(ws):
             heartbeat_tasks[client_id].cancel()
             del heartbeat_tasks[client_id]
         client_manager.remove_client(client_id)
+        _security_log('ws_command_disconnected', ip=client_ip, client_id=client_id)
 
 # WebSocket handler for live view frames from client
 async def handle_liveview_client(ws):
@@ -391,8 +442,15 @@ async def handle_liveview_client(ws):
         token = auth_data.get('token')
         client_id = auth_data.get('client_id')
         
-        if not token or not authenticate_token(token):
-            print(f"[SECURITY] LiveView authentication failed for {client_ip}")
+        auth_result = authenticate_token_with_policy(
+            token,
+            client_id=client_id,
+            client_ip=client_ip,
+        )
+
+        if not token or not auth_result.get('ok'):
+            reason = auth_result.get('reason', 'authentication_failed')
+            _security_log('ws_liveview_auth_failed', ip=client_ip, client_id=client_id, reason=reason)
             await ws.close(code=4001, reason='Authentication failed')
             return
             
@@ -415,9 +473,10 @@ async def handle_liveview_client(ws):
         return
     
     # Authentication successful
-    client_type = API_TOKENS[token].get('client_type', 'unknown')
-    client_name = API_TOKENS[token].get('name', client_id)
+    client_type = auth_result.get('client_type', 'unknown')
+    client_name = auth_result.get('name', client_id)
     print(f"[LiveView] {client_name} ({client_type}) connected from {client_ip}")
+    _security_log('ws_liveview_connected', ip=client_ip, client_id=client_id, client_name=client_name, client_type=client_type, token_source=auth_result.get('source'))
     
     # Handle telescope database operations
     if client_type == 'telescope':
@@ -510,6 +569,68 @@ async def handle_liveview_client(ws):
                 del heartbeat_tasks[liveview_client_id]
         latest_frames.pop(client_id, None)
         last_frame_log_time.pop(client_id, None)
+        _security_log('ws_liveview_disconnected', ip=client_ip, client_id=client_id)
+
+
+def _extract_api_token_from_request():
+    """Extract API token from header or JSON body."""
+    auth_header = (request.headers.get('Authorization') or '').strip()
+    if auth_header.lower().startswith('bearer '):
+        return auth_header[7:].strip()
+
+    header_token = (request.headers.get('X-API-Token') or '').strip()
+    if header_token:
+        return header_token
+
+    try:
+        data = request.get_json(silent=True) or {}
+        body_token = (data.get('token') or '').strip()
+        if body_token:
+            return body_token
+    except Exception:
+        pass
+
+    return None
+
+
+def _is_loopback_request():
+    """Allow internal localhost requests without token for backwards compatibility."""
+    try:
+        host = (request.remote_addr or '').strip()
+        return host in ('127.0.0.1', '::1', 'localhost')
+    except Exception:
+        return False
+
+
+def _authorize_send_command(client_id):
+    """Authorize /sendCommand access.
+
+    Allowed when:
+    - authenticated admin user, OR
+    - loopback request, OR
+    - valid API token with send_command scope.
+    """
+    try:
+        if current_user and getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_admin', False):
+            return True, 'admin'
+    except Exception:
+        pass
+
+    if _is_loopback_request():
+        return True, 'loopback'
+
+    token = _extract_api_token_from_request()
+    if token:
+        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        auth_result = authenticate_token_with_policy(
+            token,
+            client_id=client_id,
+            client_ip=(client_ip.split(',')[0].strip() if client_ip else 'unknown'),
+        )
+        if auth_result.get('ok'):
+            return True, auth_result.get('source', 'token')
+
+    return False, 'forbidden'
 
 def save_latest_frame(client_id):
     frame = latest_frames.get(client_id)
@@ -593,11 +714,58 @@ def send_command_handler():
     args = data.get('args', [])
     kwargs = data.get('kwargs', {})  # Extract kwargs from request
 
+    allowed, auth_source = _authorize_send_command(client_id)
+    if not allowed:
+        _security_log(
+            'send_command_denied',
+            client_id=client_id,
+            command=command,
+            ip=request.headers.get('X-Forwarded-For', request.remote_addr),
+        )
+        return jsonify({"status": "error", "error": "Unauthorized"}), 403
+
+    _security_log(
+        'send_command_allowed',
+        auth_source=auth_source,
+        client_id=client_id,
+        command=command,
+        ip=request.headers.get('X-Forwarded-For', request.remote_addr),
+    )
+
     try:
         result = client_manager.command(client_id, command, args, kwargs)
         return jsonify({"status": "success", "result": result})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
+
+
+def admin_disconnect_ws_client_handler(client_id):
+    """Admin override: disconnect an active websocket command client by client_id."""
+    try:
+        if not current_user or not getattr(current_user, 'is_authenticated', False) or not getattr(current_user, 'is_admin', False):
+            return jsonify({'status': 'error', 'error': 'Admin access required'}), 403
+    except Exception:
+        return jsonify({'status': 'error', 'error': 'Admin access required'}), 403
+
+    existing = client_manager.get_client(client_id)
+    if not existing:
+        return jsonify({'status': 'error', 'error': 'Client not connected'}), 404
+
+    global ws_event_loop
+    if ws_event_loop is None:
+        return jsonify({'status': 'error', 'error': 'WebSocket event loop not initialized'}), 500
+
+    try:
+        fut = asyncio.run_coroutine_threadsafe(
+            existing.ws.close(code=4010, reason='Admin override disconnect'),
+            ws_event_loop,
+        )
+        fut.result(timeout=5)
+        client_manager.remove_client(client_id)
+        _security_log('ws_command_admin_disconnect', client_id=client_id, by=getattr(current_user, 'id', None))
+        return jsonify({'status': 'success', 'message': f"Disconnected '{client_id}'"})
+    except Exception as e:
+        return jsonify({'status': 'error', 'error': str(e)}), 500
 
 def liveview_handler(client_id):
     """Handler for /liveview/<client_id> route"""
@@ -648,11 +816,20 @@ def add_api_token_handler():
     token = data.get('token') or generate_token()
     client_type = data.get('client_type', 'observer')  # telescope, observer
     name = data.get('name', 'Unknown Client')
-    
-    API_TOKENS[token] = {
-        "client_type": client_type,
-        "name": name
-    }
+
+    # Persist token to DB-backed telescope token store
+    try:
+        from security.token_store import upsert_raw_token_record
+        from Server import app
+
+        with app.app_context():
+            upsert_raw_token_record(
+                token,
+                name=name,
+                client_type=client_type,
+            )
+    except Exception as e:
+        print(f"[WARNING] Failed to persist API token to DB: {e}")
     
     print(f"[ADMIN] Added API token for {name} ({client_type})")
     

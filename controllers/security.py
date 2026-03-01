@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
 from flask_login import login_required, current_user
-import security.manage_tokens as token_utils
+from security.token_store import list_tokens, create_token_record, revoke_token_by_id
 import hashlib
 import logging
 
@@ -21,16 +21,15 @@ def tokens():
         flash('Admin access required.', 'danger')
         return redirect(url_for('home.home'))
 
-    tokens = token_utils.load_tokens()
-    # Build mapping of identifier -> (token, info)
+    tokens = list_tokens()
     view_tokens = []
-    for token, info in tokens.items():
+    for rec in tokens:
         view_tokens.append({
-            'id': token,  # Full token for identification
-            'truncated': token[:12] + '...',  # Truncated for display
-            'name': info.get('name'),
-            'client_type': info.get('client_type'),
-            'created': info.get('created')
+            'id': rec.id,
+            'truncated': (rec.token_prefix or 'token') + '...',
+            'name': rec.name,
+            'client_type': rec.client_type,
+            'created': rec.created_at.isoformat() if rec.created_at else 'Unknown'
         })
 
     return render_template('security_tokens.html', tokens=view_tokens)
@@ -47,13 +46,13 @@ def generate_token():
     client_type = request.form.get('client_type') or 'observer'
     
     # Check for duplicate names
-    tokens = token_utils.load_tokens()
-    for token, info in tokens.items():
-        if info.get('name') == name:
+    tokens = list_tokens()
+    for rec in tokens:
+        if rec.name == name:
             flash(f'Token with name "{name}" already exists. Please choose a different name.', 'danger')
             return redirect(url_for('security.tokens'))
-    
-    token = token_utils.add_token(name, client_type)
+
+    token, _ = create_token_record(name, client_type)
     logger.info(f"token_generated: token={token[:12]}..., name={name}, by={current_user.id}")
     flash(f'Generated token for {name}: {token} (store securely)', 'success')
     return redirect(url_for('security.tokens'))
@@ -71,10 +70,8 @@ def revoke_token():
         flash('No token specified.', 'danger')
         return redirect(url_for('security.tokens'))
 
-    tokens = token_utils.load_tokens()
-    if identifier in tokens:
-        token_utils.revoke_token(identifier)
-        logger.info(f"token_revoked: token={identifier[:12]}..., by={current_user.id}")
+    if revoke_token_by_id(identifier):
+        logger.info(f"token_revoked: token_id={identifier}, by={current_user.id}")
         flash('Token revoked.', 'success')
     else:
         flash('Token not found.', 'danger')
@@ -92,8 +89,4 @@ def show_token():
     if not token_id:
         return jsonify({'error': 'Token ID required'}), 400
 
-    tokens = token_utils.load_tokens()
-    if token_id in tokens:
-        return jsonify({'token': token_id})
-    else:
-        return jsonify({'error': 'Token not found'}), 404
+    return jsonify({'error': 'Full token display is unavailable after creation (stored hashed).'}), 410
