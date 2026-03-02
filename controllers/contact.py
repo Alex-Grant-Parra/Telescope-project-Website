@@ -9,6 +9,8 @@ import uuid
 import tempfile
 import shutil
 import imghdr
+import urllib.parse
+import urllib.request
 
 from app.db import db
 from models.contact import ContactMessage
@@ -105,6 +107,38 @@ def _store_contact_attachment(uploaded_file):
             pass
 
 
+def _verify_turnstile_token(token: str, remote_ip: str = None):
+    secret = (current_app.config.get('TURNSTILE_SECRET_KEY') or '').strip()
+    if not secret:
+        return False, ['missing-secret']
+    if not token:
+        return False, ['missing-input-response']
+
+    payload = {
+        'secret': secret,
+        'response': token
+    }
+    if remote_ip:
+        payload['remoteip'] = remote_ip
+
+    body = urllib.parse.urlencode(payload).encode('utf-8')
+    req = urllib.request.Request(
+        'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+        data=body,
+        headers={'Content-Type': 'application/x-www-form-urlencoded'}
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+    except Exception:
+        return False, ['verification-failed']
+
+    if data.get('success'):
+        return True, []
+    return False, data.get('error-codes', ['verification-failed'])
+
+
 # --- Support landing and user tickets (placeholder) ---
 @contact_bp.route('/support')
 def support_home():
@@ -155,7 +189,19 @@ def contact_form():
         '🌐 Website / Interface Feedback',
         '❓Other'
     ]
-    return render_template('contact.html', prefill_email=prefill_email, type_options=type_options)
+    captcha_required_config = bool(current_app.config.get('CONTACT_CAPTCHA_REQUIRED', True))
+    captcha_site_key = (current_app.config.get('TURNSTILE_SITE_KEY') or '').strip()
+    captcha_secret_key = (current_app.config.get('TURNSTILE_SECRET_KEY') or '').strip()
+    captcha_enabled = bool(captcha_site_key)
+    captcha_required = bool(captcha_required_config and captcha_site_key and captcha_secret_key)
+    return render_template(
+        'contact.html',
+        prefill_email=prefill_email,
+        type_options=type_options,
+        captcha_required=captcha_required,
+        captcha_enabled=captcha_enabled,
+        captcha_site_key=captcha_site_key
+    )
 
 
 @contact_bp.route('/contact', methods=['POST'])
@@ -165,6 +211,21 @@ def submit_contact():
     message_type = (request.form.get('message_type') or '').strip()
     message = (request.form.get('message') or '').strip()
     client_meta_raw = request.form.get('client_meta')
+
+    captcha_required_config = bool(current_app.config.get('CONTACT_CAPTCHA_REQUIRED', True))
+    captcha_site_key = (current_app.config.get('TURNSTILE_SITE_KEY') or '').strip()
+    captcha_secret_key = (current_app.config.get('TURNSTILE_SECRET_KEY') or '').strip()
+    captcha_required = bool(captcha_required_config and captcha_site_key and captcha_secret_key)
+    if captcha_required:
+        turnstile_token = (request.form.get('cf-turnstile-response') or '').strip()
+        is_valid_captcha, captcha_errors = _verify_turnstile_token(
+            turnstile_token,
+            request.headers.get('X-Forwarded-For', request.remote_addr)
+        )
+        if not is_valid_captcha:
+            current_app.logger.warning('Contact CAPTCHA failed: %s', ','.join(captcha_errors or []))
+            flash('Please complete the CAPTCHA before sending your ticket.', 'danger')
+            return redirect(url_for('contact.contact_form'))
 
     # Basic validation
     if not email or not message_type or not title or not message:

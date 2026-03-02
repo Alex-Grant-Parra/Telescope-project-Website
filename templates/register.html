@@ -16,6 +16,7 @@
     {% endwith %}
     
     <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <div class="mb-3">
             <label for="username" class="form-label">Username</label>
             <input type="text" name="username" class="form-control" required>
@@ -31,7 +32,20 @@
             <input type="password" name="password" class="form-control" required>
         </div>
 
+        {% if captcha_required and captcha_enabled %}
+        <div class="mb-3">
+          <div class="cf-turnstile" data-sitekey="{{ captcha_site_key }}"></div>
+          <div class="form-text">Please complete the CAPTCHA before creating your account.</div>
+        </div>
+        {% endif %}
+
         <button type="submit" class="btn btn-primary w-100">Register</button>
     </form>
 </div>
 {% endblock %}
+
+    {% block extra_js %}
+    {% if captcha_required and captcha_enabled %}
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    {% endif %}
+    {% endblock %}

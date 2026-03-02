@@ -119,6 +119,13 @@ mail = Mail(app)
 # Site domain
 app.config["APP_DOMAIN"] = os.getenv("APP_DOMAIN", "telescopes.dev")
 
+# Contact form CAPTCHA (Cloudflare Turnstile)
+app.config["TURNSTILE_SITE_KEY"] = os.getenv("TURNSTILE_SITE_KEY", "")
+app.config["TURNSTILE_SECRET_KEY"] = os.getenv("TURNSTILE_SECRET_KEY", "")
+app.config["CONTACT_CAPTCHA_REQUIRED"] = os.getenv("CONTACT_CAPTCHA_REQUIRED", "True").lower() in ("1", "true", "yes")
+app.config["REGISTER_CAPTCHA_REQUIRED"] = os.getenv("REGISTER_CAPTCHA_REQUIRED", "True").lower() in ("1", "true", "yes")
+app.config["FORGOT_PASSWORD_CAPTCHA_REQUIRED"] = os.getenv("FORGOT_PASSWORD_CAPTCHA_REQUIRED", "True").lower() in ("1", "true", "yes")
+
 # Initialize CSRF protection
 csrf = CSRFProtect()
 csrf.init_app(app)
