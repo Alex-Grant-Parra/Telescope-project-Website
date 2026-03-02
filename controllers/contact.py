@@ -21,6 +21,7 @@ contact_bp = Blueprint('contact', __name__)
 
 
 ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.log', '.txt', '.fits'}
+ALLOWED_TICKET_STATUSES = {'new', 'in_progress', 'resolved', 'closed'}
 
 
 def _allowed_file(filename: str) -> bool:
@@ -350,6 +351,49 @@ def admin_contact_list():
 
     q = ContactMessage.query.order_by(ContactMessage.created_at.desc()).all()
     return render_template('admin_contact_list.html', messages=q)
+
+
+@contact_bp.route('/admin/contact/bulk-status', methods=['POST'])
+@login_required
+def admin_contact_bulk_status():
+    if not getattr(current_user, 'is_admin', False):
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('home.home'))
+
+    selected_ids_raw = request.form.getlist('ticket_ids')
+    new_status = (request.form.get('status') or '').strip()
+
+    if new_status not in ALLOWED_TICKET_STATUSES:
+        flash('Invalid status selection.', 'danger')
+        return redirect(url_for('contact.admin_contact_list'))
+
+    selected_ids = []
+    for raw_id in selected_ids_raw:
+        try:
+            selected_ids.append(int(raw_id))
+        except Exception:
+            continue
+
+    selected_ids = list(set(selected_ids))
+    if not selected_ids:
+        flash('Select at least one ticket to update.', 'warning')
+        return redirect(url_for('contact.admin_contact_list'))
+
+    try:
+        tickets = ContactMessage.query.filter(ContactMessage.id.in_(selected_ids)).all()
+        updated_count = 0
+        for ticket in tickets:
+            if ticket.status != new_status:
+                ticket.status = new_status
+                updated_count += 1
+
+        db.session.commit()
+        flash(f'Updated {updated_count} ticket(s) to {new_status}.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Failed to update tickets: {e}', 'danger')
+
+    return redirect(url_for('contact.admin_contact_list'))
 
 
 @contact_bp.route('/admin/contact/<int:message_id>', methods=['GET', 'POST'])

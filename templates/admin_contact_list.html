@@ -8,10 +8,27 @@
   <a href="{{ url_for('admin.admin') }}" class="btn btn-outline-secondary">Back to Admin</a>
   </div>
 
+<form method="post" action="{{ url_for('contact.admin_contact_bulk_status') }}" id="bulk-status-form" class="mb-3">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+  <div class="d-flex flex-wrap gap-2 align-items-center">
+    <label for="bulk-status" class="mb-0">Set selected tickets to:</label>
+    <select name="status" id="bulk-status" class="form-select" style="max-width: 220px;" required>
+      <option value="">Choose status...</option>
+      <option value="new">new</option>
+      <option value="in_progress">in_progress</option>
+      <option value="resolved">resolved</option>
+      <option value="closed">closed</option>
+    </select>
+    <button type="submit" id="bulk-status-submit" class="btn btn-primary" disabled>Update Selected</button>
+    <span id="selected-count" class="text-muted">0 selected</span>
+  </div>
+</form>
+
 <div class="table-responsive">
   <table class="table table-striped align-middle">
     <thead>
       <tr>
+        <th style="width: 40px;"><input type="checkbox" id="select-all-tickets" aria-label="Select all tickets"></th>
         <th>ID</th>
         <th>Created</th>
         <th>Status</th>
@@ -24,6 +41,16 @@
     <tbody>
       {% for m in messages %}
       <tr>
+        <td>
+          <input
+            type="checkbox"
+            class="ticket-select"
+            name="ticket_ids"
+            value="{{ m.id }}"
+            form="bulk-status-form"
+            aria-label="Select ticket #{{ m.id }}"
+          >
+        </td>
         <td>#{{ m.id }}</td>
         <td>{{ m.created_at.strftime('%Y-%m-%d %H:%M:%S') if m.created_at else '' }} UTC</td>
         <td>
@@ -41,9 +68,71 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="6" class="text-center text-muted">No messages yet.</td></tr>
+      <tr><td colspan="8" class="text-center text-muted">No messages yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+
+<script>
+  (function () {
+    const form = document.getElementById('bulk-status-form');
+    if (!form) {
+      return;
+    }
+
+    const checkboxes = Array.from(document.querySelectorAll('.ticket-select'));
+    const selectAll = document.getElementById('select-all-tickets');
+    const submitBtn = document.getElementById('bulk-status-submit');
+    const selectedCount = document.getElementById('selected-count');
+    let lastCheckedIndex = null;
+
+    const updateSelectionUi = () => {
+      const checkedCount = checkboxes.filter((cb) => cb.checked).length;
+      selectedCount.textContent = `${checkedCount} selected`;
+      submitBtn.disabled = checkedCount === 0;
+
+      if (selectAll) {
+        selectAll.checked = checkedCount > 0 && checkedCount === checkboxes.length;
+        selectAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+      }
+    };
+
+    checkboxes.forEach((checkbox, index) => {
+      checkbox.addEventListener('click', (event) => {
+        if (event.shiftKey && lastCheckedIndex !== null) {
+          const start = Math.min(lastCheckedIndex, index);
+          const end = Math.max(lastCheckedIndex, index);
+          const targetState = checkbox.checked;
+          for (let i = start; i <= end; i += 1) {
+            checkboxes[i].checked = targetState;
+          }
+        }
+        lastCheckedIndex = index;
+        updateSelectionUi();
+      });
+
+      checkbox.addEventListener('change', updateSelectionUi);
+    });
+
+    if (selectAll) {
+      selectAll.addEventListener('change', () => {
+        const shouldCheck = selectAll.checked;
+        checkboxes.forEach((cb) => {
+          cb.checked = shouldCheck;
+        });
+        updateSelectionUi();
+      });
+    }
+
+    form.addEventListener('submit', (event) => {
+      const hasSelection = checkboxes.some((cb) => cb.checked);
+      if (!hasSelection) {
+        event.preventDefault();
+      }
+    });
+
+    updateSelectionUi();
+  })();
+</script>
 {% endblock %}
