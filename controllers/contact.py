@@ -26,6 +26,85 @@ def _allowed_file(filename: str) -> bool:
     return ext in ALLOWED_EXTENSIONS
 
 
+def _store_contact_attachment(uploaded_file):
+    """Store an uploaded support attachment and return (saved_path, original_filename, error_message)."""
+    if not uploaded_file or not getattr(uploaded_file, 'filename', None):
+        return None, None, None
+
+    orig_fname = secure_filename(uploaded_file.filename)
+    if not orig_fname:
+        return None, None, 'Invalid attachment filename.'
+
+    if not _allowed_file(orig_fname):
+        return None, None, 'Invalid file type. Allowed: .png, .jpg, .jpeg, .log, .txt, .fits'
+
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    upload_base = ContactMessage.uploads_dir(base_dir)
+    try:
+        os.makedirs(upload_base, exist_ok=True)
+    except Exception:
+        pass
+
+    tmp_path = None
+    try:
+        tmp_dir = tempfile.gettempdir()
+        tmp_name = f"contact_{uuid.uuid4().hex}"
+        tmp_path = os.path.join(tmp_dir, tmp_name)
+        uploaded_file.save(tmp_path)
+
+        max_bytes = current_app.config.get('MAX_CONTENT_LENGTH') or (128 * 1024 * 1024)
+        size = os.path.getsize(tmp_path)
+        if size > max_bytes:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+            return None, None, 'Uploaded file is too large.'
+
+        _, ext = os.path.splitext(orig_fname.lower())
+        if ext in ('.png', '.jpg', '.jpeg'):
+            verified = False
+            try:
+                from PIL import Image
+                with Image.open(tmp_path) as im:
+                    im.verify()
+                verified = True
+            except Exception:
+                try:
+                    img_type = imghdr.what(tmp_path)
+                    if img_type in ('png', 'jpeg'):
+                        verified = True
+                except Exception:
+                    verified = False
+
+            if not verified:
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+                return None, None, 'Uploaded image appears to be invalid or corrupted.'
+
+        ts = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+        target_dir = os.path.join(upload_base, ts)
+        os.makedirs(target_dir, exist_ok=True)
+        stored_name = f"{uuid.uuid4().hex}{ext}"
+        saved_path = os.path.join(target_dir, stored_name)
+
+        shutil.move(tmp_path, saved_path)
+        try:
+            os.chmod(saved_path, 0o600)
+        except Exception:
+            pass
+
+        return saved_path, orig_fname, None
+    finally:
+        try:
+            if tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+
+
 # --- Support landing and user tickets (placeholder) ---
 @contact_bp.route('/support')
 def support_home():
@@ -115,95 +194,18 @@ def submit_contact():
         pass
 
     # Handle optional file upload (safer)
-    saved_path = None
     file = request.files.get('attachment')
-    if file and file.filename:
-        orig_fname = secure_filename(file.filename)
-        if not _allowed_file(orig_fname):
-            flash('Invalid file type. Allowed: .png, .jpg, .jpeg, .log, .txt, .fits', 'danger')
-            return redirect(url_for('contact.contact_form'))
+    saved_path, original_filename, upload_error = _store_contact_attachment(file)
+    if upload_error:
+        flash(upload_error, 'danger')
+        return redirect(url_for('contact.contact_form'))
 
-        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        upload_base = ContactMessage.uploads_dir(base_dir)
+    if original_filename:
         try:
-            os.makedirs(upload_base, exist_ok=True)
+            if isinstance(meta, dict):
+                meta['original_filename'] = original_filename
         except Exception:
             pass
-
-        # Save to a temporary path first
-        tmp_fd, tmp_path = None, None
-        try:
-            # Use a temp filename in the system temp dir
-            tmp_dir = tempfile.gettempdir()
-            tmp_name = f"contact_{uuid.uuid4().hex}"
-            tmp_path = os.path.join(tmp_dir, tmp_name)
-            file.save(tmp_path)
-
-            # Enforce server-side max size
-            max_bytes = current_app.config.get('MAX_CONTENT_LENGTH') or (128 * 1024 * 1024)
-            size = os.path.getsize(tmp_path)
-            if size > max_bytes:
-                try:
-                    os.remove(tmp_path)
-                except Exception:
-                    pass
-                flash('Uploaded file is too large.', 'danger')
-                return redirect(url_for('contact.contact_form'))
-
-            # If it's an image extension, verify image contents
-            _, ext = os.path.splitext(orig_fname.lower())
-            if ext in ('.png', '.jpg', '.jpeg'):
-                # Try Pillow first, fall back to imghdr
-                verified = False
-                try:
-                    from PIL import Image
-                    with Image.open(tmp_path) as im:
-                        im.verify()
-                    verified = True
-                except Exception:
-                    try:
-                        img_type = imghdr.what(tmp_path)
-                        if img_type in ('png', 'jpeg'):
-                            verified = True
-                    except Exception:
-                        verified = False
-
-                if not verified:
-                    try:
-                        os.remove(tmp_path)
-                    except Exception:
-                        pass
-                    flash('Uploaded image appears to be invalid or corrupted.', 'danger')
-                    return redirect(url_for('contact.contact_form'))
-
-            # Use timestamp-based folder to avoid collisions, and randomize filename
-            ts = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
-            target_dir = os.path.join(upload_base, ts)
-            os.makedirs(target_dir, exist_ok=True)
-            stored_name = f"{uuid.uuid4().hex}{ext}"
-            saved_path = os.path.join(target_dir, stored_name)
-
-            # Move into final location and tighten permissions
-            shutil.move(tmp_path, saved_path)
-            try:
-                os.chmod(saved_path, 0o600)
-            except Exception:
-                pass
-
-            # Preserve original filename in meta for admin reference
-            try:
-                if isinstance(meta, dict):
-                    meta['original_filename'] = orig_fname
-            except Exception:
-                pass
-
-        finally:
-            # Ensure tmp removed if still present
-            try:
-                if tmp_path and os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-            except Exception:
-                pass
 
     # Create DB record
     cm = ContactMessage(
@@ -225,7 +227,9 @@ def submit_contact():
             author='user',
             user_id=(current_user.id if getattr(current_user, 'is_authenticated', False) else None),
             subject=title or None,
-            body=message
+            body=message,
+            file_path=saved_path,
+            original_filename=original_filename
         )
         db.session.add(first_entry)
     except Exception:
@@ -299,7 +303,15 @@ def admin_contact_detail(message_id):
     entries = ContactMessageEntry.query.filter_by(contact_id=msg.id).order_by(ContactMessageEntry.created_at.asc()).all()
     # Backfill for legacy tickets without entries
     if not entries:
-        seed = ContactMessageEntry(contact_id=msg.id, author='user', user_id=msg.user_id, subject=(msg.meta or {}).get('title'), body=msg.message)
+        seed = ContactMessageEntry(
+            contact_id=msg.id,
+            author='user',
+            user_id=msg.user_id,
+            subject=(msg.meta or {}).get('title'),
+            body=msg.message,
+            file_path=msg.file_path,
+            original_filename=(msg.meta or {}).get('original_filename')
+        )
         db.session.add(seed)
         db.session.commit()
         entries = [seed]
@@ -353,14 +365,24 @@ def admin_contact_delete(message_id):
 
     msg = ContactMessage.query.get_or_404(message_id)
 
-    # Best-effort cleanup of attachment on disk
+    # Best-effort cleanup of attachments on disk
     try:
-        if msg.file_path and os.path.exists(msg.file_path):
-            # Remove the file
-            os.remove(msg.file_path)
-            # Attempt to remove the timestamp folder if empty
-            parent_dir = os.path.dirname(msg.file_path)
+        paths_to_remove = set()
+        if msg.file_path:
+            paths_to_remove.add(msg.file_path)
+
+        try:
+            for entry in ContactMessageEntry.query.filter_by(contact_id=msg.id).all():
+                if entry.file_path:
+                    paths_to_remove.add(entry.file_path)
+        except Exception:
+            pass
+
+        for path in paths_to_remove:
             try:
+                if path and os.path.exists(path):
+                    os.remove(path)
+                parent_dir = os.path.dirname(path)
                 if parent_dir and os.path.isdir(parent_dir) and not os.listdir(parent_dir):
                     os.rmdir(parent_dir)
             except Exception:
@@ -391,22 +413,83 @@ def support_ticket_detail(message_id):
 
     if request.method == 'POST':
         reply_body = (request.form.get('reply_body') or '').strip()
-        if reply_body:
-            db.session.add(ContactMessageEntry(contact_id=msg.id, author='user', user_id=current_user.id, body=reply_body))
+        attachment = request.files.get('attachment')
+        attachment_path, original_filename, upload_error = _store_contact_attachment(attachment)
+        if upload_error:
+            flash(upload_error, 'danger')
+            return redirect(url_for('contact.support_ticket_detail', message_id=msg.id))
+
+        if reply_body or attachment_path:
+            db.session.add(
+                ContactMessageEntry(
+                    contact_id=msg.id,
+                    author='user',
+                    user_id=current_user.id,
+                    body=reply_body or '[Attachment uploaded]',
+                    file_path=attachment_path,
+                    original_filename=original_filename
+                )
+            )
             # Set status to in_progress/new when user replies
             if msg.status in ('resolved', 'closed'):
                 msg.status = 'in_progress'
             db.session.commit()
             flash('Your reply has been added to the ticket.', 'success')
             return redirect(url_for('contact.support_ticket_detail', message_id=msg.id))
+        flash('Please enter a message or attach a file.', 'danger')
+        return redirect(url_for('contact.support_ticket_detail', message_id=msg.id))
 
     entries = ContactMessageEntry.query.filter_by(contact_id=msg.id).order_by(ContactMessageEntry.created_at.asc()).all()
     if not entries:
-        seed = ContactMessageEntry(contact_id=msg.id, author='user', user_id=msg.user_id, subject=(msg.meta or {}).get('title'), body=msg.message)
+        seed = ContactMessageEntry(
+            contact_id=msg.id,
+            author='user',
+            user_id=msg.user_id,
+            subject=(msg.meta or {}).get('title'),
+            body=msg.message,
+            file_path=msg.file_path,
+            original_filename=(msg.meta or {}).get('original_filename')
+        )
         db.session.add(seed)
         db.session.commit()
         entries = [seed]
     return render_template('support_ticket_detail.html', msg=msg, entries=entries)
+
+
+@contact_bp.route('/support/tickets/<int:message_id>/entries/<int:entry_id>/attachment')
+@login_required
+def support_ticket_entry_attachment(message_id, entry_id):
+    msg = ContactMessage.query.get_or_404(message_id)
+    if msg.user_id != current_user.id:
+        flash('You do not have access to this ticket.', 'danger')
+        return redirect(url_for('contact.support_tickets'))
+
+    entry = ContactMessageEntry.query.filter_by(id=entry_id, contact_id=msg.id).first_or_404()
+    if not entry.file_path or not os.path.exists(entry.file_path):
+        return jsonify({'error': 'Attachment not found'}), 404
+
+    try:
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        upload_base = ContactMessage.uploads_dir(base_dir)
+        real_upload_base = os.path.realpath(upload_base)
+        real_path = os.path.realpath(entry.file_path)
+        if not real_path.startswith(real_upload_base):
+            return jsonify({'error': 'Attachment not accessible'}), 403
+    except Exception:
+        return jsonify({'error': 'Attachment access error'}), 500
+
+    mime, _ = mimetypes.guess_type(entry.file_path)
+    download_name = entry.original_filename or os.path.basename(entry.file_path)
+
+    try:
+        return send_file(entry.file_path, mimetype=mime or 'application/octet-stream', as_attachment=True, download_name=download_name)
+    except TypeError:
+        try:
+            return send_file(entry.file_path, mimetype=mime or 'application/octet-stream', as_attachment=True, attachment_filename=download_name)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @contact_bp.route('/admin/contact/<int:message_id>/attachment')
@@ -455,6 +538,48 @@ def admin_contact_attachment(message_id):
         # Fallback for older Flask versions: use attachment_filename
         try:
             return send_file(msg.file_path, mimetype=mime or 'application/octet-stream', as_attachment=as_attachment, attachment_filename=download_name)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@contact_bp.route('/admin/contact/<int:message_id>/entries/<int:entry_id>/attachment')
+@login_required
+def admin_contact_entry_attachment(message_id, entry_id):
+    if not getattr(current_user, 'is_admin', False):
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('home.home'))
+
+    msg = ContactMessage.query.get_or_404(message_id)
+    entry = ContactMessageEntry.query.filter_by(id=entry_id, contact_id=msg.id).first_or_404()
+    if not entry.file_path or not os.path.exists(entry.file_path):
+        return jsonify({'error': 'Attachment not found'}), 404
+
+    try:
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        upload_base = ContactMessage.uploads_dir(base_dir)
+        real_upload_base = os.path.realpath(upload_base)
+        real_path = os.path.realpath(entry.file_path)
+        if not real_path.startswith(real_upload_base):
+            return jsonify({'error': 'Attachment not accessible'}), 403
+    except Exception:
+        return jsonify({'error': 'Attachment access error'}), 500
+
+    mime, _ = mimetypes.guess_type(entry.file_path)
+    as_attachment = True
+    try:
+        if mime and mime.startswith('image/'):
+            as_attachment = False
+    except Exception:
+        as_attachment = True
+
+    download_name = entry.original_filename or os.path.basename(entry.file_path)
+    try:
+        return send_file(entry.file_path, mimetype=mime or 'application/octet-stream', as_attachment=as_attachment, download_name=download_name)
+    except TypeError:
+        try:
+            return send_file(entry.file_path, mimetype=mime or 'application/octet-stream', as_attachment=as_attachment, attachment_filename=download_name)
         except Exception as e:
             return jsonify({'error': str(e)}), 500
     except Exception as e:

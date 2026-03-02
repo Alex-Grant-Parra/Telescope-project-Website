@@ -371,6 +371,13 @@ def enforce_enabled_account():
 with app.app_context():
     db.create_all()
     print("Database tables created/verified")
+
+    # Ensure contact thread attachment columns exist for existing DBs
+    try:
+        from models.contact_thread import ensure_contact_entry_attachment_columns
+        ensure_contact_entry_attachment_columns()
+    except Exception as e:
+        print(f"[WARNING] Could not ensure contact entry attachment columns: {e}")
     
     # Cleanup expired trusted devices
     from models.trusted_device import TrustedDevice

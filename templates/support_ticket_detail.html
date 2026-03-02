@@ -27,16 +27,28 @@
               <small class="text-muted">{{ e.created_at.strftime('%Y-%m-%d %H:%M:%S') if e.created_at else '' }} UTC</small>
             </div>
             <div style="white-space:pre-wrap">{{ e.body }}</div>
+            {% if e.file_path %}
+            <div class="mt-2">
+              <a href="{{ url_for('contact.support_ticket_entry_attachment', message_id=msg.id, entry_id=e.id) }}" class="link-primary" target="_blank" rel="noopener">
+                Download attachment{% if e.original_filename %} ({{ e.original_filename }}){% endif %}
+              </a>
+            </div>
+            {% endif %}
           </div>
           {% endfor %}
         </div>
         <hr>
         <h5 class="card-title">Reply to support</h5>
-        <form method="post" action="{{ url_for('contact.support_ticket_detail', message_id=msg.id) }}">
+        <form method="post" action="{{ url_for('contact.support_ticket_detail', message_id=msg.id) }}" enctype="multipart/form-data">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
           <div class="mb-3">
             <label for="reply_body" class="form-label">Message</label>
             <textarea id="reply_body" name="reply_body" class="form-control" rows="6" placeholder="Write your message..."></textarea>
+          </div>
+          <div class="mb-3">
+            <label for="attachment" class="form-label">Attach a file (optional)</label>
+            <input class="form-control" type="file" id="attachment" name="attachment" accept=".png,.jpg,.jpeg,.log,.txt,.fits">
+            <div class="form-text">Allowed types: .png, .jpg, .jpeg, .log, .txt, .fits</div>
           </div>
           <div class="d-flex justify-content-end gap-2">
             <button type="submit" class="btn btn-primary">Send</button>
