@@ -157,18 +157,15 @@ def set_role(user_id):
         flash('User not found.', 'danger')
         return redirect(request.referrer or url_for('admin.admin'))
 
-    role = request.form.get('role')
-    print(f"[DEBUG] Received role: '{role}', form data: {dict(request.form)}")
-    print(f"[DEBUG] Role type: {type(role)}, repr: {repr(role)}")
-    
-    # Check if form data is empty (CSRF validation failure)
-    if not request.form:
-        print("[DEBUG] Empty form data - likely CSRF validation failure")
+    json_data = request.get_json(silent=True) if request.is_json else None
+    role = (json_data or {}).get('role') or request.form.get('role')
+
+    # For non-JSON submissions, empty form data usually indicates a validation issue.
+    if not request.is_json and not request.form:
         flash('Security validation failed. Please try again.', 'danger')
         return redirect(request.referrer or url_for('admin.admin'))
     
     if role not in ['Administrator', 'Standard', 'Limited']:
-        print(f"[DEBUG] Invalid role: '{role}' not in ['Administrator', 'Standard', 'Limited']")
         if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'status': 'error', 'message': 'Invalid role specified.'}), 400
         flash('Invalid role specified.', 'danger')
@@ -176,8 +173,6 @@ def set_role(user_id):
 
     user.AccountType = role
     db.session.commit()
-    print(f"[DEBUG] Successfully set user.AccountType to: '{user.AccountType}'")
-    
     if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'status': 'success', 'message': f'{user.username} role set to {role}.'})
     flash(f'{user.username} role set to {role}.', 'success')

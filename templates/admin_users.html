@@ -245,13 +245,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     },
                     body: JSON.stringify(jsonBody)
                 });
+                const responseText = await resp.text();
                 let data = null;
                 try {
-                    data = await resp.json();
+                    data = responseText ? JSON.parse(responseText) : null;
                 } catch (parseErr) {
-                    // If the response isn't JSON (e.g., redirect HTML), surface status
-                    const text = await resp.text();
-                    data = { status: resp.ok ? 'success' : 'error', message: text || resp.statusText };
+                    data = { status: resp.ok ? 'success' : 'error', message: responseText || resp.statusText };
+                }
+                if (!data || typeof data !== 'object') {
+                    data = { status: resp.ok ? 'success' : 'error', message: responseText || resp.statusText };
                 }
                 // show feedback
                 const container = document.querySelector('.container');
