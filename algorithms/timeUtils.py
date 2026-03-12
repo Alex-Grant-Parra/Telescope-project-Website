@@ -1,5 +1,7 @@
 class SpaceTime:
 
+    J2000_JD = 2451545.0
+
     @staticmethod
     def getLST(LR_Longitude, LR_GST):
         LR_Longitude_hours = LR_Longitude/15
@@ -12,7 +14,7 @@ class SpaceTime:
     def getGST(LR_julianDate, LI_hour, LI_minute, LR_second):
         
         # Finding Greenwich siderial time (GST)
-        LR_S = LR_julianDate - 2451545.0
+        LR_S = LR_julianDate - SpaceTime.J2000_JD
         LR_T = LR_S / 36525.0
         LR_T0 = 6.697374558 + (2400.051336*LR_T) + (0.000025862*LR_T**2)
         LR_T0 = LR_T0%24
@@ -60,3 +62,16 @@ class SpaceTime:
         LR_julianDate = LI_B + LI_C + LI_D + LI_day + 1720994.5 + LR_fractionalDay
 
         return LR_julianDate
+
+    @staticmethod
+    def getMeanObliquityDeg(LR_julianDate):
+        """Mean obliquity of the ecliptic (degrees) at a Julian date."""
+        LR_T = (LR_julianDate - SpaceTime.J2000_JD) / 36525.0
+        LR_changeInTilt = ((46.815 * LR_T) + (0.0006 * LR_T**2) - (0.00181 * LR_T**3)) / 3600.0
+        return 23.439292 - LR_changeInTilt
+
+    @staticmethod
+    def getMeanObliquityRad(LR_julianDate):
+        """Mean obliquity of the ecliptic (radians) at a Julian date."""
+        import math
+        return math.radians(SpaceTime.getMeanObliquityDeg(LR_julianDate))

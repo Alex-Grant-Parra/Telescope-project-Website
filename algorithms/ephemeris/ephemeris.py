@@ -1,7 +1,6 @@
 from algorithms.ephemeris.loader import load_all
 from algorithms.timeUtils import SpaceTime
 from algorithms.ephemeris import utils as ephem_utils
-from algorithms.convert import convert
 
 MAJOR = ["Mercury","Venus","Earth","Mars","Jupiter","Saturn","Uranus","Neptune"]
 
@@ -13,8 +12,6 @@ def get_positions(year, month, day, hour: int = 0, minute: int = 0, second: floa
       - ra_deg: Right ascension in degrees
       - dec_deg: Declination in degrees
       - distance_km: optional distance in km (when available)
-
-    Names are lower-cased: 'sun', 'moon', 'mercury', ...
     """
     planets, moon = load_all()
     jd = SpaceTime.getJD(year, month, day, hour, minute, second)

@@ -32,7 +32,7 @@ class CelestialObject:
         self.w = kwargs.get("ArgPeri") # Arugument of periapsis
         self.M = kwargs.get("MeanAnomaly") # Mean anomaly
 
-        self.T = 2451545.0 # Time at perihelion, epoch, currently julian date
+        self.T = SpaceTime.J2000_JD # Time at perihelion, epoch, currently julian date
 
         self.q = self.a * (1 - self.e) # Customary to give perihelion distance instead of a for hyperbolic orbits
 
@@ -103,11 +103,7 @@ for key, value in data.items():
 # print(planets.get("mars").P) # returns 18.6021
 
 def findAxialTilt(julianDate):
-    JD = julianDate-2451545.0 # The constant is the JD for J2000 1.5
-    T = JD/36525.0 # Days in a centuary
-    ChangeInTilt = ((46.815*T)+(0.0006*T**2)-(0.00181*T**3))/3600
-    Tilt = 23.439292-ChangeInTilt
-    return Tilt
+    return SpaceTime.getMeanObliquityDeg(julianDate)
 
 def findPlanet(year, month, day, planetChoice, hour: int = 0, minute: int = 0, second: float = 0.0):
 
