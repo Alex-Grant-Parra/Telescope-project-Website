@@ -106,14 +106,12 @@ def findPlanet(year, month, day, planetChoice, hour: int = 0, minute: int = 0, s
     J1990JD = 2447892.5
     JDdifference = currentJD - J1990JD + 1
 
-    # For the planet:
     Np = (360/365.242191 * JDdifference/planets.get(planetChoice).P)%360
     Mp = Np + planets.get(planetChoice).l - planets.get(planetChoice).W
     l = (Np + 360/pi * planets.get(planetChoice).e * sin(Mp) + planets.get(planetChoice).l)%360
     vp = l - planets.get(planetChoice).W
     r = (planets.get(planetChoice).a * (1 - planets.get(planetChoice).e ** 2)) / (1 + planets.get(planetChoice).e * cos(vp))
 
-    # For the earth
     Ne = (360/365.242191 * JDdifference/EarthPeriod)%360
     Me = Ne + EarthLongAtEpoch - EarthLongOfPeri
     L = (Ne + 360/pi * EarthEccentricity * sin(Me) + EarthLongAtEpoch)%360
@@ -171,7 +169,6 @@ def findSun(year, month, day, usedForMoon=False, hour: int = 0, minute: int = 0,
     if usedForMoon == False:
         return convert.EclipticToEquatorial(convert.DecimalToHrMinSec(0), convert.DecimalToHrMinSec(LR_EclLong), findAxialTilt(LR_julianDate))
     else:
-        # Return M (degrees) and ecliptic longitude for Moon phase computations
         return (LR_M, LR_EclLong)
 
 

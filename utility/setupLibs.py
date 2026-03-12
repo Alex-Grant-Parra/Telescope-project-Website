@@ -38,7 +38,6 @@ def ensure_requirements():
         print("No requirements to process in", req)
         return
 
-    # Try to import packaging for robust parsing/version checks; fallback to pkg_resources
     use_packaging = False
     try:
         from packaging.requirements import Requirement as PRequirement
@@ -120,13 +119,11 @@ def ensure_requirements():
                                 else:
                                     spec_ok = False; break
                 else:
-                    # If we can't parse, try canonicalizing simple name
                     parsed_name = canonicalize_name(line.split()[0])
                     installed_ver = installed.get(parsed_name)
                     if installed_ver is None:
                         spec_ok = False
         except Exception:
-            # if any parsing/checking error, mark for install to be safe
             spec_ok = False
 
         if not spec_ok:

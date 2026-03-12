@@ -57,7 +57,6 @@ class HDSTARtable(BaseTable):
             from sqlalchemy import text
             # Normalize: remove spaces and uppercase for comparison
             norm = (name_or_hd or "").strip().replace(" ", "").upper()
-            # If it looks like an HD pattern without prefix, leave as-is for exact fallthrough
             if norm.startswith("HD"):
                 stmt = text(
                     "SELECT * FROM HDSTARTable WHERE REPLACE(UPPER(Name),' ', '') = :norm LIMIT 1"

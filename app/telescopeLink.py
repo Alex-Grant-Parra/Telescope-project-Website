@@ -15,7 +15,6 @@ import io
 flask_port = os.getenv("FLASK_PORT", "5000")
 app_domain = os.getenv("APP_DOMAIN", "telescopes.dev")
 
-# For internal API calls, use localhost to bypass Cloudflare
 url = f"http://localhost:{flask_port}/sendCommand"
 external_domain = f"https://{app_domain}"
 

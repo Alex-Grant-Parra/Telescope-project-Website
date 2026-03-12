@@ -20,7 +20,6 @@ import atexit
 from waitress import serve  
 from datetime import datetime
 import ipaddress
-# Import security components
 from security import SecurityMiddleware, register_security_error_handlers
 
 # Get the base dir
@@ -37,11 +36,7 @@ else:
     
 
 # # Startup Cloudflare Tunnel
-# try:
 #     # Redirect cloudflared stdout/stderr to log files to avoid console output
-#     cf_out = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cloudflared_stdout.log"), "a", encoding="utf-8")
-#     cf_err = open(os.path.join(BASE_DIR, "infrastructure", "logs", "cloudflared_stderr.log"), "a", encoding="utf-8")
-#     cloudflaredProc = subprocess.Popen([
 #         "cloudflared",
 #         "tunnel",
 #         "--config",
@@ -49,19 +44,10 @@ else:
 #         "run",
 #         "server",
 #     ], stdout=cf_out, stderr=cf_err, cwd=os.path.join(BASE_DIR, "infrastructure"))
-#     print("Cloudflare Tunnel started in background (logs: infrastructure/logs)")
-# except Exception as e:
-#     print(f"Failed to start cloudflared: {e}")
 
 # # Cleanup function for shutting down processes
-# def cleanup_processes():
 #     """Clean up Cloudflare Tunnel process on exit"""
-#     try:
-#         if 'cloudflaredProc' in globals() and cloudflaredProc.poll() is None:
-#             print("Terminating Cloudflare Tunnel process...")
 #             cloudflaredProc.terminate()
-#     except Exception as e:
-#         print(f"Error terminating Cloudflare Tunnel: {e}")
 
 # # Register cleanup function
 # atexit.register(cleanup_processes)
@@ -198,11 +184,9 @@ def force_https():
     if any(host_only.startswith(h) for h in local_hosts):
         return None
 
-    # If the host is an IP address, decide based on private/public and port
     try:
         ip_obj = ipaddress.ip_address(host_only)
         if ip_obj.is_private:
-            # If hitting the Flask server directly on its HTTP port, upgrade to HTTPS on the same host
             try:
                 flask_port_str = str(FlaskServerPort)
             except Exception:
@@ -369,7 +353,6 @@ def enforce_enabled_account():
                     flash('Your account has been disabled. You have been logged out.', 'warning')
                     return redirect(url_for('auth.login'))
             except Exception:
-                # If check fails, be permissive
                 return None
     except Exception:
         return None
@@ -418,7 +401,6 @@ with app.app_context():
 def index():
     return redirect(url_for("home.home"))
 
-# Import websocket server functionality
 from app.WebsocketServer import (
     start_websocket_servers,
     send_command_handler,
@@ -436,7 +418,6 @@ def send_command():
 try:
     csrf.exempt(send_command)
 except Exception:
-    # If CSRFProtect isn't available for some reason, ignore so server still runs
     pass
 
 @app.route('/liveview/<client_id>')
@@ -464,10 +445,6 @@ if __name__ == '__main__':
     # from plateSolver.plateSolver import plateSolver 
 
     # # starDetector.getFaintStars()
-    # result = plateSolver.processImageForView()
-    # centroids = result["centroids"]
-    # matches = plateSolver.identifyStars(detectedCentroids=centroids)
-    # print(matches)
 
     # Start websocket servers using the new module
     start_websocket_servers()

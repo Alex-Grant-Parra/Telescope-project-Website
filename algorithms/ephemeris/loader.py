@@ -19,7 +19,6 @@ def load_planets():
     # The VSOP pickle may have several shapes. Common forms:
     # - {'Mercury': {...}, 'Venus': {...}, ...}
     # - {'VSOP87A': {'Mercury': {...}, ...}}
-    # If nested under a top-level key, descend one level.
     if isinstance(vsop_data, dict) and len(vsop_data) == 1:
         # check if the single value is another dict of planets
         first_val = next(iter(vsop_data.values()))

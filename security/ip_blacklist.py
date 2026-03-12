@@ -241,7 +241,6 @@ class IPBlacklist:
                 self.blacklisted_ips = loaded_ips
                 self.logger.info(f"Loaded {len(self.blacklisted_ips)} IPs from {self.blacklist_file}")
                 
-                # Try to extract last update time from file header
                 with open(self.blacklist_file, 'r') as f:
                     for line in f:
                         if line.startswith('# Last updated:'):

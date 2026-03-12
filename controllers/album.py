@@ -33,13 +33,11 @@ def get_jpeg_files():
             display_str = "Unknown"
             try:
                 name_no_ext = os.path.splitext(fname)[0]
-                # Try current format first
                 m = re.match(r"^photo_(\d{8})_(\d{6})$", name_no_ext)
                 if m:
                     ymd, hms = m.groups()
                     date = datetime.strptime(ymd + hms, "%Y%m%d%H%M%S")
                 else:
-                    # Try legacy format (time optional)
                     m2 = re.match(r"^photo(\d{8})(\d{6})?$", name_no_ext)
                     if m2:
                         ymd, hms = m2.groups()

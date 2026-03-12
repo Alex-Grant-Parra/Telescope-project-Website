@@ -68,7 +68,6 @@ def send_email(app, role, recipients, subject, body, reply_to=None):
     sender_email = app.config.get(prefix + 'SENDER') or app.config.get('MAIL_DEFAULT_SENDER')
     sender_name = app.config.get(prefix + 'NAME') or (role.capitalize())
 
-    # If dedicated SMTP settings exist for this role, use them
     server = app.config.get(prefix + 'SMTP_SERVER')
     port = app.config.get(prefix + 'SMTP_PORT')
     use_tls = app.config.get(prefix + 'SMTP_USE_TLS', True)

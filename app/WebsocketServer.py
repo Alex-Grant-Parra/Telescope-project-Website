@@ -150,23 +150,16 @@ def get_ws_client_ip(ws):
 def check_rate_limit(client_ip):
     """Simple rate limiting check"""
     # Rate limiting disabled for normal users
-    # current_time = time.time()
-    # minute_key = int(current_time // 60)
     # 
-    # if client_ip not in client_request_counts:
     #     client_request_counts[client_ip] = {}
     # 
-    # if minute_key not in client_request_counts[client_ip]:
     #     client_request_counts[client_ip][minute_key] = 0
     # 
     # client_request_counts[client_ip][minute_key] += 1
     # 
     # # Clean old entries
-    # old_keys = [k for k in client_request_counts[client_ip].keys() if k < minute_key - 1]
-    # for k in old_keys:
     #     del client_request_counts[client_ip][k]
     # 
-    # return client_request_counts[client_ip][minute_key] <= REQUEST_LIMIT_PER_MINUTE
     
     return True  # Allow all requests for normal users
 
@@ -355,7 +348,6 @@ async def handle_client(ws):
                 existing = Telescope.get_telescope_by_id(client_name)
 
                 if not existing:
-                    # If an old token-based record exists, migrate it to the name
                     legacy = db.session.query(Telescope).filter_by(telescope_id=token).first()
                     if legacy:
                         legacy.telescope_id = client_name
@@ -539,7 +531,6 @@ async def handle_liveview_client(ws):
                 now = time.time()
                 # Only log every 2 seconds per client
                 if (client_id not in last_frame_log_time) or (now - last_frame_log_time[client_id] > 2):
-                    # print(f"[LiveView] Received frame from {client_name}, size: {len(message)} bytes")
                     last_frame_log_time[client_id] = now
             except websockets.exceptions.ConnectionClosed:
                 print(f"[LiveView] {client_name} disconnected from live view.")
@@ -642,7 +633,6 @@ def save_latest_frame(client_id):
             file_path = os.path.join(tmp_dir, f"{client_id}_latest.jpg")
             with open(file_path, "wb") as f:
                 f.write(frame)
-            # print(f"[DEBUG] Saved {file_path}")
         except Exception as e:
             print(f"[DEBUG] Failed to save frame for {client_id}: {e}")
 
@@ -661,8 +651,6 @@ def start_ws_server():
                 ping_interval=WS_PING_INTERVAL,
                 ping_timeout=WS_PING_TIMEOUT
             ):
-                # print(f"Command WebSocket server running locally at ws://{WS_IP}:{WS_PORT} \n")
-                # print(f"Public access via: wss://ws.telescopes.dev \n")
                 await asyncio.Future()
         except Exception as e:
             print(f"[CommandWS] WebSocket server failed to start: {e}")
@@ -686,8 +674,6 @@ def start_liveview_ws_server():
                 ping_interval=WS_PING_INTERVAL,
                 ping_timeout=WS_PING_TIMEOUT
             ):
-                # print(f"LiveView WebSocket server running locally at ws://{WS_IP}:{LIVEVIEW_WS_PORT}")
-                # print(f"Public access via: wss://liveview.telescopes.dev")
                 await asyncio.Future()
         except Exception as e:
             print(f"[LiveView] WebSocket server failed to start: {e}")

@@ -43,8 +43,6 @@ class convert:
         LR_latitude_RAD = radians(LR_latitude)
         LR_H_RAD = radians(getHourAngle(LL_RA, LR_LST)*15)
         LR_DEC_RAD = radians(convert.HrMinSecToDegrees(LL_DEC[0], LL_DEC[1], LL_DEC[2]))
-        # print(getHourAngle(LL_RA, LR_LST))
-        # print(degrees(LR_H_RAD))
         LR_ELV_RAD = asin(sin(LR_DEC_RAD) * sin(LR_latitude_RAD) + cos(LR_DEC_RAD) * cos(LR_latitude_RAD) * cos(LR_H_RAD))
 
         LR_AZ_RAD = acos((sin(LR_DEC_RAD) - sin(LR_latitude_RAD)*sin(LR_ELV_RAD)) / (cos(LR_latitude_RAD)*cos(LR_ELV_RAD)))
@@ -116,11 +114,9 @@ class convert:
 
         LR_RA = (degrees(LR_RA)/15)%24
         LR_DEC = degrees(LR_DEC)%360
-        # print(f"LR_DEC = {LR_DEC}")
 
         LR_RA = convert.DecimalToHrMinSec(LR_RA%24)
 
-        # print(LR_DEC)
         LR_DEC = LR_DEC%360
         if LR_DEC > 180:
             LR_DEC = LR_DEC - 360
@@ -236,63 +232,33 @@ def calculateSolarPos(LR_julianDate):
     
     LR_e = GD_SUNDATA.get("Eccentricity")
     LR_daysBetween = LR_julianDate - time.getJD(1990, 1, 0)
-    # print(f"LR_daysBetween = {LR_daysBetween}")
     LR_N = ((360/365.242191)*LR_daysBetween)%360
-    # print(f"LR_N = {LR_N}")
     LR_MeanAnomaly = LR_N + GD_SUNDATA.get("Ecliptic longitude (epoch)") -GD_SUNDATA.get("Ecliptic longitude (perigee)")
-    # print(f"LR_MeanAnomaly = {LR_MeanAnomaly}")
     LR_MeanAnomaly = radians(LR_MeanAnomaly)
-    # print(f"LR_MeanAnomaly = {LR_MeanAnomaly}")
     LR_E = solveKepler(LR_MeanAnomaly, GD_SUNDATA.get("Eccentricity"))
-    # print(f"LR_E = {LR_E}")  
     LR_V = degrees(atan(((1+LR_e)/(1-LR_e))**(1/2)*tan(LR_E/2))*2)
-    # print(f"LR_V = {LR_V}")  
     LR_EclLong = (LR_V + GD_SUNDATA.get("Ecliptic longitude (perigee)"))%360 # correct upto here
-    # print(f"LR_EclLong = {LR_EclLong}") 
     return convert.EclipticToEquatorial(convert.DecimalToHrMinSec(0), convert.DecimalToHrMinSec(LR_EclLong), findAxialTilt(LR_julianDate))
 
 # These four function below are used to refine coordinates for an object
 # They remove precession, nutation, aberation and refraction
-# def removePrecession(LR_RA, LR_DEC, LR_julianDate):
-#     LR_DeciRA = convertToDecimalDegrees(LR_RA[0], LR_RA[1], LR_RA[2])
-#     LR_HrsRA = LR_DeciRA*15
-#     LR_DeciDEC = convertToDecimalDegrees(LR_DEC[0], LR_DEC[1], LR_DEC[2])
-#     LR_N = (LR_julianDate - getJD(2000, 1, 0))/365.2425
 
 #     # Used the estimated value for the J2000 0.0 epoch.
-#     LR_S1 = (3.07420 + 1.33589*sin(radians(LR_HrsRA))*tan(radians(LR_DeciDEC))) * LR_N
-#     LR_S1h = LR_S1 / 3600
 
-#     LR_FinalRA = convertToHrMinSec((LR_S1h + LR_DeciRA)) # To return - This is the final Right ascention
 
-#     LR_S2 = ((20.0383*cos(radians(LR_HrsRA))) * LR_N)/3600
 
-#     LR_FinalDEC = convertToHrMinSec((LR_S2 + LR_DeciDEC))
 
-#     return (LR_FinalRA, LR_FinalDEC)
 
-# def findNutation(LR_julianDate):
 
 #     # at some point, make sure to:
 #     # Correct the ecliptic longitude by adding LR_P
 #     # Adjust the obliquity of the ecliptic by adding LR_O
 
-#     LR_T = (LR_julianDate - 2415020)/36525
-#     LR_A = 100.002136 * LR_T
-#     LR_L = (279.6967 + 360*(LR_A-int(LR_A)))%360
-#     LR_B = 5.372617 * LR_T
-#     LR_UnHealthySquid = (259.1833 - 360*(LR_B-int(LR_B)))%360
 #     # All above this point is correct, there is an error somewhere in the two lines below
-#     LR_P = -17.2*sin(radians(LR_UnHealthySquid)) - 1.3*sin(radians(2*LR_L))
-#     LR_O = 9.2*cos(radians(LR_UnHealthySquid)) + 0.5*cos(radians(2*LR_L))
 
-#     return (LR_P, LR_O)
 
-# def removeAberation():
 
-# def removeRefraction():
 
-# planetary_data = [ # from J2000, supplied from the Jet Propultion Laboratory
 #     ["Name", "Semi-Major Axis", "Eccentricity", "Inclination", "LongitudeAscNode", "LongitudePerihelion", "MeanLongitude"],
 #     ["Mercury", 0.38709893, 0.20563069, 7.00487, 48.33167, 77.45645, 252.25084],
 #     ["Jupiter", 5.20336301, 0.04839266, 1.30530, 100.55615, 14.75385, 34.40438],
@@ -301,10 +267,8 @@ def calculateSolarPos(LR_julianDate):
 #     ]
 
 
-# def calculatePlanetPos(LR_julianDate, LL_Data, LL_EarthData):
 
 #     #Days since epoch
-#     LR_daysBetween = LR_julianDate - getJD(2000, 1, 1)
     
 
 #     # Primary orbital elements
@@ -318,14 +282,8 @@ def calculateSolarPos(LR_julianDate):
 
 #     # Calculating period using kepler's third law
 #     LR_PeriodPlanet, LR_PeriodEarth = (LR_SemiMajorAxisPlanet)**(3/2), (LR_SemiMajorAxisEarth)**(3/2)
-#     LR_e_Planet = LR_EccentricityPlanet
-#     LR_daysBetween = LR_julianDate - getJD(1990, 1, 0)
     
-#     LR_N = ((360/365.242191)*LR_daysBetween)%360
-#     LR_MeanAnomalyPlanet = LR_N + LR_MeanLongitudePlanet - LR_PeriLongitudePlanet
 
-#     return LR_MeanAnomalyPlanet
 
-# print(calculatePlanetPos(getJD(1988, 11, 22.75), planetary_data[2], planetary_data[3]))
 
 

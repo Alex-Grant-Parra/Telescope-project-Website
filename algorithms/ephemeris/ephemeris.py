@@ -40,7 +40,6 @@ def get_positions(year, month, day, hour: int = 0, minute: int = 0, second: floa
                     'distance_km': sun_res.get('distance_km')
                 }
         except Exception:
-            # If earth/cartesian not available, skip
             pass
 
     # Major planets

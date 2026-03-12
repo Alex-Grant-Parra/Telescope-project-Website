@@ -10,7 +10,6 @@ import sys
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Import only what we need to avoid circular imports
 from app.db import db
 from sqlalchemy import text
 
@@ -89,7 +88,6 @@ def create_telescopes_table():
             print("  - type (STRING(100))")
             print("  - last_seen (FLOAT)")
             
-            # Try to restore data if we had any
             if backup_data:
                 print(f"\nAttempting to restore {len(backup_data)} records...")
                 restored = 0

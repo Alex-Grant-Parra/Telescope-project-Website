@@ -136,9 +136,7 @@ def search_object():
                 print("Celestial object not found.")
 
         else:
-            # Try searching by common name in HD stars first, then in NGC table
             print(f"Searching by common name across stars and NGC: {norm}")
-            # Try HD table commonNames (case-insensitive contains)
             result = HDSTARtable.query_by_common_name(norm)
             if not result:
                 # Then try NGC common names (exact ilike on full cell)
@@ -152,14 +150,11 @@ def search_object():
         print(f"Error during search: {e}")
         return jsonify({"status": "error", "message": "Invalid search format"})
 
-    # If result is found, process the result and return as JSON
     if result:
         # Check if result is a dictionary
         if isinstance(result, dict):
-            # If it's a dictionary, return it directly
             result_data = result
         else:
-            # If it's an SQLAlchemy model instance, use dynamic reflection
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
 
         name = result_data.get('Name', "Null")
@@ -168,13 +163,11 @@ def search_object():
         mag = result_data.get('V-Mag', 0)  # Default to 0 if V-Mag is missing or None
 
         # Extract friendly common name (non-HD variant) if available
-        # Try both 'commonNames' (HDSTARtable) and 'Common names' (NGCtable/IndexTable)
         common_names_raw = result_data.get('commonNames', '') or result_data.get('Common names', '')
         friendly_name = extract_friendly_common_name(common_names_raw)
         if friendly_name:
             result_data['friendlyName'] = friendly_name
 
-        # print(f"\n[TRACKING] {name} at RA: {ra}°, DEC: {dec}° with magnitude {mag}.\n", flush=True)
 
         # session["selectedObject"] = { # Adds to flask's session
         #     "name": name,
@@ -360,7 +353,6 @@ def remove_telescope():
         from models.tables import Telescope
         result = Telescope.remove_telescope(telescope_id)
         
-        # If we removed the currently selected telescope, clear the session
         selected = session.get('selected_telescope', {})
         if result.get("status") == "success" and selected.get('telescope_id') == telescope_id:
             session.pop('selected_telescope', None)
@@ -516,6 +508,5 @@ def get_motors():
             return jsonify({"status": "success", "motors": ["motor1"]})
         
     except Exception as e:
-        # If query fails, return default motor
         print(f"Failed to get motors: {str(e)}")
         return jsonify({"status": "success", "motors": ["motor1"]})

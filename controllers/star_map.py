@@ -92,7 +92,6 @@ def get_stars():
         except Exception:
             _dt = None
 
-    # If include_planets, compute planets for given or current UTC
     planets = []
     if include_planets:
         if _dt is None:
@@ -145,7 +144,6 @@ def get_stars():
                         magv = float(mag_val) if mag_val is not None else 30
                     except Exception:
                         magv = 30
-                    # If DB-side filter not possible, enforce min/max in Python
                     if 'V-Mag' not in col_map and (magv < min_mag or magv > max_mag):
                         continue
                     stars_list.append({
@@ -261,7 +259,6 @@ def get_planets():
 
 @star_map_bp.route("/StarMap")
 def star_map():
-    # For fast initial load, render without embedding the entire star dataset
     # The client will fetch stars and planets via APIs progressively
     selected_telescope = session.get('selected_telescope')
     return render_template("star_map.html", stars=[], selected_telescope=selected_telescope)
@@ -303,7 +300,6 @@ def star_info(star_name):
                 "type": "star"
             }
             # Add friendly common name if available
-            # Try both 'commonNames' (HDSTARtable) and 'Common names' (NGCtable)
             common_names_raw = getattr(result, 'commonNames', None) or getattr(result, 'Common names', None)
             if common_names_raw:
                 friendly_name = extract_friendly_common_name(common_names_raw)
@@ -504,7 +500,6 @@ def get_telescope_position():
         dec = None
         
         if coords and isinstance(coords, dict):
-            # Try nested "result" first (from /sendCommand wrapper)
             if "result" in coords:
                 result = coords["result"]
                 if isinstance(result, dict):

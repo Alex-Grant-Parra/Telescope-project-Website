@@ -12,7 +12,6 @@ sec_logger = logging.getLogger('security')
 # Define the blueprint for admin routes
 admin_bp = Blueprint('admin', __name__)
 
-# Import csrf for exemption
 try:
     from flask_wtf.csrf import exempt
 except ImportError:
@@ -36,7 +35,6 @@ def admin():
 def _admin_guard():
     """Helper to check admin privilege; returns (None) if OK or a Flask response to return."""
     if not current_user.is_authenticated or not current_user.is_admin:
-        # If this was an AJAX request, return JSON so frontend can handle it
         if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'status': 'error', 'message': 'Admin access required.'}), 403
         flash('Admin access required.', 'danger')
@@ -160,7 +158,6 @@ def set_role(user_id):
     json_data = request.get_json(silent=True) if request.is_json else None
     role = (json_data or {}).get('role') or request.form.get('role')
 
-    # For non-JSON submissions, empty form data usually indicates a validation issue.
     if not request.is_json and not request.form:
         flash('Security validation failed. Please try again.', 'danger')
         return redirect(request.referrer or url_for('admin.admin'))
@@ -267,7 +264,6 @@ def admin_security_logfile(filename):
     if not requested.startswith(base_dir) or not os.path.exists(requested):
         return jsonify({'error': 'File not found'}), 404
 
-    # Return last 100 lines
     try:
         with open(requested, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()[-500:]
@@ -387,7 +383,6 @@ def admin_security_tokens():
             'db_info': None
         }
         
-        # If it's a telescope, get database info
         if rec.client_type == 'telescope':
             try:
                 telescope_name = rec.name
@@ -466,7 +461,6 @@ def admin_revoke_token():
     rec = get_token_by_id(identifier)
     if rec:
         
-        # If it's a telescope, remove from database too
         if rec.client_type == 'telescope':
             try:
                 telescope_name = rec.name

@@ -52,7 +52,6 @@ def add_token(name, client_type="observer", telescope_type=None):
     with _with_app_context():
         token, _ = create_token_record(name, client_type)
     
-    # If this is a telescope, add it to the database
     if client_type == "telescope":
         try:
             from app.db import db

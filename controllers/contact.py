@@ -438,7 +438,6 @@ def admin_contact_detail(message_id):
         if status and status != msg.status:
             msg.status = status
 
-        # If sending reply
         if action == 'send_reply' and reply_body:
             try:
                 from utility.emailer import send_email

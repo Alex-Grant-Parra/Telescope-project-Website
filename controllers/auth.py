@@ -108,7 +108,6 @@ def login():
                     sec_logger.info(json.dumps({'event': 'login_disabled_attempt', 'user_id': user.id, 'username': username}))
                     return render_template('login.html')
             except Exception:
-                # If is_enabled check fails for some reason, proceed cautiously
                 pass
             # Check if the request is coming from a local connection
             is_local = is_local_connection()
@@ -135,7 +134,6 @@ def login():
                 
                 # Generate and send the 2FA code
                 totp_code = user.generate_totp_code()
-                # print(f"TOTP code sent: {totp_code}")  # Debug statement
                 # Auth-related email sender
                 send_email(current_app, 'auth', [user.get_email()], "Your 2FA Code", f"Your 2FA code is {totp_code}. Please enter this code to complete your login.")
                 flash('Check your email for the 2FA code to complete the login.', 'info')
@@ -248,7 +246,6 @@ def forgot_password():
         if found_user:
             # Check if request is from local connection
             if is_local_connection():
-                # For local connections, show reset token directly instead of sending email
                 reset_token = found_user.get_reset_token()
                 flash(f'Password reset token (local connection): {reset_token}', 'info')
                 flash('Use this token to access the reset link directly.', 'info')
@@ -325,7 +322,6 @@ def login_2fa():
         totp_code = request.form['totp']
 
         if user.verify_2fa_code(totp_code):
-            # If user chose to trust this device, add it to trusted devices
             if trust_device:
                 device_name, token = TrustedDevice.trust_device(user.id, trust_for_days=30)
                 # Set a cookie that will persist for the trust period; httponly to reduce XSS risk

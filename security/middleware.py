@@ -273,7 +273,6 @@ class SecurityMiddleware:
         if is_suspicious:
             limit = RATE_LIMITS.get('suspicious', 10)
         # else:
-        #     limit = RATE_LIMITS.get('default', 60)
         
         # Initialize tracking for this IP
         if client_ip not in self.request_history:
@@ -310,7 +309,6 @@ class SecurityMiddleware:
                 'blocked_ip': client_ip
             })
 
-            # Return 403 Forbidden
             abort(403)
 
         # Only log requests after we've cleared the blacklist check so that
@@ -327,7 +325,6 @@ class SecurityMiddleware:
                 self.suspicious_request_counts[client_ip] = 0
             self.suspicious_request_counts[client_ip] += 1
             
-            # For highly suspicious requests, consider blocking
             high_risk_indicators = ['suspicious_path', 'unusual_method']
             if any(indicator in suspicious_indicators for indicator in high_risk_indicators):
                 # Check if this is part of a scanning/enumeration attack
