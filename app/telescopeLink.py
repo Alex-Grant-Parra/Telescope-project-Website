@@ -19,21 +19,6 @@ app_domain = os.getenv("APP_DOMAIN", "telescopes.dev")
 url = f"http://localhost:{flask_port}/sendCommand"
 external_domain = f"https://{app_domain}"
 
-# Example
-# payload = {"client_id": client_id, "command": "add", "args": [5, 7]}
-# response = requests.post(url, json=payload).text
-# print(response)
-
-# clientIndex = 0
-# client_id = None
-
-# def getClientID():
-#     global client_id
-#     if clients:
-#         client_id = clients[clientIndex]
-#         print("Updated client_id:")
-#     else:
-#         print("No clients to update with")
 
 def load_api_token():
     """Load API token from environment for local telescope client use."""

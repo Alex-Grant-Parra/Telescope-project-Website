@@ -65,13 +65,13 @@ class SpaceTime:
 
     @staticmethod
     def getMeanObliquityDeg(LR_julianDate):
-        """Mean obliquity of the ecliptic (degrees) at a Julian date."""
+        # Mean obliquity of the ecliptic (degrees) at a Julian date
         LR_T = (LR_julianDate - SpaceTime.J2000_JD) / 36525.0
         LR_changeInTilt = ((46.815 * LR_T) + (0.0006 * LR_T**2) - (0.00181 * LR_T**3)) / 3600.0
         return 23.439292 - LR_changeInTilt
 
     @staticmethod
     def getMeanObliquityRad(LR_julianDate):
-        """Mean obliquity of the ecliptic (radians) at a Julian date."""
-        import math
-        return math.radians(SpaceTime.getMeanObliquityDeg(LR_julianDate))
+        # Mean obliquity of the ecliptic (radians) at a Julian date
+        from math import radians 
+        return radians(SpaceTime.getMeanObliquityDeg(LR_julianDate))

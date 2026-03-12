@@ -1,3 +1,8 @@
+# REDUNDANT, UNUSED! DO NOT RUN
+
+
+
+
 from math import sin, cos, tan, asin, acos, atan, atan2, degrees, radians, pi, floor, sqrt
 
 class convert:
