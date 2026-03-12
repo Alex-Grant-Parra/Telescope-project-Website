@@ -42,8 +42,10 @@ THREAT_SOURCES = {
 
 # Manual IP blocks (IPs that are always blocked)
 MANUAL_BLOCKS = [
-    '38.211.193.130',  # The IP that attacked your server
-    '38.211.193.0/24'  # Block the entire subnet for safety
+    '38.211.193.130',  # Previous attack
+    '38.211.193.0/24',  # Block the entire subnet for safety
+    '204.76.203.210',  # Config/env file enumeration attack Feb 5 2026
+    '204.76.203.0/24'   # Block entire subnet
 ]
 
 # Suspicious request patterns

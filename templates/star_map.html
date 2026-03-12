@@ -94,12 +94,64 @@
         #cursor-coords div {
             margin: 1px 0;
         }
+        #tracking-info {
+            position: absolute;
+            top: 80px;
+            left: 10px;
+            z-index: 20;
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-family: sans-serif;
+            display: none;
+            min-width: 250px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        #tracking-info .tracking-header {
+            background: #4CAF50;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 4px;
+            margin: -12px -16px 10px -16px;
+            font-weight: bold;
+            font-size: 0.95em;
+        }
+        #tracking-info .tracking-content {
+            font-size: 0.9em;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+        #tracking-info .tracking-content div {
+            margin: 4px 0;
+        }
+        #stop-tracking-btn {
+            width: 100%;
+            padding: 8px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        #stop-tracking-btn:hover {
+            background: #d32f2f;
+        }
     </style>
 </head>
 <body>
 <div id="loading">Loading planetarium...</div>
 <canvas id="planetarium"></canvas>
 <div id="info">Drag to rotate. Click a star/planet for info.</div>
+<div id="tracking-info">
+    <div class="tracking-header">🎯 Tracking Status</div>
+    <div class="tracking-content" id="tracking-content">
+        <em>No object being tracked</em>
+    </div>
+    <button id="stop-tracking-btn" onclick="stopTracking()">⏹️ Stop Tracking</button>
+</div>
 <div id="controls">
     <label>
         Mag ≤ <span id="mag-value">6</span>
@@ -119,7 +171,7 @@
     <div>
         <label for="time-control" style="display:block; margin-top: 4px;">Time (local):</label>
         <div style="display:flex; gap: 6px; align-items:center;">
-            <input type="datetime-local" id="time-control" style="flex:1; padding: 4px; background:#222; color:#fff; border:1px solid #555; border-radius:3px;">
+            <input type="datetime-local" id="time-control" step="1" style="flex:1; padding: 4px; background:#222; color:#fff; border:1px solid #555; border-radius:3px;">
             <button id="time-now" title="Set to current time" style="padding:4px 8px;">Now</button>
         </div>
         <div style="margin-top: 4px;">
@@ -217,6 +269,7 @@
     
 </div>
 <script type="application/json" id="stars-data">[]</script>
+<script type="application/json" id="telescope-data">{{ selected_telescope | tojson }}</script>
 <script src="{{ url_for('static', filename='js/csrf-protection.js') }}" defer></script>
 <!-- Cache-busting query param to ensure latest JS is fetched -->
 <script src="{{ url_for('static', filename='js/star_map.js') }}?v=2025-10-30-2" defer></script>
@@ -297,22 +350,28 @@ document.addEventListener('DOMContentLoaded', function() {
     let liveTimeInterval = null;
     let detectedUserLocation = { lat: 0, lon: 0 }; // Store detected location for reset
     
-    function formatLocalDateTime(date) {
+    function formatLocalDateTime(date, includeSeconds = false) {
         // Format date for datetime-local input
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const hours = String(date.getHours()).padStart(2, '0');
         const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        if (includeSeconds) {
+            return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+        }
         return `${year}-${month}-${day}T${hours}:${minutes}`;
     }
     
-    function updateTimeToNow() {
+    function updateTimeToNow(includeSeconds = false) {
         const timeControl = document.getElementById('time-control');
         if (timeControl) {
             const now = new Date();
-            now.setSeconds(0, 0); // Round to nearest minute
-            timeControl.value = formatLocalDateTime(now);
+            if (!includeSeconds) {
+                now.setSeconds(0, 0); // Round to nearest minute when not in live mode
+            }
+            timeControl.value = formatLocalDateTime(now, includeSeconds);
             
             // Trigger change event to update the star map
             timeControl.dispatchEvent(new Event('change'));
@@ -342,12 +401,12 @@ document.addEventListener('DOMContentLoaded', function() {
             clearInterval(liveTimeInterval);
         }
         
-        // Update immediately
-        updateTimeToNow();
+        // Update immediately with seconds
+        updateTimeToNow(true);
         
-        // Then update every 5 seconds
-        liveTimeInterval = setInterval(updateTimeToNow, 5000);
-        console.log('Live time mode started');
+        // Then update every second
+        liveTimeInterval = setInterval(() => updateTimeToNow(true), 1000);
+        console.log('Live time mode started - updating every second');
     }
     
     function stopLiveTime() {

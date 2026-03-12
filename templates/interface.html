@@ -89,9 +89,9 @@
         </div>
     </div>
 
-    <!-- Draggable Telescope Selection Panel -->
+    <!-- Draggable Tracking Info Panel -->
     <div class="draggable-panel border rounded shadow p-3 bg-white position-absolute" id="telescopeSelectionPanel" style="top: 300px; left: 80vw; min-width: 250px;">
-        <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Telescope Selection</div>
+        <div class="panel-header bg-dark text-white p-2 rounded-top" style="user-select: none;">Tracking Info</div>
         <div class="control-row my-2">
             <label for="telescopeSelect">Connected Telescopes</label>
             <select id="telescopeSelect" class="form-select" onchange="selectTelescope()">
@@ -100,14 +100,23 @@
         </div>
         <div class="control-row my-2" id="telescopeInfo" style="display: none;">
             <div class="small text-muted">
-                <div><strong>ID:</strong> <span id="telescopeId"></span></div>
+                <div><strong>Name:</strong> <span id="telescopeName"></span></div>
                 <div><strong>IP:</strong> <span id="telescopeIp"></span></div>
-                <div><strong>Version:</strong> <span id="telescopeVersion"></span></div>
-                <div><strong>Status:</strong> <span id="telescopeStatus"></span></div>
+                <div><strong>Type:</strong> <span id="telescopeType"></span></div>
+                <div><strong>Last seen:</strong> <span id="telescopeLastSeen"></span></div>
             </div>
         </div>
         <div class="control-row my-2">
             <button class="btn btn-info btn-sm w-100" onclick="refreshTelescopes()">🔄 Refresh</button>
+        </div>
+        <div class="control-row my-2 border-top pt-2" id="trackingPanel">
+            <div class="panel-header bg-primary text-white p-2 rounded-top" style="user-select: none;">🎯 Tracking Status</div>
+            <div class="control-row my-2">
+                <div id="trackingStatusContent" class="text-muted small" style="min-height: 80px; line-height: 1.6;">
+                    <em>No object being tracked</em>
+                </div>
+            </div>
+            <button class="btn btn-sm btn-outline-danger w-100" id="stopTrackingBtn" style="display: none;" onclick="stopTracking()">⏹️ Stop Tracking</button>
         </div>
     </div>
 </div>
@@ -256,5 +265,5 @@
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/interface.js') }}?v=20251029-1"></script>
+<script src="{{ url_for('static', filename='js/interface.js') }}?v=20260207-last-seen"></script>
 {% endblock %}

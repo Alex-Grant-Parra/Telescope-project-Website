@@ -10,8 +10,14 @@ from time import sleep
 from PIL import Image
 import io
 
-domain = os.getenv("APP_DOMAIN", "telescopes.dev")
-url = f"https://{domain}/sendCommand"  # Endpoint for sending flask server commands
+# Determine the correct URL for /sendCommand
+# Use localhost for internal calls to avoid Cloudflare challenges
+flask_port = os.getenv("FLASK_PORT", "5000")
+app_domain = os.getenv("APP_DOMAIN", "telescopes.dev")
+
+# For internal API calls, use localhost to bypass Cloudflare
+url = f"http://localhost:{flask_port}/sendCommand"
+external_domain = f"https://{app_domain}"
 
 # Example
 # payload = {"client_id": client_id, "command": "add", "args": [5, 7]}
@@ -30,16 +36,13 @@ url = f"https://{domain}/sendCommand"  # Endpoint for sending flask server comma
 #         print("No clients to update with")
 
 def load_api_token():
-    """Load API token from api_tokens.json file"""
+    """Load API token from environment for local telescope client use."""
     try:
-        with open("security/api_tokens.json", "r") as f:
-            tokens = ujson.load(f)
-            # Return the first token found (assumes telescope has one token)
-            for token, info in tokens.items():
-                if info.get('client_type') == 'telescope':
-                    return token
-            # If no telescope token, return any token
-            return list(tokens.keys())[0] if tokens else None
+        token = os.getenv("TELESCOPE_API_TOKEN") or os.getenv("API_TOKEN")
+        if token:
+            return token.strip()
+        print("Warning: No telescope API token in environment (set TELESCOPE_API_TOKEN)")
+        return None
     except Exception as e:
         print(f"Warning: Could not load API token: {e}")
         return None
@@ -73,7 +76,7 @@ class Telescope:
         try:
             if has_request_context():
                 selected = session.get('selected_telescope') or {}
-                sel_id = selected.get('telescopeId')
+                sel_id = selected.get('telescope_id')
                 if sel_id:
                     return sel_id
         except Exception:
@@ -221,6 +224,10 @@ class MotorController:
     def status_all(self):
         """Query status of all motors on the ESP32."""
         return self.telescope.send_command("espStatusAll", args=[])
+
+    def get_current_coordinates(self):
+        """Get current telescope coordinates (right ascension and declination)."""
+        return self.telescope.send_command("getCurrentCoordinates", args=[])
 
 
 # Convenience helper

@@ -44,6 +44,13 @@
         <div class="form-text">Allowed types: .png, .jpg, .jpeg, .log, .txt, .fits</div>
       </div>
 
+      {% if captcha_required and captcha_enabled %}
+      <div class="mb-3">
+        <div class="cf-turnstile" data-sitekey="{{ captcha_site_key }}"></div>
+        <div class="form-text">Please complete the CAPTCHA before sending your ticket.</div>
+      </div>
+      {% endif %}
+
       <div class="d-flex justify-content-end gap-2">
         <a class="btn btn-outline-secondary" href="{{ url_for('home.home') }}">Cancel</a>
         <button type="submit" class="btn btn-primary">Send</button>
@@ -54,6 +61,9 @@
 {% endblock %}
 
 {% block extra_js %}
+{% if captcha_required and captcha_enabled %}
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+{% endif %}
 <script>
 // Collect client metadata immediately after DOM is ready; start latency pings lazily on user interaction
 (function(){

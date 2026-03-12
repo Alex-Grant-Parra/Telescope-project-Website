@@ -13,15 +13,22 @@ interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
 @interface_bp.route("/")
 def interface():
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return render_template("errors/401.html"), 401
     return render_template("interface.html")
 
 @interface_bp.route("/update_camera", methods=["POST"])
 def update_camera():
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to control telescope"}), 401
+    
     data = request.json or {}
     response = {"status": "success", "message": "Settings updated"}
 
     # Determine target telescope
-    telescope_id = data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+    telescope_id = data.get("telescopeId") or data.get("telescope_id") or (session.get('selected_telescope') or {}).get('telescope_id')
     if not telescope_id:
         return jsonify({"status": "error", "message": "No telescope selected"}), 400
 
@@ -183,10 +190,16 @@ def search_object():
 
 
 def format_celestial_data(name, data):
+    ra_hours = convert.HrMinSecToDegrees(data['ra'][0], data['ra'][1], data['ra'][2])
+    ra_degrees = ra_hours * 15  # Convert hours to degrees (360°/24h = 15°/h)
+    
+    dec_degrees = convert.HrMinSecToDegrees(data['dec'][0], data['dec'][1], data['dec'][2])
+    # DEC doesn't need the *15 factor - it's already degrees:arcminutes:arcseconds
+    
     return {
         "Name": name.capitalize(),
-        "RA": convert.HrMinSecToDegrees(data['ra'][0], data['ra'][1], data['ra'][2]),  # Formatting RA
-        "DEC": convert.HrMinSecToDegrees(data['dec'][0], data['dec'][1], data['dec'][2]),  # Formatting DEC
+        "RA": ra_degrees,
+        "DEC": dec_degrees,
         "V-Mag": data["vmag"]
     }
 
@@ -194,7 +207,7 @@ def format_celestial_data(name, data):
 def get_camera_choices():
     try:
         selected = session.get('selected_telescope') or {}
-        cid = selected.get('telescopeId')
+        cid = selected.get('telescope_id')
         if not cid:
             return jsonify({"status": "error", "message": "No telescope selected"}), 400
         t = Telescope(cid)
@@ -210,9 +223,9 @@ def take_photo():
     try:
         from flask_login import current_user
         if not current_user.is_authenticated:
-            return jsonify({"status": "error", "message": "Must be logged in to take photos"})
+            return jsonify({"status": "error", "message": "Must be logged in to take photos"}), 401
         current_id = current_user.get_id()
-        telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+        telescope_id = (request.json or {}).get("telescopeId") or (request.json or {}).get("telescope_id") or (session.get('selected_telescope') or {}).get('telescope_id')
         if not telescope_id:
             return jsonify({"status": "error", "message": "No telescope selected"}), 400
         t = Telescope(telescope_id)
@@ -233,10 +246,14 @@ def get_telescopes():
         
         telescope_list = []
         for telescope in telescopes:
-            telescope_data = {column: getattr(telescope, column) for column in telescope.__table__.columns.keys()}
-            
-            # Add online status
-            telescope_data['online'] = Telescope.is_telescope_online(telescope_data.get('telescopeId', ''))
+            telescope_data = {
+                'id': telescope.id,
+                'telescope_id': telescope.telescope_id,
+                'ip_address': telescope.ip_address,
+                'type': telescope.type,
+                'last_seen': telescope.last_seen,
+                'online': Telescope.is_telescope_online(telescope.telescope_id)
+            }
             telescope_list.append(telescope_data)
         
         return jsonify({"status": "success", "telescopes": telescope_list})
@@ -248,9 +265,13 @@ def select_telescope():
     """
     Set the selected telescope in the user's session
     """
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to select telescope"}), 401
+    
     try:
         data = request.json
-        telescope_id = data.get("telescopeId")
+        telescope_id = data.get("telescopeId") or data.get("telescope_id")
         
         if not telescope_id:
             return jsonify({"status": "error", "message": "Telescope ID is required"})
@@ -263,11 +284,11 @@ def select_telescope():
         
         # Store selected telescope in session
         session['selected_telescope'] = {
-            'telescopeId': telescope.get('telescopeId'),
-            'ipAddress': telescope.get('ipAddress'),
-            'firmwareVersion': telescope.get('firmwareVersion'),
-            'capabilities': telescope.get('capabilities'),
-            'online': Telescope.is_telescope_online(telescope.get('telescopeId', ''))
+            'telescope_id': telescope.get('telescope_id'),
+            'ip_address': telescope.get('ip_address'),
+            'type': telescope.get('type'),
+            'last_seen': telescope.get('last_seen'),
+            'online': Telescope.is_telescope_online(telescope.get('telescope_id', ''))
         }
         
         return jsonify({
@@ -295,22 +316,25 @@ def add_telescope():
     """
     Add a new telescope to the database
     """
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to manage telescopes"}), 401
+    
     try:
         data = request.json
-        telescope_id = data.get("telescopeId")
-        ip_address = data.get("ipAddress")
-        firmware_version = data.get("firmwareVersion")
-        capabilities = data.get("capabilities")
+        telescope_id = data.get("telescopeId") or data.get("telescope_id")
+        ip_address = data.get("ipAddress") or data.get("ip_address")
+        telescope_type = data.get("type") or data.get("telescope_type")
         
         # Validate required fields
-        if not all([telescope_id, ip_address, firmware_version, capabilities]):
+        if not telescope_id:
             return jsonify({
                 "status": "error", 
-                "message": "All fields are required: telescopeId, ipAddress, firmwareVersion, capabilities"
+                "message": "Telescope ID is required"
             })
         
         from models.tables import Telescope
-        result = Telescope.add_telescope(telescope_id, ip_address, firmware_version, capabilities)
+        result = Telescope.add_telescope(telescope_id, ip_address, telescope_type)
         
         return jsonify(result)
         
@@ -322,9 +346,13 @@ def remove_telescope():
     """
     Remove a telescope from the database
     """
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to manage telescopes"}), 401
+    
     try:
         data = request.json
-        telescope_id = data.get("telescopeId")
+        telescope_id = data.get("telescopeId") or data.get("telescope_id")
         
         if not telescope_id:
             return jsonify({"status": "error", "message": "Telescope ID is required"})
@@ -333,7 +361,8 @@ def remove_telescope():
         result = Telescope.remove_telescope(telescope_id)
         
         # If we removed the currently selected telescope, clear the session
-        if result.get("status") == "success" and session.get('selected_telescope', {}).get('telescopeId') == telescope_id:
+        selected = session.get('selected_telescope', {})
+        if result.get("status") == "success" and selected.get('telescope_id') == telescope_id:
             session.pop('selected_telescope', None)
         
         return jsonify(result)
@@ -348,7 +377,7 @@ def update_telescope_heartbeat():
     """
     try:
         data = request.json
-        telescope_id = data.get("telescopeId")
+        telescope_id = data.get("telescopeId") or data.get("telescope_id")
         
         if not telescope_id:
             return jsonify({"status": "error", "message": "Telescope ID is required"})
@@ -364,9 +393,13 @@ def update_telescope_heartbeat():
 @interface_bp.route("/start_live_view", methods=["POST"])
 def start_live_view():
     """Start live view on the telescope"""
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to control telescope"}), 401
+    
     print("Started live view")
     try:
-        telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+        telescope_id = (request.json or {}).get("telescopeId") or (request.json or {}).get("telescope_id") or (session.get('selected_telescope') or {}).get('telescope_id')
         if not telescope_id:
             return jsonify({"status": "error", "message": "No telescope selected"}), 400
         t = Telescope(telescope_id)
@@ -378,9 +411,13 @@ def start_live_view():
 @interface_bp.route("/stop_live_view", methods=["POST"])
 def stop_live_view():
     """Stop live view on the telescope"""
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to control telescope"}), 401
+    
     print("Stopped live view")
     try:
-        telescope_id = (request.json or {}).get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+        telescope_id = (request.json or {}).get("telescopeId") or (request.json or {}).get("telescope_id") or (session.get('selected_telescope') or {}).get('telescope_id')
         if not telescope_id:
             return jsonify({"status": "error", "message": "No telescope selected"}), 400
         t = Telescope(telescope_id)
@@ -392,9 +429,13 @@ def stop_live_view():
 @interface_bp.route("/motor_command", methods=["POST"])
 def motor_command():
     """Execute motor commands on the telescope"""
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({"status": "error", "message": "Must be logged in to control telescope"}), 401
+    
     try:
         data = request.json or {}
-        telescope_id = data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+        telescope_id = data.get("telescope_id") or data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescope_id')
         command = data.get("command")
         args = data.get("args")
         motor_id = data.get("motor_id", "motor1")  # Default to motor1 for backward compatibility
@@ -455,7 +496,7 @@ def get_motors():
     """Get list of available motors for the selected telescope"""
     try:
         data = request.json or {}
-        telescope_id = data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescopeId')
+        telescope_id = data.get("telescope_id") or data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescope_id')
         
         if not telescope_id:
             return jsonify({"status": "error", "message": "No telescope selected"}), 400

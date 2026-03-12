@@ -1,4 +1,15 @@
 // 3D Planetarium JavaScript
+
+// Helper function to check for authentication errors in fetch responses
+function checkAuthResponse(response) {
+    if (response.status === 401) {
+        alert('You must be logged in to control the telescope.');
+        window.location.href = '/login';
+        throw new Error('Not authenticated');
+    }
+    return response;
+}
+
 // Initial stars are empty (we fetch a small filtered set after load)
 const stars = JSON.parse(document.getElementById('stars-data').textContent);
 
@@ -79,6 +90,8 @@ const timeControl = document.getElementById('time-control');
 const timeNowBtn = document.getElementById('time-now');
 const timeSegmentIndicator = document.getElementById('time-segment-indicator');
 let currentLSTDeg = 0; // updated per draw based on time and longitude
+let lastPlanetUpdateTime = 0; // Track when planets were last updated
+const PLANET_UPDATE_THROTTLE_MS = 60000; // Only update planets every 60 seconds max
 const resetBtn = document.getElementById('reset-view');
 const helpBtn = document.getElementById('help-btn');
 const helpModal = document.getElementById('help-modal');
@@ -123,6 +136,110 @@ const clearSearchBtn = document.getElementById('clear-search-btn');
 // Search state
 let searchedObject = null;
 let highlightAnimation = 0;
+
+// Telescope position tracking
+let telescopePosition = null;
+let telescopePositionUpdateInterval = null;
+let telescopePositionAvailable = false; // Track if we've successfully fetched at least once
+const telescopeMarkerSize = 25;
+const telescopeMarkerColor = "#00ff00"; // Green for telescope position
+
+// Get telescope data from embedded template
+let telescopeDataFromSession = null;
+try {
+    const telescopeDataElement = document.getElementById('telescope-data');
+    if (telescopeDataElement && telescopeDataElement.textContent) {
+        telescopeDataFromSession = JSON.parse(telescopeDataElement.textContent);
+    }
+} catch (e) {
+    console.debug('Could not parse telescope data from template:', e);
+}
+
+function isTelescopeSelected() {
+    return telescopeDataFromSession && telescopeDataFromSession.telescope_id;
+}
+
+function updateTelescopePosition() {
+    // Only fetch telescope position if one is selected in the session
+    if (!isTelescopeSelected()) {
+        return;
+    }
+    
+    fetch('/api/telescope_position')
+        .then(response => {
+            if (response.status === 401) {
+                // Not authenticated, stop polling
+                console.warn('Telescope position: Not authenticated');
+                if (telescopePositionUpdateInterval) clearInterval(telescopePositionUpdateInterval);
+                return null;
+            }
+            // For 422 (no telescope selected), keep polling in case one gets selected
+            if (response.status === 422) {
+                if (telescopePositionAvailable) {
+                    console.debug('Telescope position: No telescope currently selected (422)');
+                    telescopePositionAvailable = false;
+                }
+                telescopePosition = null;
+                return null;
+            }
+            if (!response.ok) {
+                console.debug('Telescope position API returned status:', response.status);
+                return null;
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data && data.status === 'success' && data.ra !== null && data.dec !== null) {
+                // Get current observer position and time to convert RA/DEC to Alt/Az
+                const latDeg = parseFloat(latInput.value) || 0;
+                const lonDeg = parseFloat(lonInput.value) || 0;
+                let selectedDate = new Date();
+                try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
+                
+                // Convert RA/DEC to Alt/Az for fixed horizon-based positioning
+                const { altDeg, azDeg } = radecToAltAz(data.ra, data.dec, selectedDate, latDeg, lonDeg);
+                
+                telescopePosition = {
+                    ra: data.ra,
+                    dec: data.dec,
+                    alt: altDeg,
+                    az: azDeg,
+                    timestamp: Date.now()
+                };
+                if (!telescopePositionAvailable) {
+                    telescopePositionAvailable = true;
+                    console.log('%c✓ Telescope position now available!', 'color: green; font-weight: bold;', `RA: ${data.ra}°, DEC: ${data.dec}° (Alt: ${altDeg.toFixed(1)}°, Az: ${azDeg.toFixed(1)}°)`);
+                }
+                draw();
+            } else if (data && data.status === 'error') {
+                console.debug('Telescope position error:', data.message);
+                telescopePosition = null;
+                telescopePositionAvailable = false;
+            }
+        })
+        .catch(err => {
+            // Silently fail - just don't display telescope marker, but keep trying
+            console.debug('Telescope position update failed:', err.message);
+        });
+}
+
+function startTelescopePositionTracking() {
+    // Update immediately
+    updateTelescopePosition();
+    
+    // Then update every 5 seconds to reduce connection load
+    if (telescopePositionUpdateInterval) clearInterval(telescopePositionUpdateInterval);
+    telescopePositionUpdateInterval = setInterval(updateTelescopePosition, 1000);
+}
+
+function stopTelescopePositionTracking() {
+    if (telescopePositionUpdateInterval) {
+        clearInterval(telescopePositionUpdateInterval);
+        telescopePositionUpdateInterval = null;
+    }
+    telescopePosition = null;
+    telescopePositionAvailable = false;
+}
 
 // Controls inversion state (affects drag deltas only)
 let invertControls = false;
@@ -561,13 +678,22 @@ function replacePlanetsInScene(newPlanets) {
     planetsList = newList;
 }
 
-async function refreshPlanetsForCurrentTime() {
+async function refreshPlanetsForCurrentTime(force = false) {
+    // Throttle planet updates to avoid excessive queries during live time mode
+    const now = Date.now();
+    if (!force && (now - lastPlanetUpdateTime) < PLANET_UPDATE_THROTTLE_MS) {
+        // Skip planet update but still trigger draw for sky rotation
+        draw();
+        return;
+    }
+    
     let selectedDate = new Date();
     try { if (timeControl && timeControl.value) selectedDate = new Date(timeControl.value); } catch {}
     selectedDate.setSeconds(0, 0);
     const updated = await fetchPlanetsForDate(new Date(selectedDate.toISOString()));
     if (updated) {
         replacePlanetsInScene(updated);
+        lastPlanetUpdateTime = now;
         draw();
     }
 }
@@ -576,7 +702,7 @@ function schedulePlanetsRefresh() {
     if (planetsRefreshTimer) clearTimeout(planetsRefreshTimer);
     planetsRefreshTimer = setTimeout(() => {
         planetsRefreshTimer = null;
-        refreshPlanetsForCurrentTime();
+        refreshPlanetsForCurrentTime(true); // Force update for manual keyboard adjustments
     }, 250); // debounce rapid keypresses
 }
 
@@ -1288,6 +1414,66 @@ function draw() {
             }
         }
     }
+
+    // Draw telescope position marker
+    if (telescopePosition) {
+        // Use Alt/Az coordinates so telescope marker doesn't move with time changes
+        // Only moves when actual telescope position is updated from server
+        let [x, y, z] = altazToXYZ(telescopePosition.alt, telescopePosition.az);
+        [x, y, z] = rotate([x, y, z], rotX, rotY, 0, 0);
+        if (z > 0) {
+            const [cx, cy] = project([x, y, z]);
+            const scaledMarkerSize = telescopeMarkerSize * zoom;
+            
+            // Draw a distinctive crosshair/scope marker
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = telescopeMarkerColor;
+            ctx.lineWidth = 2;
+            
+            // Outer circle
+            ctx.beginPath();
+            ctx.arc(cx, cy, scaledMarkerSize, 0, 2*Math.PI);
+            ctx.stroke();
+            
+            // Crosshairs
+            const crossSize = scaledMarkerSize * 1.3;
+            ctx.beginPath();
+            ctx.moveTo(cx - crossSize, cy);
+            ctx.lineTo(cx + crossSize, cy);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - crossSize);
+            ctx.lineTo(cx, cy + crossSize);
+            ctx.stroke();
+            
+            // Central dot
+            ctx.fillStyle = telescopeMarkerColor;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 3, 0, 2*Math.PI);
+            ctx.fill();
+            
+            // Label with coordinates
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = telescopeMarkerColor;
+            ctx.font = "12px monospace";
+            ctx.textAlign = "left";
+            const raHours = telescopePosition.ra / 15;
+            const raH = Math.floor(raHours);
+            const raM = Math.floor((raHours - raH) * 60);
+            const raS = ((raHours - raH) * 60 - raM) * 60;
+            
+            const decSign = telescopePosition.dec >= 0 ? '+' : '-';
+            const decAbs = Math.abs(telescopePosition.dec);
+            const decD = Math.floor(decAbs);
+            const decM = Math.floor((decAbs - decD) * 60);
+            const decS = ((decAbs - decD) * 60 - decM) * 60;
+            
+            const raStr = `${raH}h${raM}m${raS.toFixed(1)}s`;
+            const decStr = `${decSign}${decD}°${decM}'${decS.toFixed(1)}"`;
+            ctx.fillText(`Telescope: ${raStr}`, cx + crossSize + 10, cy - 10);
+            ctx.fillText(decStr, cx + crossSize + 10, cy + 5);
+        }
+    }
 }
 
 // Update cursor coordinate display
@@ -1993,6 +2179,7 @@ helpModal.addEventListener('click', (e) => {
 
 // Expose functions to global scope so inline onclick handlers work robustly
 window.trackObject = trackObject;
+window.stopTracking = stopTracking;
 window.searchObject = searchObject;
 window.clearSearch = clearSearch;
 
@@ -2048,6 +2235,61 @@ function hideLoading() {
     loading.style.display = "none";
 }
 
+// Function to update the tracking info panel
+function updateTrackingPanel(trackingData) {
+    const trackingInfoDiv = document.getElementById('tracking-info');
+    const trackingContent = document.getElementById('tracking-content');
+    
+    if (!trackingData) {
+        // Hide panel when no tracking
+        trackingInfoDiv.style.display = 'none';
+        trackingContent.innerHTML = '<em>No object being tracked</em>';
+        return;
+    }
+    
+    // Show panel and update content
+    trackingInfoDiv.style.display = 'block';
+    trackingContent.innerHTML = `
+        <div><strong>Object:</strong> ${trackingData.name}</div>
+        <div><strong>RA:</strong> ${trackingData.ra.toFixed(4)}°</div>
+        <div><strong>DEC:</strong> ${trackingData.dec.toFixed(4)}°</div>
+        ${trackingData.mag !== undefined ? `<div><strong>Magnitude:</strong> ${trackingData.mag.toFixed(2)}</div>` : ''}
+    `;
+}
+
+// Function to stop tracking
+function stopTracking() {
+    console.log('=== stopTracking CALLED from star map ===');
+    
+    fetch("/stop_tracking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Stop tracking response:', data);
+        if (data.status === "stopped") {
+            // Clear tracking panel
+            updateTrackingPanel(null);
+            // Clear sessionStorage
+            sessionStorage.removeItem('currentTracking');
+            console.log('✓ Tracking stopped successfully');
+            alert('🛑 Tracking stopped successfully');
+        } else {
+            throw new Error(data.message || "Failed to stop tracking");
+        }
+    })
+    .catch(error => {
+        console.error('✗ Error stopping tracking:', error);
+        alert(`❌ Failed to stop tracking: ${error.message}`);
+        
+        // Still clear the panel even if command failed
+        updateTrackingPanel(null);
+        sessionStorage.removeItem('currentTracking');
+    });
+}
+
 // Function to track a celestial object
 function trackObject(name, ra, dec, mag) {
     // First fetch star info to get friendly name if available
@@ -2071,16 +2313,30 @@ function trackObject(name, ra, dec, mag) {
                     mag: mag
                 })
             })
+            .then(checkAuthResponse)
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'tracking') {
-                    document.getElementById('info').innerHTML = 
-                        `<b>${displayName}</b><br>RA: ${ra.toFixed(2)}°<br>DEC: ${dec.toFixed(2)}°<br>Mag: ${mag}<br>
-                         <span style="color: #4CAF50; font-weight: bold;">✓ Tracking ${displayName}</span>`;
-                    console.log(`Successfully started tracking ${name}`);
+                    console.log(`Successfully started tracking ${name} on telescope ${data.telescope_id}`);
+                    
+                    // Store tracking state in sessionStorage so it can be displayed on interface page
+                    const trackingData = {
+                        name: name,
+                        ra: ra,
+                        dec: dec,
+                        mag: mag
+                    };
+                    sessionStorage.setItem('currentTracking', JSON.stringify(trackingData));
+                    
+                    // Update tracking panel to show tracking info
+                    updateTrackingPanel(trackingData);
+                    
+                } else if (data.redirect) {
+                    // No telescope selected - inform user
+                    alert('Please select a telescope in the Interface page to begin tracking');
                 } else {
                     console.error('Tracking failed:', data);
-                    alert('Failed to start tracking. Please try again.');
+                    alert(data.message || 'Failed to start tracking. Please try again.');
                 }
             })
             .catch(error => {
@@ -2102,16 +2358,32 @@ function trackObject(name, ra, dec, mag) {
                     mag: mag
                 })
             })
+            .then(checkAuthResponse)
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'tracking') {
-                    document.getElementById('info').innerHTML = 
-                        `<b>${name}</b><br>RA: ${ra.toFixed(2)}°<br>DEC: ${dec.toFixed(2)}°<br>Mag: ${mag}<br>
-                         <span style="color: #4CAF50; font-weight: bold;">✓ Tracking ${name}</span>`;
-                    console.log(`Successfully started tracking ${name}`);
+                    console.log(`Successfully started tracking ${name} on telescope ${data.telescope_id}`);
+                    
+                    // Store tracking state in sessionStorage so it can be displayed on interface page
+                    const trackingData = {
+                        name: name,
+                        ra: ra,
+                        dec: dec,
+                        mag: mag
+                    };
+                    sessionStorage.setItem('currentTracking', JSON.stringify(trackingData));
+                    
+                    // Update tracking panel to show tracking info
+                    updateTrackingPanel(trackingData);
+                    
+                    // Show success message instead of redirecting
+                    alert(`✓ Now tracking ${name}`);
+                } else if (data.redirect) {
+                    // No telescope selected - inform user
+                    alert('Please select a telescope in the Interface page to begin tracking');
                 } else {
                     console.error('Tracking failed:', data);
-                    alert('Failed to start tracking. Please try again.');
+                    alert(data.message || 'Failed to start tracking. Please try again.');
                 }
             })
             .catch(error => {
@@ -2126,6 +2398,44 @@ function searchObject() {
     const searchValue = searchInput.value.trim();
     if (!searchValue) {
         alert('Please enter a search term.');
+        return;
+    }
+
+    // Check if searching for "telescope"
+    if (searchValue.toLowerCase() === 'telescope') {
+        if (!isTelescopeSelected()) {
+            alert('No telescope selected. Please select a telescope first.');
+            return;
+        }
+        
+        if (!telescopePosition && !telescopePositionAvailable) {
+            // Try fetching once more before giving up
+            fetch('/api/telescope_position')
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.status === 'success' && data.ra !== null && data.dec !== null) {
+                        telescopePosition = {
+                            ra: data.ra,
+                            dec: data.dec,
+                            timestamp: Date.now()
+                        };
+                        telescopePositionAvailable = true;
+                        console.log('Telescope position fetched on demand:', data.ra, data.dec);
+                        performTelescopeSearch();
+                    } else {
+                        console.warn('Telescope position search failed:', data.message || 'Unknown error');
+                        alert(`Telescope position not available: ${data.message || 'No telescope selected or unable to contact telescope'}`);
+                    }
+                })
+                .catch(err => {
+                    console.error('Telescope search error:', err);
+                    alert('Error fetching telescope position. Check browser console for details.');
+                });
+        } else if (telescopePosition) {
+            performTelescopeSearch();
+        } else {
+            alert('Telescope position not available. Make sure a telescope is selected.');
+        }
         return;
     }
 
@@ -2346,6 +2656,43 @@ function clearSearch() {
     draw();
 }
 
+// Helper function to perform telescope search
+function performTelescopeSearch() {
+    if (!telescopePosition) {
+        console.error('performTelescopeSearch called but telescopePosition is null');
+        alert('Telescope position not available.');
+        return;
+    }
+    
+    // Create a searchedObject from telescopePosition
+    const telescopeObj = {
+        name: 'Telescope',
+        ra: telescopePosition.ra,
+        dec: telescopePosition.dec,
+        mag: -99, // Very bright so it shows up
+        type: 'telescope'
+    };
+    
+    // Set as searched object and move camera to it
+    searchedObject = telescopeObj;
+    highlightAnimation = 0;
+    moveToObject(telescopeObj);
+    
+    // Show info
+    const raHMS = decimalToHMS(telescopeObj.ra);
+    const decDMS = decimalToDMS(telescopeObj.dec);
+    
+    window.currentStarData = { ...telescopeObj };
+    
+    document.getElementById('info').innerHTML = 
+        `<b>🔍 Telescope Position</b><br>RA: ${raHMS}<br>DEC: ${decDMS}<br>
+         <div style="margin-top: 5px; display: flex; gap: 4px;">
+            <button onclick="clearSearch()" style="padding: 4px 8px; background: #999; color: white; border: none; border-radius: 3px; cursor: pointer; flex: 1;">Clear</button>
+         </div>`;
+    
+    draw();
+}
+
 // Initial draw and loading
 window.addEventListener('DOMContentLoaded', () => {
     console.log('%cStar Map JS loaded v2025-10-27-1', 'color:#0bf');
@@ -2354,7 +2701,12 @@ window.addEventListener('DOMContentLoaded', () => {
         const now = new Date();
         now.setSeconds(0, 0);
         timeControl.value = formatLocalDateTime(now);
-        timeControl.addEventListener('change', () => { refreshPlanetsForCurrentTime(); draw(); });
+        timeControl.addEventListener('change', () => { 
+            // During live time updates, refreshPlanetsForCurrentTime handles throttling
+            // For manual changes, force immediate planet update
+            const isLiveTimeActive = document.getElementById('live-time')?.checked;
+            refreshPlanetsForCurrentTime(!isLiveTimeActive); 
+        });
         // Add keyboard rollover handling for ArrowUp/ArrowDown
         timeControl.addEventListener('keydown', handleTimeControlKeydown);
         // Add click handler to support virtual caret segmentation on browsers without selectionStart
@@ -2368,7 +2720,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const now = new Date();
             now.setSeconds(0, 0);
             if (timeControl) timeControl.value = formatLocalDateTime(now);
-            refreshPlanetsForCurrentTime();
+            refreshPlanetsForCurrentTime(true); // Force update when clicking "Now" button
             draw();
         });
     }
@@ -2413,6 +2765,20 @@ window.addEventListener('DOMContentLoaded', () => {
             setTimeout(hideLoading, 200);
             // Begin background staged prefetch so data is ready before user requests it
             stagedPrefetchAfterFirstDraw();
+            // Start telescope position tracking
+            startTelescopePositionTracking();
+            
+            // Restore tracking state from sessionStorage if it exists
+            try {
+                const trackingState = sessionStorage.getItem('currentTracking');
+                if (trackingState) {
+                    const trackingData = JSON.parse(trackingState);
+                    updateTrackingPanel(trackingData);
+                }
+            } catch (e) {
+                console.log('No tracking state to restore');
+            }
+            
             // Start animation loop for search highlighting
             function animate() {
                 if (searchedObject) {

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, session
 from flask_login import login_required, current_user
 from models.user import User
 from app.db import db
@@ -157,18 +157,15 @@ def set_role(user_id):
         flash('User not found.', 'danger')
         return redirect(request.referrer or url_for('admin.admin'))
 
-    role = request.form.get('role')
-    print(f"[DEBUG] Received role: '{role}', form data: {dict(request.form)}")
-    print(f"[DEBUG] Role type: {type(role)}, repr: {repr(role)}")
-    
-    # Check if form data is empty (CSRF validation failure)
-    if not request.form:
-        print("[DEBUG] Empty form data - likely CSRF validation failure")
+    json_data = request.get_json(silent=True) if request.is_json else None
+    role = (json_data or {}).get('role') or request.form.get('role')
+
+    # For non-JSON submissions, empty form data usually indicates a validation issue.
+    if not request.is_json and not request.form:
         flash('Security validation failed. Please try again.', 'danger')
         return redirect(request.referrer or url_for('admin.admin'))
     
     if role not in ['Administrator', 'Standard', 'Limited']:
-        print(f"[DEBUG] Invalid role: '{role}' not in ['Administrator', 'Standard', 'Limited']")
         if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'status': 'error', 'message': 'Invalid role specified.'}), 400
         flash('Invalid role specified.', 'danger')
@@ -176,8 +173,6 @@ def set_role(user_id):
 
     user.AccountType = role
     db.session.commit()
-    print(f"[DEBUG] Successfully set user.AccountType to: '{user.AccountType}'")
-    
     if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'status': 'success', 'message': f'{user.username} role set to {role}.'})
     flash(f'{user.username} role set to {role}.', 'success')
@@ -377,20 +372,47 @@ def admin_security_tokens():
     if guard:
         return guard
 
-    import security.manage_tokens as token_utils
-    tokens = token_utils.load_tokens()
-    # Build mapping of identifier -> (token, info)
-    view_tokens = []
-    for token, info in tokens.items():
-        view_tokens.append({
-            'id': token,  # Full token for identification
-            'truncated': token[:12] + '...',  # Truncated for display
-            'name': info.get('name'),
-            'client_type': info.get('client_type'),
-            'created': info.get('created')
-        })
+    from security.token_store import list_tokens
+    from models.tables import Telescope
 
-    return render_template('security_tokens.html', tokens=view_tokens)
+    tokens = list_tokens()
+    view_tokens = []
+    for rec in tokens:
+        token_data = {
+            'id': rec.id,
+            'truncated': (rec.token_prefix or 'token') + '...',
+            'name': rec.name,
+            'client_type': rec.client_type,
+            'created': rec.created_at.isoformat() if rec.created_at else 'Unknown',
+            'db_info': None
+        }
+        
+        # If it's a telescope, get database info
+        if rec.client_type == 'telescope':
+            try:
+                telescope_name = rec.name
+                telescope = Telescope.get_telescope_by_id(telescope_name)
+                if telescope:
+                    token_data['db_info'] = {
+                        'type': telescope.get('type'),
+                        'ip_address': telescope.get('ip_address'),
+                        'last_seen': telescope.get('last_seen'),
+                        'online': Telescope.is_telescope_online(telescope_name)
+                    }
+            except Exception as e:
+                logging.error(f"Error fetching telescope data: {e}")
+        
+        view_tokens.append(token_data)
+
+    generated_token = session.pop('new_api_token', None)
+    generated_token_name = session.pop('new_api_token_name', None)
+
+    return render_template(
+        'security_tokens.html',
+        tokens=view_tokens,
+        generated_token=generated_token,
+        generated_token_name=generated_token_name,
+    )
 
 
 @admin_bp.route('/admin/security/tokens/generate', methods=['POST'])
@@ -400,20 +422,29 @@ def admin_generate_token():
     if guard:
         return guard
 
-    import security.manage_tokens as token_utils
+    from security.token_store import create_token_record, list_tokens
     name = request.form.get('name') or 'unnamed'
     client_type = request.form.get('client_type') or 'observer'
+    request.form.get('telescope_type') or None
     
     # Check for duplicate names
-    tokens = token_utils.load_tokens()
-    for token, info in tokens.items():
-        if info.get('name') == name:
+    tokens = list_tokens()
+    for rec in tokens:
+        if rec.name == name:
             flash(f'Token with name "{name}" already exists. Please choose a different name.', 'danger')
             return redirect(url_for('admin.admin_security_tokens'))
+
+    token, _ = create_token_record(name, client_type)
+    sec_logger.info(f"token_generated: token={token[:12]}..., name={name}, type={client_type}, by={current_user.id}")
+
+    # One-time token reveal after redirect
+    session['new_api_token'] = token
+    session['new_api_token_name'] = name
     
-    token = token_utils.add_token(name, client_type)
-    sec_logger.info(f"token_generated: token={token[:12]}..., name={name}, by={current_user.id}")
-    flash(f'Generated token for {name}: {token} (store securely)', 'success')
+    flash_msg = f'Generated token for {name}: {token} (store securely)'
+    if client_type == 'telescope':
+        flash_msg += ' - Telescope added to database.'
+    flash(flash_msg, 'success')
     return redirect(url_for('admin.admin_security_tokens'))
 
 
@@ -424,17 +455,30 @@ def admin_revoke_token():
     if guard:
         return guard
 
-    import security.manage_tokens as token_utils
+    from security.token_store import get_token_by_id, revoke_token_by_id
+    from models.tables import Telescope
+    
     identifier = request.form.get('token')
     if not identifier:
         flash('No token specified.', 'danger')
         return redirect(url_for('admin.admin_security_tokens'))
 
-    tokens = token_utils.load_tokens()
-    if identifier in tokens:
-        token_utils.revoke_token(identifier)
-        sec_logger.info(f"token_revoked: token={identifier[:12]}..., by={current_user.id}")
-        flash('Token revoked.', 'success')
+    rec = get_token_by_id(identifier)
+    if rec:
+        
+        # If it's a telescope, remove from database too
+        if rec.client_type == 'telescope':
+            try:
+                telescope_name = rec.name
+                result = Telescope.remove_telescope(telescope_name)
+                if result['status'] == 'success':
+                    sec_logger.info(f"telescope_removed: token_id={rec.id}, by={current_user.id}")
+            except Exception as e:
+                logging.error(f"Error removing telescope from database: {e}")
+
+        revoke_token_by_id(identifier)
+        sec_logger.info(f"token_revoked: token_id={rec.id}, by={current_user.id}")
+        flash('Token revoked and telescope removed from database.', 'success')
     else:
         flash('Token not found.', 'danger')
 
@@ -448,13 +492,9 @@ def admin_show_token():
     if guard:
         return guard
 
-    import security.manage_tokens as token_utils
     token_id = request.json.get('token_id') if request.is_json else request.form.get('token_id')
     if not token_id:
         return jsonify({'error': 'Token ID required'}), 400
 
-    tokens = token_utils.load_tokens()
-    if token_id in tokens:
-        return jsonify({'token': token_id})
-    else:
-        return jsonify({'error': 'Token not found'}), 404
+    # Tokens are stored hashed in DB and cannot be recovered after creation.
+    return jsonify({'error': 'Full token display is unavailable after creation (stored hashed).'}), 410

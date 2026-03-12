@@ -184,8 +184,34 @@ class PlanetsTable(BaseTable):
 
 
 # Telescope model: For managing connected telescopes
-class Telescope(BaseTable):
-    __tablename__ = 'telescopes'  # The actual table name in the database
+class Telescope(db.Model):
+    __tablename__ = 'telescopes'
+    __table_args__ = {'extend_existing': True}
+    
+    # Explicit column definitions
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    telescope_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    ip_address = db.Column(db.String(45), nullable=True)  # IPv4 or IPv6
+    type = db.Column(db.String(100), nullable=True)
+    last_seen = db.Column(db.Float, nullable=True)  # Unix timestamp
+    token_hash = db.Column(db.String(64), nullable=True, index=True)
+    token_prefix = db.Column(db.String(16), nullable=True)
+    token_created_at = db.Column(db.DateTime, nullable=True)
+    
+    def __repr__(self):
+        return f"<Telescope(id={self.id}, telescope_id='{self.telescope_id}', type='{self.type}')>"
+
+    @property
+    def name(self):
+        return self.telescope_id
+
+    @property
+    def client_type(self):
+        return self.type
+
+    @property
+    def created_at(self):
+        return self.token_created_at
     
     @staticmethod
     def get_all_telescopes():
@@ -198,14 +224,17 @@ class Telescope(BaseTable):
     @staticmethod
     def get_telescope_by_id(telescope_id):
         """
-        Get a specific telescope by its telescopeId.
+        Get a specific telescope by its telescope_id (human-readable name).
         """
-        result = db.session.query(Telescope).filter_by(telescopeId=telescope_id).first()
+        result = db.session.query(Telescope).filter_by(telescope_id=telescope_id).first()
         if result:
-            if isinstance(result, dict):
-                return result
-            result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
-            return result_data
+            return {
+                'id': result.id,
+                'telescope_id': result.telescope_id,
+                'ip_address': result.ip_address,
+                'type': result.type,
+                'last_seen': result.last_seen
+            }
         return None
     
     @staticmethod
@@ -215,22 +244,21 @@ class Telescope(BaseTable):
         """
         import time
         current_time = time.time()
-        telescope = db.session.query(Telescope).filter_by(telescopeId=telescope_id).first()
-        if telescope and hasattr(telescope, 'lastSeen'):
+        telescope = db.session.query(Telescope).filter_by(telescope_id=telescope_id).first()
+        if telescope and telescope.last_seen:
             # Consider telescope online if seen within last 5 minutes (300 seconds)
-            return (current_time - telescope.lastSeen) < 300
+            return (current_time - telescope.last_seen) < 300
         return False
     
     @staticmethod
-    def add_telescope(telescope_id, ip_address, firmware_version, capabilities, last_seen=None):
+    def add_telescope(telescope_id, ip_address=None, telescope_type=None, last_seen=None):
         """
         Add a new telescope to the database.
         
         Args:
-            telescope_id (str): Unique identifier for the telescope
-            ip_address (str): IP address of the telescope
-            firmware_version (str): Firmware version of the telescope
-            capabilities (str): Comma-separated list of telescope capabilities
+            telescope_id (str): Unique identifier for the telescope (name)
+            ip_address (str, optional): IP address of the telescope
+            telescope_type (str, optional): Client type (telescope/observer)
             last_seen (float, optional): Unix timestamp of last contact. Defaults to current time.
         
         Returns:
@@ -242,29 +270,26 @@ class Telescope(BaseTable):
                 last_seen = time.time()
             
             # Check if telescope already exists
-            existing = db.session.query(Telescope).filter_by(telescopeId=telescope_id).first()
+            existing = db.session.query(Telescope).filter_by(telescope_id=telescope_id).first()
             if existing:
                 return {"status": "error", "message": f"Telescope with ID '{telescope_id}' already exists"}
             
-            # Use raw SQL to insert since we're using table reflection
-            from sqlalchemy import text
-            db.session.execute(
-                text("INSERT INTO telescopes (telescopeId, ipAddress, firmwareVersion, capabilities, lastSeen) "
-                     "VALUES (:telescopeId, :ipAddress, :firmwareVersion, :capabilities, :lastSeen)"),
-                {
-                    'telescopeId': telescope_id,
-                    'ipAddress': ip_address,
-                    'firmwareVersion': firmware_version,
-                    'capabilities': capabilities,
-                    'lastSeen': last_seen
-                }
+            # Create new telescope instance
+            new_telescope = Telescope(
+                telescope_id=telescope_id,
+                ip_address=ip_address,
+                type=telescope_type or "telescope",
+                last_seen=last_seen
             )
+            
+            db.session.add(new_telescope)
             db.session.commit()
             
-            return {"status": "success", "message": f"Telescope '{telescope_id}' added successfully"}
+            return {"status": "success", "message": f"Telescope '{telescope_id}' added successfully", "id": new_telescope.id}
             
         except Exception as e:
             db.session.rollback()
+            logger.error(f"Failed to add telescope: {str(e)}")
             return {"status": "error", "message": f"Failed to add telescope: {str(e)}"}
     
     @staticmethod
@@ -280,7 +305,7 @@ class Telescope(BaseTable):
         """
         try:
             # Check if telescope exists
-            telescope = db.session.query(Telescope).filter_by(telescopeId=telescope_id).first()
+            telescope = db.session.query(Telescope).filter_by(telescope_id=telescope_id).first()
             if not telescope:
                 return {"status": "error", "message": f"Telescope with ID '{telescope_id}' not found"}
             
@@ -292,6 +317,7 @@ class Telescope(BaseTable):
             
         except Exception as e:
             db.session.rollback()
+            logger.error(f"Failed to remove telescope: {str(e)}")
             return {"status": "error", "message": f"Failed to remove telescope: {str(e)}"}
     
     @staticmethod
@@ -311,19 +337,45 @@ class Telescope(BaseTable):
             if last_seen is None:
                 last_seen = time.time()
             
-            # Use raw SQL to update since we're using table reflection
-            from sqlalchemy import text
-            result = db.session.execute(
-                text("UPDATE telescopes SET lastSeen = :lastSeen WHERE telescopeId = :telescopeId"),
-                {'lastSeen': last_seen, 'telescopeId': telescope_id}
-            )
+            telescope = db.session.query(Telescope).filter_by(telescope_id=telescope_id).first()
             
-            if result.rowcount == 0:
+            if not telescope:
                 return {"status": "error", "message": f"Telescope with ID '{telescope_id}' not found"}
             
+            telescope.last_seen = last_seen
             db.session.commit()
+            
             return {"status": "success", "message": f"Updated last seen for telescope '{telescope_id}'"}
             
         except Exception as e:
             db.session.rollback()
+            logger.error(f"Failed to update telescope: {str(e)}")
+            return {"status": "error", "message": f"Failed to update telescope: {str(e)}"}
+    
+    @staticmethod
+    def update_ip_address(telescope_id, ip_address):
+        """
+        Update the IP address for a telescope.
+        
+        Args:
+            telescope_id (str): The telescope ID to update
+            ip_address (str): New IP address
+        
+        Returns:
+            dict: Success/error status and message
+        """
+        try:
+            telescope = db.session.query(Telescope).filter_by(telescope_id=telescope_id).first()
+            
+            if not telescope:
+                return {"status": "error", "message": f"Telescope with ID '{telescope_id}' not found"}
+            
+            telescope.ip_address = ip_address
+            db.session.commit()
+            
+            return {"status": "success", "message": f"Updated IP address for telescope '{telescope_id}'"}
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to update telescope IP: {str(e)}")
             return {"status": "error", "message": f"Failed to update telescope: {str(e)}"}

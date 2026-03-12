@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, abort
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any
 import json
 from pathlib import Path
@@ -19,6 +19,10 @@ class SecurityMiddleware:
         """
         self.app = app
         self.blacklist = get_blacklist()
+        
+        # Rate limiting tracking: {ip: [timestamps]}
+        self.request_history = {}
+        self.suspicious_request_counts = {}
         
         # Setup security logging
         if log_file is None:
@@ -204,7 +208,8 @@ class SecurityMiddleware:
         suspicious_paths = [
             'cgi-bin', 'phpunit', 'wp-admin', 'wp-content', '.php',
             'eval-stdin', 'shell', '/bin/', 'cmd.exe', 'powershell',
-            '../', '..\\', '%2e%2e', 'etc/passwd', 'boot.ini'
+            '../', '..\\', '%2e%2e', 'etc/passwd', 'boot.ini',
+            'proc/self', 'windows/system32'
         ]
         
         path_lower = request.path.lower()
@@ -215,11 +220,23 @@ class SecurityMiddleware:
                 suspicious_indicators['suspicious_path'] = pattern
                 break
         
+        # Check for config/secret file probes (high indicator of scanning)
+        config_file_patterns = [
+            '.env', 'docker-compose', 'config.', 'secrets.', 'credentials.',
+            '.sql', 'backup.', '.bak', '.old', '.save', '.tmp',
+            'wp-config', 'settings.', '.swp', '~', '.git'
+        ]
+        
+        for pattern in config_file_patterns:
+            if pattern in path_lower:
+                suspicious_indicators['config_file_probe'] = pattern
+                break
+        
         # Check for suspicious headers
         user_agent = request.headers.get('User-Agent', '').lower()
         suspicious_agents = [
             'sqlmap', 'nikto', 'nmap', 'masscan', 'zap', 'burp',
-            'crawler', 'bot', 'spider', 'scanner'
+            'crawler', 'bot', 'spider', 'scanner', 'exploit'
         ]
         
         for agent in suspicious_agents:
@@ -237,6 +254,44 @@ class SecurityMiddleware:
             suspicious_indicators['suspicious_content_type'] = content_type
         
         return suspicious_indicators
+    
+    def _check_rate_limit(self, client_ip: str, is_suspicious: bool = False) -> bool:
+        """
+        Check if client has exceeded rate limit.
+        Returns True if limit exceeded (should block), False if OK.
+        """
+        from .config import RATE_LIMITS
+        
+        # Rate limiting disabled for normal users
+        if not is_suspicious:
+            return False  # Allow all requests for normal users
+        
+        now = datetime.now()
+        window = timedelta(minutes=1)
+        
+        # Determine limit based on request type
+        if is_suspicious:
+            limit = RATE_LIMITS.get('suspicious', 10)
+        # else:
+        #     limit = RATE_LIMITS.get('default', 60)
+        
+        # Initialize tracking for this IP
+        if client_ip not in self.request_history:
+            self.request_history[client_ip] = []
+        
+        # Remove old entries outside the time window
+        self.request_history[client_ip] = [
+            ts for ts in self.request_history[client_ip]
+            if now - ts < window
+        ]
+        
+        # Check if limit exceeded
+        if len(self.request_history[client_ip]) >= limit:
+            return True  # Rate limit exceeded
+        
+        # Record this request
+        self.request_history[client_ip].append(now)
+        return False  # OK to proceed
     
     def _before_request(self):
         """Handle request before processing"""
@@ -267,18 +322,43 @@ class SecurityMiddleware:
         if suspicious_indicators:
             self._log_security_event('suspicious_request', suspicious_indicators)
             
+            # Track suspicious requests from this IP
+            if client_ip not in self.suspicious_request_counts:
+                self.suspicious_request_counts[client_ip] = 0
+            self.suspicious_request_counts[client_ip] += 1
+            
             # For highly suspicious requests, consider blocking
             high_risk_indicators = ['suspicious_path', 'unusual_method']
             if any(indicator in suspicious_indicators for indicator in high_risk_indicators):
-                # Optionally auto-blacklist aggressive attackers
-                self.blacklist.add_manual_ip(client_ip)
-                
-                self._log_security_event('auto_blacklisted', {
-                    'reason': 'aggressive_attack_pattern',
-                    'indicators': suspicious_indicators
+                # Check if this is part of a scanning/enumeration attack
+                if self.suspicious_request_counts[client_ip] >= 3:
+                    # Auto-blacklist aggressive attackers after 3+ suspicious requests
+                    self.blacklist.add_manual_ip(client_ip)
+                    
+                    self._log_security_event('auto_blacklisted', {
+                        'reason': 'aggressive_attack_pattern',
+                        'suspicious_count': self.suspicious_request_counts[client_ip],
+                        'indicators': suspicious_indicators
+                    })
+                    
+                    abort(403)
+            
+            # Rate limit suspicious requests more aggressively
+            if self._check_rate_limit(client_ip, is_suspicious=True):
+                self._log_security_event('rate_limit_exceeded', {
+                    'reason': 'suspicious_request_rate',
+                    'client_ip': client_ip
                 })
-                
-                abort(403)
+                abort(429)  # Too Many Requests
+        else:
+            # Normal rate limiting for legitimate requests
+            if self._check_rate_limit(client_ip, is_suspicious=False):
+                self._log_security_event('rate_limit_exceeded', {
+                    'reason': 'normal_request_rate',
+                    'client_ip': client_ip
+                })
+                abort(429)  # Too Many Requests
+    
     
     def _register_security_routes(self):
         """Register security management routes"""

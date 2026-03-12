@@ -49,6 +49,16 @@
               <small class="text-muted">{{ e.created_at.strftime('%Y-%m-%d %H:%M:%S') if e.created_at else '' }} UTC</small>
             </div>
             <div style="white-space:pre-wrap">{{ e.body }}</div>
+            {% if e.file_path %}
+            <div class="mt-2">
+              {% set entry_ext = (e.file_path.split('.')[-1] | lower) %}
+              {% if entry_ext in ['png','jpg','jpeg'] %}
+                <a href="{{ url_for('contact.admin_contact_entry_attachment', message_id=msg.id, entry_id=e.id) }}" class="link-primary" target="_blank" rel="noopener">View attachment{% if e.original_filename %} ({{ e.original_filename }}){% endif %}</a>
+              {% else %}
+                <a href="{{ url_for('contact.admin_contact_entry_attachment', message_id=msg.id, entry_id=e.id) }}" class="link-primary" target="_blank" rel="noopener">Download attachment{% if e.original_filename %} ({{ e.original_filename }}){% endif %}</a>
+              {% endif %}
+            </div>
+            {% endif %}
           </div>
           {% endfor %}
         </div>

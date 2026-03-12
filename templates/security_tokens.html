@@ -13,15 +13,35 @@
       {% endif %}
     {% endwith %}
 
+    {% if generated_token %}
+    <div class="card border-success mb-3">
+        <div class="card-header bg-success text-white">New Token Generated</div>
+        <div class="card-body">
+            <p class="mb-2">
+                {% if generated_token_name %}
+                    Token for <strong>{{ generated_token_name }}</strong>.
+                {% else %}
+                    New token generated.
+                {% endif %}
+                Copy and store this now — it won't be shown again.
+            </p>
+            <div class="input-group">
+                <input id="new-token-value" type="text" class="form-control" readonly value="{{ generated_token }}" />
+                <button class="btn btn-outline-success" type="button" onclick="copyGeneratedToken()">Copy</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="card mb-3">
         <div class="card-body">
-            <form method="post" action="{{ url_for('admin.admin_generate_token') }}" class="row g-2">
+            <form method="post" action="{{ url_for('admin.admin_generate_token') }}" class="row g-2" id="tokenForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                <div class="col-sm-5">
-                    <input name="name" class="form-control" placeholder="Client name" />
+                <div class="col-sm-4">
+                    <input name="name" class="form-control" placeholder="Client name" required />
                 </div>
                 <div class="col-sm-3">
-                    <select name="client_type" class="form-select">
+                    <select name="client_type" class="form-select" id="clientTypeSelect">
                         <option value="observer">Observer</option>
                         <option value="telescope">Telescope</option>
                     </select>
@@ -40,18 +60,43 @@
             <div class="table-responsive">
                 <table class="table table-sm table-striped">
                     <thead>
-                        <tr><th>Token</th><th>Name</th><th>Type</th><th>Created</th><th>Actions</th></tr>
+                        <tr>
+                            <th>Token</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Details</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
                     </thead>
                     <tbody>
                         {% for t in tokens %}
                             <tr>
                                 <td>
                                     <code id="token-{{ loop.index }}">{{ t.truncated }}</code>
-                                    <button class="btn btn-sm btn-outline-secondary ms-2" data-token-id="{{ t.id }}" data-index="{{ loop.index }}" onclick="showToken(this)">Show Full</button>
+                                    <small class="text-muted ms-2">(stored hashed)</small>
                                 </td>
                                 <td>{{ t.name }}</td>
-                                <td>{{ t.client_type }}</td>
-                                <td>{{ t.created }}</td>
+                                <td>
+                                    <span class="badge bg-{{ 'primary' if t.client_type == 'telescope' else 'secondary' }}">
+                                        {{ t.client_type }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if t.db_info %}
+                                        <small>
+                                            {% if t.db_info.type %}<strong>Type:</strong> {{ t.db_info.type }}<br>{% endif %}
+                                            {% if t.db_info.ip_address %}<strong>IP:</strong> {{ t.db_info.ip_address }}<br>{% endif %}
+                                            <strong>Status:</strong> 
+                                            <span class="badge bg-{{ 'success' if t.db_info.online else 'secondary' }}">
+                                                {{ 'Online' if t.db_info.online else 'Offline' }}
+                                            </span>
+                                        </small>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td><small>{{ t.created }}</small></td>
                                 <td>
                                     <form method="post" action="{{ url_for('admin.admin_revoke_token') }}" style="display:inline">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
@@ -73,29 +118,17 @@
 
 <script>
 function showToken(button) {
-    const tokenId = button.getAttribute('data-token-id');
-    const index = button.getAttribute('data-index');
-    
-    fetch('/admin/security/tokens/show', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({token_id: tokenId})
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.token) {
-            document.getElementById('token-' + index).innerHTML = data.token;
-            button.style.display = 'none'; // Hide the button after showing token
-        } else {
-            alert('Error: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Failed to show token');
-    });
+    alert('Full token display is unavailable after creation (stored hashed).');
+}
+
+function copyGeneratedToken() {
+    const el = document.getElementById('new-token-value');
+    if (!el) return;
+    el.select();
+    el.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(el.value)
+        .then(() => alert('Token copied to clipboard.'))
+        .catch(() => alert('Copy failed. Please copy manually.'));
 }
 </script>
 {% endblock %}

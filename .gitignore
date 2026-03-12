@@ -9,6 +9,7 @@ security/api_tokens.json
 instance/.env
 config.yml
 .vscode
+static/videos
 
 algorithms/__pycache__
 

@@ -7,6 +7,7 @@ from sqlalchemy import func
 
 from algorithms.convert import convert
 from algorithms.astroTools import getAllCelestialData
+from app.telescopeLink import Telescope
 
 star_map_bp = Blueprint("star_map", __name__)
 
@@ -262,7 +263,8 @@ def get_planets():
 def star_map():
     # For fast initial load, render without embedding the entire star dataset
     # The client will fetch stars and planets via APIs progressively
-    return render_template("star_map.html", stars=[])
+    selected_telescope = session.get('selected_telescope')
+    return render_template("star_map.html", stars=[], selected_telescope=selected_telescope)
 
 def extract_friendly_common_name(common_names_field: str) -> str:
     """
@@ -336,6 +338,14 @@ def star_info(star_name):
 
 @star_map_bp.route("/track_star", methods=["POST"])
 def track_star():
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return jsonify({
+            "status": "error",
+            "error": "Must be logged in",
+            "message": "Must be logged in to control telescope"
+        }), 401
+    
     data = request.get_json()
     ra = data.get("ra")
     dec = data.get("dec")
@@ -346,13 +356,210 @@ def track_star():
         print("Missing RA/DEC in request")
         return jsonify({"error": "Missing RA/DEC"}), 400
 
-    print(f"\n[TRACKING] {name} at RA: {ra}°, DEC: {dec}° with magnitude {mag}.\n", flush=True)
+    # Check if a telescope is selected
+    selected_telescope = session.get('selected_telescope')
+    telescope_id = selected_telescope.get('telescope_id') if selected_telescope else None
+    
+    if not telescope_id:
+        # No telescope selected - client should redirect to interface
+        print(f"[TRACKING] No telescope selected for {name}")
+        return jsonify({
+            "status": "error",
+            "error": "No telescope selected",
+            "redirect": True,
+            "message": "Please select a telescope in the Interface page to begin tracking"
+        }), 422
+    
+    try:
+        # Create telescope instance and send coordinates
+        t = Telescope(telescope_id)
+        print(f"\n[TRACKING] Sending {name} coordinates to telescope {telescope_id}")
+        print(f"[TRACKING] RA: {ra}°, DEC: {dec}°, Mag: {mag}\n", flush=True)
+        
+        # Send track command with coordinates to the telescope
+        result = t.send_command("trackCoordinates", kwargs={
+            "name": name,
+            "ra": ra,
+            "dec": dec,
+            "mag": mag
+        })
+        
+        # Store in sesh
+        session["selectedObject"] = {
+            "name": name,
+            "ra": ra,
+            "dec": dec,
+            "mag": mag
+        }
+        
+        return jsonify({
+            "status": "tracking",
+            "ra": ra,
+            "dec": dec,
+            "telescope_id": telescope_id,
+            "result": result,
+            "redirect": True
+        })
+        
+    except Exception as e:
+        print(f"[TRACKING ERROR] Failed to send coordinates: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "message": f"Failed to send tracking command: {str(e)}"
+        }), 500
 
-    session["selectedObject"] = {
-        "name": name,
-        "ra": ra,
-        "dec": dec,
-        "mag": mag
-    }
+@star_map_bp.route("/get_tracking_status", methods=["GET"])
+def get_tracking_status():
+    """Get the current tracking status from the session"""
+    selected_object = session.get("selectedObject")
+    
+    if selected_object:
+        return jsonify({
+            "status": "success",
+            "tracking": True,
+            "object": {
+                "name": selected_object.get("name"),
+                "ra": selected_object.get("ra"),
+                "dec": selected_object.get("dec"),
+                "mag": selected_object.get("mag")
+            }
+        })
+    else:
+        return jsonify({
+            "status": "success",
+            "tracking": False,
+            "object": None
+        })
 
-    return jsonify({"status": "tracking", "ra": ra, "dec": dec})
+@star_map_bp.route("/stop_tracking", methods=["POST"])
+def stop_tracking():
+    """Stop tracking the current object"""
+    # Check if a telescope is selected
+    selected_telescope = session.get('selected_telescope')
+    telescope_id = selected_telescope.get('telescope_id') if selected_telescope else None
+    
+    if not telescope_id:
+        print(f"[TRACKING] No telescope selected for stop command")
+        return jsonify({
+            "status": "error",
+            "error": "No telescope selected",
+            "message": "No telescope selected"
+        }), 422
+    
+    try:
+        # Create telescope instance and send stop tracking command
+        t = Telescope(telescope_id)
+        print(f"\n[TRACKING] Stopping tracking on telescope {telescope_id}\n", flush=True)
+        
+        # Send stop tracking command to the telescope
+        result = t.send_command("stopTracking")
+        
+        # Clear session tracking data
+        session.pop("selectedObject", None)
+        
+        print(f"[TRACKING] Tracking stopped successfully")
+        
+        return jsonify({
+            "status": "stopped",
+            "message": "Tracking stopped successfully",
+            "telescope_id": telescope_id,
+            "result": result
+        })
+        
+    except Exception as e:
+        print(f"[TRACKING ERROR] Failed to stop tracking: {str(e)}")
+        # Still clear session even if command failed
+        session.pop("selectedObject", None)
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "message": f"Failed to stop tracking: {str(e)}"
+        }), 500
+
+@star_map_bp.route("/api/telescope_position", methods=["GET"])
+def get_telescope_position():
+    """Get the current position (RA/DEC) of the telescope"""
+    # Check if a telescope is selected
+    selected_telescope = session.get('selected_telescope')
+    telescope_id = selected_telescope.get('telescope_id') if selected_telescope else None
+    
+    if not telescope_id:
+        return jsonify({
+            "status": "error",
+            "error": "No telescope selected",
+            "message": "No telescope selected"
+        }), 422
+    
+    try:
+        # Create telescope instance and get current coordinates
+        t = Telescope(telescope_id)
+        print(f"[TELESCOPE] Getting coordinates for {telescope_id}", flush=True)
+        coords = t.motor.get_current_coordinates()
+        
+        print(f"[TELESCOPE] Got response: {coords}", flush=True)
+        
+        # Extract RA and DEC from various possible response formats
+        ra = None
+        dec = None
+        
+        if coords and isinstance(coords, dict):
+            # Try nested "result" first (from /sendCommand wrapper)
+            if "result" in coords:
+                result = coords["result"]
+                if isinstance(result, dict):
+                    ra = result.get("current_right_ascension") or result.get("ra")
+                    dec = result.get("current_declination") or result.get("dec")
+            
+            # Fall back to top-level keys
+            if ra is None or dec is None:
+                ra = ra or coords.get("current_right_ascension") or coords.get("ra")
+                dec = dec or coords.get("current_declination") or coords.get("dec")
+        
+        print(f"[TELESCOPE] Extracted RA: {ra}, DEC: {dec}", flush=True)
+        
+        if ra is not None and dec is not None:
+            try:
+                ra_float = float(ra)
+                dec_float = float(dec)
+                print(f"[TELESCOPE] Success! RA: {ra_float}°, DEC: {dec_float}°", flush=True)
+                return jsonify({
+                    "status": "success",
+                    "ra": ra_float,
+                    "dec": dec_float,
+                    "telescope_id": telescope_id
+                })
+            except (ValueError, TypeError) as e:
+                return jsonify({
+                    "status": "error",
+                    "error": "Failed to parse coordinates as numbers",
+                    "message": f"RA: {ra}, DEC: {dec} - {str(e)}",
+                    "telescope_id": telescope_id
+                }), 500
+        else:
+            return jsonify({
+                "status": "error",
+                "error": "No coordinates in response",
+                "message": f"Response structure: {coords}",
+                "telescope_id": telescope_id
+            }), 500
+            
+    except Exception as e:
+        print(f"[TELESCOPE POSITION ERROR] Failed to get coordinates: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "message": f"Failed to get telescope position: {str(e)}"
+        }), 500
+
+@star_map_bp.route("/api/debug/session", methods=["GET"])
+def debug_session():
+    """Debug endpoint to check session state"""
+    selected_telescope = session.get('selected_telescope')
+    return jsonify({
+        "status": "success",
+        "selected_telescope": selected_telescope,
+        "session_keys": list(session.keys())
+    })

@@ -5,6 +5,8 @@ import logging
 sec_logger = logging.getLogger('security')
 import json
 import ipaddress
+import urllib.parse
+import urllib.request
 from utility.hash import hash_password, check_password
 from models.user import User
 from models.trusted_device import TrustedDevice
@@ -48,6 +50,47 @@ def is_local_connection():
         pass
     
     return False
+
+
+def _captcha_context(config_key: str):
+    captcha_required_config = bool(current_app.config.get(config_key, True))
+    captcha_site_key = (current_app.config.get('TURNSTILE_SITE_KEY') or '').strip()
+    captcha_secret_key = (current_app.config.get('TURNSTILE_SECRET_KEY') or '').strip()
+    captcha_enabled = bool(captcha_site_key)
+    captcha_required = bool(captcha_required_config and captcha_site_key and captcha_secret_key)
+    return captcha_required, captcha_enabled, captcha_site_key
+
+
+def _verify_turnstile_token(token: str, remote_ip: str = None):
+    secret = (current_app.config.get('TURNSTILE_SECRET_KEY') or '').strip()
+    if not secret:
+        return False, ['missing-secret']
+    if not token:
+        return False, ['missing-input-response']
+
+    payload = {
+        'secret': secret,
+        'response': token
+    }
+    if remote_ip:
+        payload['remoteip'] = remote_ip
+
+    body = urllib.parse.urlencode(payload).encode('utf-8')
+    req = urllib.request.Request(
+        'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+        data=body,
+        headers={'Content-Type': 'application/x-www-form-urlencoded'}
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+    except Exception:
+        return False, ['verification-failed']
+
+    if data.get('success'):
+        return True, []
+    return False, data.get('error-codes', ['verification-failed'])
 
 @auth_bp.route("/login", methods=['GET', 'POST'])
 def login():
@@ -122,7 +165,19 @@ def logout():
 
 @auth_bp.route("/register", methods=['GET', 'POST'])
 def register():
+    captcha_required, captcha_enabled, captcha_site_key = _captcha_context('REGISTER_CAPTCHA_REQUIRED')
+
     if request.method == 'POST':
+        if captcha_required:
+            xff = request.headers.get('X-Forwarded-For')
+            remote_ip = xff.split(',')[0].strip() if xff else request.remote_addr
+            turnstile_token = (request.form.get('cf-turnstile-response') or '').strip()
+            is_valid_captcha, captcha_errors = _verify_turnstile_token(turnstile_token, remote_ip)
+            if not is_valid_captcha:
+                current_app.logger.warning('Register CAPTCHA failed: %s', ','.join(captcha_errors or []))
+                flash('Please complete the CAPTCHA before creating your account.', 'danger')
+                return redirect(url_for('auth.register'))
+
         username = request.form['username']
         email = request.form['email']
         password = request.form['password']
@@ -157,12 +212,29 @@ def register():
         session['_flashes'] = []  # Clear flash messages manually
         return redirect(url_for('home.home'))
 
-    return render_template('register.html')
+    return render_template(
+        'register.html',
+        captcha_required=captcha_required,
+        captcha_enabled=captcha_enabled,
+        captcha_site_key=captcha_site_key
+    )
 
 
 @auth_bp.route("/forgot_password", methods=['GET', 'POST'])
 def forgot_password():
+    captcha_required, captcha_enabled, captcha_site_key = _captcha_context('FORGOT_PASSWORD_CAPTCHA_REQUIRED')
+
     if request.method == 'POST':
+        if captcha_required:
+            xff = request.headers.get('X-Forwarded-For')
+            remote_ip = xff.split(',')[0].strip() if xff else request.remote_addr
+            turnstile_token = (request.form.get('cf-turnstile-response') or '').strip()
+            is_valid_captcha, captcha_errors = _verify_turnstile_token(turnstile_token, remote_ip)
+            if not is_valid_captcha:
+                current_app.logger.warning('Forgot-password CAPTCHA failed: %s', ','.join(captcha_errors or []))
+                flash('Please complete the CAPTCHA before requesting a reset link.', 'danger')
+                return redirect(url_for('auth.forgot_password'))
+
         email = request.form['email']
         
         # Search for the user by comparing the decrypted email
@@ -198,7 +270,12 @@ def forgot_password():
         else:
             flash('No account found with that email address.', 'danger')
 
-    return render_template('forgot_password.html')
+    return render_template(
+        'forgot_password.html',
+        captcha_required=captcha_required,
+        captcha_enabled=captcha_enabled,
+        captcha_site_key=captcha_site_key
+    )
 
 
 # Reset password route
