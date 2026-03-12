@@ -118,6 +118,44 @@ class convert:
         return result
 
     @staticmethod
+    def DegreesToHMS(LR_degrees):
+        """Convert decimal degrees to [hour, minute, second] with rollover handling."""
+        LR_hours = (LR_degrees / 15.0) % 24.0
+        LI_hours = int(LR_hours)
+        LR_minutes = (LR_hours - LI_hours) * 60.0
+        LI_minutes = int(LR_minutes)
+        LR_seconds = round((LR_minutes - LI_minutes) * 60.0, 2)
+
+        if LR_seconds >= 60:
+            LR_seconds = 0
+            LI_minutes += 1
+        if LI_minutes >= 60:
+            LI_minutes = 0
+            LI_hours = (LI_hours + 1) % 24
+
+        return [LI_hours, LI_minutes, LR_seconds]
+
+    @staticmethod
+    def DegreesToDMS(LR_degrees):
+        """Convert signed decimal degrees to [degree, minute, second] with rollover handling."""
+        LI_sign = -1 if LR_degrees < 0 else 1
+        LR_absDegrees = abs(LR_degrees)
+        LI_degrees = int(LR_absDegrees)
+        LR_minutes = (LR_absDegrees - LI_degrees) * 60.0
+        LI_minutes = int(LR_minutes)
+        LR_seconds = round((LR_minutes - LI_minutes) * 60.0, 2)
+
+        if LR_seconds >= 60:
+            LR_seconds = 0
+            LI_minutes += 1
+        if LI_minutes >= 60:
+            LI_minutes = 0
+            LI_degrees += 1
+
+        LI_degrees *= LI_sign
+        return [LI_degrees, LI_minutes, LR_seconds]
+
+    @staticmethod
     def HrMinSecToDegrees(hours, minutes, seconds):
         sign = -1 if hours < 0 or minutes < 0 or seconds < 0 else 1
         return sign * (abs(hours) + abs(minutes) / 60 + abs(seconds) / 3600)

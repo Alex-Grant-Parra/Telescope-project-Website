@@ -1,7 +1,3 @@
-"""Cleaned ephemeris interface extracted from test2.py.
-Provides a single function get_positions(year, month, day, hour, minute, second)
-which returns RA/Dec in degrees for sun, moon and major planets plus optional distances.
-"""
 from algorithms.ephemeris.loader import load_all
 from algorithms.timeUtils import SpaceTime
 from algorithms.ephemeris import utils as ephem_utils

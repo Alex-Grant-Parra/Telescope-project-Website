@@ -5,10 +5,9 @@ from app.db import db
 from models.tables import PlanetsTable  
 from algorithms.timeUtils import SpaceTime
 from algorithms.convert import convert
-from models.tables import PlanetsTable
 
 from utility.timer_utils import timer
-from algorithms.ephemeris.test2_clean import get_positions as ephem_get_positions
+from algorithms.ephemeris.ephemeris import get_positions as ephem_get_positions
 
 # Overriding trig functions to use degrees
 sin = lambda x: math_sin(radians(x))
@@ -299,37 +298,6 @@ def getAllCelestialData(year, month, day, hour: int = 0, minute: int = 0, second
         print(f"ephem_get_positions failed: {e}")
         pos = {}
 
-    # Helper to convert degrees -> H:M:S and D:M:S (int seconds) with rollover
-    def deg_to_hms_int(ra_deg):
-        hours = (ra_deg / 15.0) % 24.0
-        h = int(hours)
-        min_f = (hours - h) * 60.0
-        m = int(min_f)
-        sec = round((min_f - m) * 60.0, 2)
-        if sec >= 60:
-            sec = 0
-            m += 1
-        if m >= 60:
-            m = 0
-            h = (h + 1) % 24
-        return [h, m, sec]
-
-    def deg_to_dms_int(dec_deg):
-        sign = -1 if dec_deg < 0 else 1
-        a = abs(dec_deg)
-        d = int(a)
-        min_f = (a - d) * 60.0
-        m = int(min_f)
-        sec = round((min_f - m) * 60.0, 2)
-        if sec >= 60:
-            sec = 0
-            m += 1
-        if m >= 60:
-            m = 0
-            d += 1
-        d *= sign
-        return [d, m, sec]
-
     # Map ephem output into expected shape
     for key, val in pos.items():
         try:
@@ -338,8 +306,8 @@ def getAllCelestialData(year, month, day, hour: int = 0, minute: int = 0, second
             v = val.get('distance_km')
             if ra is None or dec is None:
                 continue
-            ra_hms = deg_to_hms_int(ra)
-            dec_dms = deg_to_dms_int(dec)
+            ra_hms = convert.DegreesToHMS(ra)
+            dec_dms = convert.DegreesToDMS(dec)
             vmag = get_vmag_for_object(key) if key in planets else None
             results[key.lower()] = {"ra": ra_hms, "dec": dec_dms, "vmag": vmag}
         except Exception as e:
@@ -355,14 +323,14 @@ def getAllCelestialData(year, month, day, hour: int = 0, minute: int = 0, second
             # Convert sun's ra/dec back to degrees for phase calculation
             sun_ra_h, sun_ra_m, sun_ra_s = results["sun"]["ra"]
             sun_dec_d, sun_dec_m, sun_dec_s = results["sun"]["dec"]
-            ra_sun_deg = (sun_ra_h + sun_ra_m/60 + sun_ra_s/3600) * 15
-            dec_sun_deg = sun_dec_d + (sun_dec_m/60 + sun_dec_s/3600) * (1 if sun_dec_d >= 0 else -1)
+            ra_sun_deg = convert.HrMinSecToDegrees(sun_ra_h, sun_ra_m, sun_ra_s) * 15
+            dec_sun_deg = convert.HrMinSecToDegrees(sun_dec_d, sun_dec_m, sun_dec_s)
             
             # Convert moon's ra/dec to degrees
             moon_ra_h, moon_ra_m, moon_ra_s = ra_moon
             moon_dec_d, moon_dec_m, moon_dec_s = dec_moon
-            ra_moon_deg = (moon_ra_h + moon_ra_m/60 + moon_ra_s/3600) * 15
-            dec_moon_deg = moon_dec_d + (moon_dec_m/60 + moon_dec_s/3600) * (1 if moon_dec_d >= 0 else -1)
+            ra_moon_deg = convert.HrMinSecToDegrees(moon_ra_h, moon_ra_m, moon_ra_s) * 15
+            dec_moon_deg = convert.HrMinSecToDegrees(moon_dec_d, moon_dec_m, moon_dec_s)
             
             # Calculate phase angle
             phaseDeg = phase_angle(ra_moon_deg, dec_moon_deg, ra_sun_deg, dec_sun_deg)
