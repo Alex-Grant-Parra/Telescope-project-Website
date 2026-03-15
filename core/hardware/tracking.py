@@ -92,14 +92,14 @@ def _initialize_motors():
             print("[tracking] Creating motor2 (DEC motor)...")
             try:
                 result = ESP32Motor.create(
-                    conn=conn,
-                    motor_id="motor2",
-                    step_pin=33,
-                    dir_pin=32,
-                    en_pin=25,
-                    steps_per_rev=1600,
-                    engage=True,
-                    replace=True
+                conn=conn,
+                motor_id="motor2",
+                step_pin=33,
+                dir_pin=25,
+                en_pin=32,
+                steps_per_rev=1600,
+                engage=True,
+                replace=True
                 )
                 print(f"[tracking] Motor2 (DEC) created successfully: {result}")
             except Exception as e:
