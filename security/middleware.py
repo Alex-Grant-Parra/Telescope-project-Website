@@ -10,13 +10,7 @@ from logging.handlers import RotatingFileHandler
 
 class SecurityMiddleware:
     def __init__(self, app: Flask = None, log_file: str = None):
-        """
-        Initialize Security Middleware
-        
-        Args:
-            app: Flask application instance
-            log_file: Path to security log file
-        """
+        # Initialize security middleware
         self.app = app
         self.blacklist = get_blacklist()
         
@@ -58,7 +52,7 @@ class SecurityMiddleware:
             self.init_app(app)
     
     def init_app(self, app: Flask):
-        """Initialize middleware with Flask app"""
+        # Initialize middleware with Flask app
         self.app = app
         
         # Register before_request handler
@@ -114,7 +108,7 @@ class SecurityMiddleware:
         self.security_logger.info("Request logging initialized")
     
     def _log_request(self):
-        """Log every request with true client IP and details"""
+        # Log every request with true client IP and details
         if not self.request_logger:
             return
             
@@ -162,7 +156,7 @@ class SecurityMiddleware:
             self.security_logger.error(f"Error writing request log: {e}")
     
     def _get_client_ip(self) -> str:
-        """Get the real client IP address"""
+        # Get the real client IP address
         # Check for various forwarded headers (for reverse proxy scenarios)
         forwarded_headers = [
             'CF-Connecting-IP',  # Cloudflare
@@ -181,7 +175,7 @@ class SecurityMiddleware:
         return request.remote_addr or 'unknown'
     
     def _log_security_event(self, event_type: str, details: Dict[str, Any]):
-        """Log security events"""
+        # Log security events
         client_ip = self._get_client_ip()
         
         log_entry = {
@@ -201,7 +195,7 @@ class SecurityMiddleware:
         return log_entry
     
     def _is_suspicious_request(self) -> Dict[str, Any]:
-        """Check if request is suspicious"""
+        # Check whether the request looks suspicious
         suspicious_indicators = {}
         
         # Check for common attack patterns in URL
@@ -256,10 +250,7 @@ class SecurityMiddleware:
         return suspicious_indicators
     
     def _check_rate_limit(self, client_ip: str, is_suspicious: bool = False) -> bool:
-        """
-        Check if client has exceeded rate limit.
-        Returns True if limit exceeded (should block), False if OK.
-        """
+        # Check whether client has exceeded rate limit; return True when blocked
         from .config import RATE_LIMITS
         
         # Rate limiting disabled for normal users
@@ -293,7 +284,7 @@ class SecurityMiddleware:
         return False  # OK to proceed
     
     def _before_request(self):
-        """Handle request before processing"""
+        # Handle request before processing
         # Get client IP early so can remove some processing for blacklisted
         # clients and avoid doing extra work (like heavy request logging).
         client_ip = self._get_client_ip()
@@ -358,11 +349,11 @@ class SecurityMiddleware:
     
     
     def _register_security_routes(self):
-        """Register security management routes"""
+        # Register security management routes
         
         @self.app.route('/admin/security/status')
         def security_status():
-            """Get security system status"""
+            # Return security system status
             # This should be protected by admin authentication
             stats = self.blacklist.get_stats()
             return jsonify({
@@ -374,7 +365,7 @@ class SecurityMiddleware:
         
         @self.app.route('/admin/security/blacklist/add', methods=['POST'])
         def add_to_blacklist():
-            """Manually add IP to blacklist"""
+            # Manually add an IP to blacklist
             # This should be protected by admin authentication
             data = request.get_json()
             if not data or 'ip' not in data:
@@ -389,7 +380,7 @@ class SecurityMiddleware:
         
         @self.app.route('/admin/security/blacklist/remove', methods=['POST'])
         def remove_from_blacklist():
-            """Remove IP from blacklist"""
+            # Remove an IP from blacklist
             # This should be protected by admin authentication
             data = request.get_json()
             if not data or 'ip' not in data:
@@ -404,7 +395,7 @@ class SecurityMiddleware:
         
         @self.app.route('/admin/security/logs')
         def get_security_logs():
-            """Get recent security logs"""
+            # Return recent security logs
             # This should be protected by admin authentication
             try:
                 logs = []
@@ -425,11 +416,11 @@ class SecurityMiddleware:
 
 # Error handlers for security responses
 def register_security_error_handlers(app: Flask):
-    """Register custom error handlers for security responses"""
+    # Register custom error handlers for security responses
     
     @app.errorhandler(403)
     def forbidden(e):
-        """Custom 403 response"""
+        # Return custom 403 response
         return jsonify({
             'error': 'Access forbidden',
             'message': 'Your request was blocked for security reasons'
@@ -437,7 +428,7 @@ def register_security_error_handlers(app: Flask):
     
     @app.errorhandler(429)
     def too_many_requests(e):
-        """Custom 429 response"""
+        # Return custom 429 response
         return jsonify({
             'error': 'Too many requests',
             'message': 'Rate limit exceeded'
