@@ -238,10 +238,7 @@ def phase_angle(ra_moon, dec_moon, ra_sun, dec_sun):
 
 
 def get_vmag_for_object(name, phaseDeg=None):
-    """Return V magnitude for a body without hitting the DB on every call.
-    Uses in-memory 'data' loaded at module import for planets and sun.
-    Moon remains dynamic (phase-dependent).
-    """
+    # Return V magnitude for a body without hitting the DB on every call
     name_l = name.lower()
 
     if name_l == "moon":
@@ -264,10 +261,7 @@ def get_vmag_for_object(name, phaseDeg=None):
 
 @timer
 def getAllCelestialData(year, month, day, hour: int = 0, minute: int = 0, second: float = 0.0):
-    """Primary implementation now delegates to ephemeris.get_positions.
-    Old algorithmic implementation is preserved below (commented out) for reference.
-    Returns data in the form expected by controllers: ra as [H,M,S], dec as [D,M,S], vmag.
-    """
+    # Primary implementation now delegates to ephemeris.get_positions; map results to controller format
     results = {}
 
     try:

@@ -6,24 +6,7 @@ PICKLE_DIR = r"instance\ephemerisData\pickled"
 os.makedirs(PICKLE_DIR, exist_ok=True)
 
 def parse_vsop87(file_path):
-    """Parse a VSOP87A raw file into X/Y/Z series terms.
-
-    The provided raw files (e.g. VSOP87A.ear) appear to list the VSOP87 terms
-    grouped under headers like:
-        VSOP87 VERSION A1    EARTH     VARIABLE 1 (XYZ)       *T**0    843 TERMS
-
-    We treat VARIABLE 1 -> X, 2 -> Y, 3 -> Z.
-    Each following numeric line (until the next header) contains many integer
-    columns followed by five floating values. Based on inspection we map the
-    last five floats as:
-        f1 f2 f3 phase frequency
-    We approximate a standard VSOP term A * cos(B + C*T) by choosing:
-        A = f3, B = phase, C = frequency
-    (This is a simplification; for accurate ephemerides a full formal parser
-    with power-of-T handling is required.)
-
-    Returns dict with keys 'X','Y','Z' each a list of (A,B,C) triples.
-    """
+    # Parse a VSOP87A raw file into X/Y/Z series terms (simplified A,B,C triples)
     series = {"X": [], "Y": [], "Z": []}
     current_key = None
     with open(file_path, "r") as f:
@@ -45,7 +28,7 @@ def parse_vsop87(file_path):
             if current_key is None:
                 continue
             parts = line.split()
-            # Need at least 5 trailing float columns; attempt to parse last 5
+            # Need at least 5 trailing float columns, attempt to parse last 5
             if len(parts) < 5:
                 continue
             tail = parts[-5:]

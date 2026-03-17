@@ -1,5 +1,4 @@
 
-# utils.py
 import math
 from algorithms.convert import convert
 from algorithms.timeUtils import SpaceTime
@@ -39,14 +38,10 @@ def _lbr_to_ecliptic_xyz(L, B_, R):
     z_ecl = R * math.sin(B_)
     return x_ecl, y_ecl, z_ecl
 
-# ---------- VSOP87 evaluation ----------
+# VSOP87 evaluation
 def series_to_position(series, jd):
-    """
-    Evaluate VSOP87 series for given Julian Date.
-    series: dict of {L, B, R} -> list of (A, B, C)
-    Returns: ra_deg, dec_deg, r_au
-    """
-    # Time variable for VSOP-like series
+    # Evaluate VSOP87 series for given Julian Date; return ra_deg, dec_deg, r_au
+    # Time variable for VSOP like series
     T = (jd - SpaceTime.J2000_JD) / 365250.0
 
     eps = SpaceTime.getMeanObliquityRad(jd)
@@ -62,9 +57,7 @@ def series_to_position(series, jd):
         ra, dec, r = _xyz_to_radec_distance(X_eq, Y_eq, Z_eq)
         return ra, dec, r
 
-    # Case B: Series given as L (lambda), B (beta), R (radius) lists
-    # Evaluate as sums of A * cos(B + C*T). This is a simplified evaluator
-    # and assumes the pickler has bundled polynomial-in-T terms into triples.
+    # Evaluate as sums of A * cos(B + C*T)
     if any(k in series for k in ("L", "B", "R")):
         L = _eval_triples(series.get("L", []), T)
         B_ = _eval_triples(series.get("B", []), T)
@@ -79,9 +72,7 @@ def series_to_position(series, jd):
 
 
 def series_to_equatorial_xyz(series, jd):
-    """Return equatorial rectangular (X,Y,Z) and distance r (AU) for a VSOP X/Y/Z series.
-    This uses the simplified parsing currently implemented.
-    """
+    # Return equatorial rectangular (X,Y,Z) and distance r (AU) for a VSOP X/Y/Z series
     T = (jd - SpaceTime.J2000_JD) / 365250.0
     if not any(k in series for k in ("X", "Y", "Z")):
         return None
@@ -97,15 +88,7 @@ def series_to_equatorial_xyz(series, jd):
 
 
 def heliocentric_to_geocentric(object_xyz, earth_xyz):
-    """Convert heliocentric equatorial Cartesian coordinates to geocentric RA/Dec and distance.
-
-    Inputs:
-        object_xyz: (Ox, Oy, Oz, Or) in AU
-        earth_xyz: (Ex, Ey, Ez, Er) in AU
-
-    Returns:
-        dict with keys: ra_deg, dec_deg, distance_km, ra_hms, dec_dms
-    """
+    # Convert heliocentric equatorial Cartesian coordinates to geocentric RA/Dec and distance
     if not object_xyz or not earth_xyz:
         return None
     Ox, Oy, Oz, _ = object_xyz
@@ -125,27 +108,14 @@ def heliocentric_to_geocentric(object_xyz, earth_xyz):
 
 
 def heliocentric_to_geocentric_for_body(body_xyz, earth_xyz):
-    """Generic wrapper: convert any body's heliocentric equatorial (X,Y,Z,r)
-    to geocentric RA/Dec and distance. Accepts body_xyz or None.
-
-    body_xyz: (X, Y, Z, r) in AU
-    earth_xyz: (Ex, Ey, Ez, er) in AU
-    """
+    # Wrapper
     if not body_xyz or not earth_xyz:
         return None
     return heliocentric_to_geocentric(body_xyz, earth_xyz)
 
-# ---------- ELP82b Moon evaluation ----------
+# ELP82b Moon evaluation 
 def elp_to_position(series, jd):
-    """
-    Evaluate lunar series for given Julian Date.
-    series: list of tuples (A, B, C, D, ...) for ELP82b terms
-    Returns: ra_deg, dec_deg, distance_km
-    """
-    # Simple placeholder; actual implementation sums series properly.
-    # The ELP82b terms may have variable-length tuples; each term's
-    # first three values are expected to be (A, B, C) where C multiplies jd.
-    # Use scaled time variable similar to VSOP: small T variable
+    # Currently unused as not working
     T = (jd - SpaceTime.J2000_JD) / 365250.0
     L = 0.0
     B_ = 0.0

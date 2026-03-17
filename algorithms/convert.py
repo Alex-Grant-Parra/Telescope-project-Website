@@ -155,7 +155,7 @@ class convert:
 
     @staticmethod
     def DegreesToHMS(LR_degrees):
-        """Convert decimal degrees to [hour, minute, second] with rollover handling."""
+        # Convert decimal degrees to [hour, minute, second] with rollover handling
         LR_hours = (LR_degrees / 15.0) % 24.0
         LI_hours = int(LR_hours)
         LR_minutes = (LR_hours - LI_hours) * 60.0
@@ -173,7 +173,7 @@ class convert:
 
     @staticmethod
     def DegreesToDMS(LR_degrees):
-        """Convert signed decimal degrees to [degree, minute, second] with rollover handling."""
+        # Convert signed decimal degrees to [degree, minute, second] with rollover handling
         LI_sign = -1 if LR_degrees < 0 else 1
         LR_absDegrees = abs(LR_degrees)
         LI_degrees = int(LR_absDegrees)

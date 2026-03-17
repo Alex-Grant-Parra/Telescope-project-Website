@@ -6,13 +6,7 @@ MAJOR = ["Mercury","Venus","Earth","Mars","Jupiter","Saturn","Uranus","Neptune"]
 
 
 def get_positions(year, month, day, hour: int = 0, minute: int = 0, second: float = 0.0):
-    """Return a mapping of celestial bodies to their positions.
-
-    Each value is a dict with keys:
-      - ra_deg: Right ascension in degrees
-      - dec_deg: Declination in degrees
-      - distance_km: optional distance in km (when available)
-    """
+        # Return a mapping of celestial bodies to their positions (ra_deg, dec_deg, optional distance_km)
     planets, moon = load_all()
     jd = SpaceTime.getJD(year, month, day, hour, minute, second)
 
@@ -27,7 +21,7 @@ def get_positions(year, month, day, hour: int = 0, minute: int = 0, second: floa
             dist_km = vals[2] if len(vals) > 2 else None
             out['moon'] = {'ra_deg': ra_deg, 'dec_deg': dec_deg, 'distance_km': dist_km}
 
-    # Sun (geocentric) -- Sun heliocentric vector is origin
+    # Sun, geocentric, Sun heliocentric vector is origin
     earth = planets.get('Earth')
     if earth is not None:
         try:
@@ -68,7 +62,6 @@ def get_positions(year, month, day, hour: int = 0, minute: int = 0, second: floa
                 except Exception:
                     # fallback to heliocentric pos
                     pass
-            # fallback: use heliocentric values if geocentric not computed
             if pos:
                 ra_deg, dec_deg = pos[0], pos[1]
                 out[name.lower()] = {'ra_deg': ra_deg, 'dec_deg': dec_deg}
