@@ -11,10 +11,10 @@ import logging
 from flask import jsonify, request, Response
 from flask_login import current_user
 
-# WebSocket Configuration - using the same ports as defined in Server.py
+# WebSocket Configuration
 commandPort = 4000
 LiveViewPort = 8000
-WS_IP = os.getenv("WS_IP", "0.0.0.0")  # Use environment variable, default to all interfaces
+WS_IP = os.getenv("WS_IP", "0.0.0.0")  # default to all interfaces
 WS_PORT = commandPort
 LIVEVIEW_WS_PORT = LiveViewPort
 WS_PING_INTERVAL = int(os.getenv("WS_PING_INTERVAL", "20"))
@@ -42,7 +42,7 @@ _HANDSHAKE_LOG_WINDOW_SECONDS = 30
 
 
 def _log_handshake_reject_summary():
-    """Log throttled summary for invalid websocket handshake attempts."""
+     # Log throttled summary for invalid websocket handshake attempts.
     global _handshake_reject_count, _handshake_last_summary
     now = time.time()
 
@@ -56,9 +56,9 @@ def _log_handshake_reject_summary():
             _handshake_reject_count = 0
             _handshake_last_summary = now
 
-
+# Suppress noisy traceback logs for malformed/non-upgrade websocket probes
 class _WebSocketHandshakeNoiseFilter(logging.Filter):
-    """Suppress noisy traceback logs for malformed/non-upgrade websocket probes."""
+    
 
     def filter(self, record):
         message = record.getMessage().lower()
@@ -78,9 +78,9 @@ class _WebSocketHandshakeNoiseFilter(logging.Filter):
 
         return True
 
-
+# Attach filter to websockets loggers to reduce noisy handshake tracebacks
 def _configure_websocket_logging():
-    """Attach filter to websockets loggers to reduce noisy handshake tracebacks."""
+     
     noise_filter = _WebSocketHandshakeNoiseFilter()
 
     for logger_name in ("websockets.server", "websockets.asyncio.server"):
@@ -92,8 +92,8 @@ def _configure_websocket_logging():
 
 _configure_websocket_logging()
 
+# Validate client token against DB-backed token store
 def authenticate_token(token):
-    """Validate client token against DB-backed token store."""
     from security.token_store import verify_token
     from Server import app
 
@@ -102,9 +102,9 @@ def authenticate_token(token):
 
     return bool(rec)
 
-
+# Validate token against DB-backed token store
 def authenticate_token_with_policy(token, *, client_id=None, client_ip=None, required_scope=None):
-    """Validate token against DB-backed token store."""
+    
     from security.token_store import verify_token
     from Server import app
 
@@ -124,9 +124,9 @@ def authenticate_token_with_policy(token, *, client_id=None, client_ip=None, req
 
     return {'ok': False, 'reason': reason or 'authentication_failed'}
 
-
+# Best effort security event logging
 def _security_log(event, **kwargs):
-    """Best-effort security event logging."""
+    
     try:
         payload = {'event': event}
         payload.update(kwargs)
@@ -137,8 +137,9 @@ def _security_log(event, **kwargs):
         except Exception:
             pass
 
+# Resolve client IP for WebSocket connections using forwarded headers when available
 def get_ws_client_ip(ws):
-    """Resolve client IP for WebSocket connections using forwarded headers when available."""
+    
     try:
         xff = ws.request_headers.get('X-Forwarded-For') or ws.request_headers.get('X-Real-IP')
         if xff:
@@ -148,25 +149,26 @@ def get_ws_client_ip(ws):
     return ws.remote_address[0] if ws.remote_address else "unknown"
 
 def check_rate_limit(client_ip):
-    """Simple rate limiting check"""
-    # Rate limiting disabled for normal users
-    # 
-    #     client_request_counts[client_ip] = {}
-    # 
-    #     client_request_counts[client_ip][minute_key] = 0
-    # 
-    # client_request_counts[client_ip][minute_key] += 1
-    # 
-    # # Clean old entries
-    #     del client_request_counts[client_ip][k]
-    # 
+
+#     # Rate limiting disabled for normal users
+    
+#         client_request_counts[client_ip] = {}
+    
+#         client_request_counts[client_ip][minute_key] = 0
+    
+#         client_request_counts[client_ip][minute_key] += 1
+    
+#     # Clean old entries
+#         del client_request_counts[client_ip][k]
+    
     
     return True  # Allow all requests for normal users
 
+# Generate a secure token for new clients
 def generate_token():
-    """Generate a secure token for new clients"""
     return secrets.token_urlsafe(32)
 
+# Main client class representing a connected WebSocket client
 class Client:
     def __init__(self, client_id, ws):
         self.client_id = client_id
@@ -203,8 +205,9 @@ class ClientManager:
         with self._lock:
             self.clients[client_id] = Client(client_id, ws)
 
+    # Atomically add client only if not currently connected
     def try_add_client(self, client_id, ws):
-        """Atomically add client only if not currently connected."""
+        
         with self._lock:
             if client_id in self.clients:
                 return False
@@ -216,7 +219,7 @@ class ClientManager:
             self.clients.pop(client_id, None)
 
     def command(self, client_id, function_name, args=None, kwargs=None):
-        """Send command to client using thread-safe asyncio.run_coroutine_threadsafe"""
+        # Send command to client using threadsafe async call
         global ws_event_loop
         if client_id not in self.clients:
             raise Exception(f"Client '{client_id}' not found")
@@ -243,10 +246,7 @@ class ClientManager:
 client_manager = ClientManager()
 
 async def telescope_heartbeat(client_id, client_name, telescope_id, ws):
-    """
-    Send periodic heartbeat pings to telescope and update last_seen in database.
-    Runs every 30 seconds.
-    """
+    # Periodic heartbeat every 30 seconds
     while True:
         try:
             await asyncio.sleep(30)  # Wait 30 seconds between pings
@@ -564,9 +564,8 @@ async def handle_liveview_client(ws):
         last_frame_log_time.pop(client_id, None)
         _security_log('ws_liveview_disconnected', ip=client_ip, client_id=client_id)
 
-
+# Extract API token from header or JSON body
 def _extract_api_token_from_request():
-    """Extract API token from header or JSON body."""
     auth_header = (request.headers.get('Authorization') or '').strip()
     if auth_header.lower().startswith('bearer '):
         return auth_header[7:].strip()
@@ -585,24 +584,17 @@ def _extract_api_token_from_request():
 
     return None
 
-
+# Allow internal localhost requests without token
 def _is_loopback_request():
-    """Allow internal localhost requests without token for backwards compatibility."""
+    
     try:
         host = (request.remote_addr or '').strip()
         return host in ('127.0.0.1', '::1', 'localhost')
     except Exception:
         return False
 
-
+# Auth handler
 def _authorize_send_command(client_id):
-    """Authorize /sendCommand access.
-
-    Allowed when:
-    - authenticated admin user, OR
-    - loopback request, OR
-    - valid API token with send_command scope.
-    """
     try:
         if current_user and getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_admin', False):
             return True, 'admin'
@@ -625,6 +617,7 @@ def _authorize_send_command(client_id):
 
     return False, 'forbidden'
 
+# Saving liveview frames
 def save_latest_frame(client_id):
     frame = latest_frames.get(client_id)
     if frame:
@@ -683,8 +676,9 @@ def start_liveview_ws_server():
     except Exception as e:
         print(f"[LiveView] Event loop error: {e}")
 
+# Start both websocket servers in daemon threads
 def start_websocket_servers():
-    """Start both websocket servers in daemon threads"""
+    
     from socket import gethostname
     
     threading.Thread(target=start_ws_server, daemon=True).start()
@@ -693,9 +687,8 @@ def start_websocket_servers():
     threading.Thread(target=start_liveview_ws_server, daemon=True).start()
     print(f"Starting liveView server on {gethostname()} at port: {LiveViewPort}")
 
-# Flask route functions that interface with the websocket servers
+# Send command
 def send_command_handler():
-    """Handler for /sendCommand route"""
     data = request.get_json()
     client_id = data.get('client_id')
     command = data.get('command')
@@ -726,9 +719,9 @@ def send_command_handler():
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 
-
+# Client disconnect handler for admin interface
 def admin_disconnect_ws_client_handler(client_id):
-    """Admin override: disconnect an active websocket command client by client_id."""
+    
     try:
         if not current_user or not getattr(current_user, 'is_authenticated', False) or not getattr(current_user, 'is_admin', False):
             return jsonify({'status': 'error', 'error': 'Admin access required'}), 403
@@ -754,9 +747,9 @@ def admin_disconnect_ws_client_handler(client_id):
         return jsonify({'status': 'success', 'message': f"Disconnected '{client_id}'"})
     except Exception as e:
         return jsonify({'status': 'error', 'error': str(e)}), 500
-
+    
+# Handler for /liveview/<client_id> route
 def liveview_handler(client_id):
-    """Handler for /liveview/<client_id> route"""
     def generate():
         last_save = 0
         while True:
@@ -777,9 +770,9 @@ def liveview_handler(client_id):
     except Exception as e:
         print(f"[MJPEG] Error creating response for {client_id}: {e}")
         return Response("Error streaming live view", status=500)
-
+    
+# Handler for /client/register route
 def register_client_handler():
-    """Handler for /client/register route"""
     print("Client requesting client ID")
     client_id = str(uuid.uuid4())
     
@@ -797,8 +790,9 @@ def register_client_handler():
         "message": "Store this token securely - you'll need it to connect via WebSocket"
     })
 
+# Handler for /admin/add_token route - for manually adding authorized tokens
 def add_api_token_handler():
-    """Handler for /admin/add_token route - for manually adding authorized tokens"""
+   
     data = request.get_json()
     
     token = data.get('token') or generate_token()
