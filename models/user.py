@@ -114,12 +114,12 @@ class User(UserMixin, db.Model):
 
     # Night mode preference methods
     def set_night_mode(self, is_night_mode):
-        """Set the user's night mode preference"""
+        # Set the user's night mode preference
         self.night_mode = bool(is_night_mode)
         db.session.commit()
 
     def get_night_mode(self):
-        """Get the user's night mode preference"""
+        # Get the user's night mode preference
         return bool(self.night_mode) if self.night_mode is not None else False
 
     # Account enabled/disabled helpers that consult AccountStatusHistory
@@ -173,7 +173,7 @@ def get_account_type_route():
 @user_bp.route("/user/night_mode", methods=["GET"])
 @login_required
 def get_night_mode():
-    """Get the current user's night mode preference"""
+    # Get the current user's night mode preference
     try:
         night_mode = current_user.get_night_mode()
         return jsonify({"status": "success", "night_mode": night_mode})
@@ -183,7 +183,7 @@ def get_night_mode():
 @user_bp.route("/user/night_mode", methods=["POST"])
 @login_required
 def set_night_mode():
-    """Set the current user's night mode preference"""
+    # Set the current user's night mode preference
     try:
         from flask import request
         data = request.get_json()

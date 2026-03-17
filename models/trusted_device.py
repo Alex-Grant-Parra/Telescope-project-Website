@@ -23,7 +23,7 @@ class TrustedDevice(db.Model):
     
     @staticmethod
     def generate_device_fingerprint():
-        """Generate a device fingerprint based on request headers and IP"""
+        # Generate a device fingerprint based on request headers and IP
         # Get identifying information from the request
         user_agent = request.headers.get('User-Agent', '')
         accept_language = request.headers.get('Accept-Language', '')
@@ -38,7 +38,7 @@ class TrustedDevice(db.Model):
     
     @staticmethod
     def get_device_name():
-        """Extract a friendly device name from User-Agent"""
+        # Extract a friendly device name from User-Agent
         user_agent = request.headers.get('User-Agent', '')
         
         # Simple device name extraction
@@ -74,7 +74,7 @@ class TrustedDevice(db.Model):
     
     @staticmethod
     def is_device_trusted(user_id):
-        """Check if the current device is trusted for the given user"""
+        # Check if the current device is trusted for the given user
         # Prefer token stored in a cookie; this is more stable across proxies/NATs
         try:
             token = request.cookies.get('trusted_device_token')
@@ -129,7 +129,7 @@ class TrustedDevice(db.Model):
     
     @staticmethod
     def trust_device(user_id, trust_for_days=30):
-        """Mark the current device as trusted for the specified number of days"""
+        # Mark the current device as trusted for the specified number of days
         # Create a stable random token to represent this trusted device. Store that
         # token in the DB and return it so the caller can set a persistent cookie.
         token = os.urandom(24).hex()
@@ -152,7 +152,7 @@ class TrustedDevice(db.Model):
     
     @staticmethod
     def cleanup_expired_devices():
-        """Remove expired trusted devices"""
+        # Remove expired trusted devices
         expired_devices = TrustedDevice.query.filter(
             TrustedDevice.expires_at < datetime.utcnow()
         ).all()
@@ -165,14 +165,14 @@ class TrustedDevice(db.Model):
     
     @staticmethod
     def get_user_trusted_devices(user_id):
-        """Get all trusted devices for a user"""
+        # Get all trusted devices for a user
         return TrustedDevice.query.filter_by(user_id=user_id).filter(
             TrustedDevice.expires_at > datetime.utcnow()
         ).order_by(TrustedDevice.last_used.desc()).all()
     
     @staticmethod
     def revoke_device(user_id, device_id):
-        """Revoke trust for a specific device"""
+        # Revoke trust for a specific device
         device = TrustedDevice.query.filter_by(
             id=device_id,
             user_id=user_id
