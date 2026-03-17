@@ -18,7 +18,7 @@ auth_bp = Blueprint('auth', __name__)
 
 
 def is_local_connection():
-    """Check if the request is coming from localhost, 127.0.0.1, or a local IP address."""
+    # Check if the request is coming from localhost, 127.0.0.1, or a local IP address
     # Get the client IP address
     client_ip = request.remote_addr
     
@@ -153,10 +153,6 @@ def logout():
     except Exception:
         pass
     logout_user()
-    # Note: Do NOT clear the trusted device cookie here.
-    # Leaving the cookie intact allows the device to remain trusted across logouts,
-    # which is the expected behavior for a "trusted device" 2FA bypass.
-    # Users can explicitly revoke devices from their profile or via revoke routes.
     session.clear()  # Clear the session
     flash('Logged out successfully', 'info')
     return resp
@@ -200,7 +196,7 @@ def register():
         new_user = User(username=username, email=email, password=hashed_password)
         new_user.set_email(email)
         new_user.set_totp_secret()  # Generate TOTP secret
-        print(f"TOTP secret for new user: {new_user.totp_secret}")  # Debug statement
+
         
         db.session.add(new_user)
         db.session.commit()
@@ -324,7 +320,7 @@ def login_2fa():
         if user.verify_2fa_code(totp_code):
             if trust_device:
                 device_name, token = TrustedDevice.trust_device(user.id, trust_for_days=30)
-                # Set a cookie that will persist for the trust period; httponly to reduce XSS risk
+                # Set a cookie that will persist for the trust period, httponly to reduce XSS risk
                 resp = redirect(url_for('home.home'))
                 resp.set_cookie('trusted_device_token', token, max_age=30*24*60*60, httponly=True, samesite='Lax')
                 flash(f'Login successful! Device "{device_name}" is now trusted for 30 days.', 'success')
@@ -348,14 +344,14 @@ def login_2fa():
 @auth_bp.route("/trusted_devices")
 @login_required
 def trusted_devices():
-    """Legacy route - redirect to profile-based trusted devices"""
+    # for old route
     return redirect(url_for('profile.profile_trusted_devices'))
 
 
 @auth_bp.route("/revoke_device/<int:device_id>", methods=['POST'])
 @login_required
 def revoke_device(device_id):
-    """Revoke trust for a specific device"""
+    # Revoke trust for a specific device
     if TrustedDevice.revoke_device(current_user.id, device_id):
         flash('Device trust revoked successfully.', 'success')
     else:
@@ -366,7 +362,7 @@ def revoke_device(device_id):
 @auth_bp.route("/device_info")
 @login_required
 def device_info():
-    """Debug route to show device fingerprint information"""
+    # Debug route to show device fingerprint information
     # Get device info from TrustedDevice
     fingerprint = TrustedDevice.generate_device_fingerprint()
     device_name = TrustedDevice.get_device_name()

@@ -180,11 +180,7 @@ def get_stars():
 
 @star_map_bp.route("/api/stars_meta")
 def get_stars_meta():
-    """
-    Return overall magnitude extremes across star tables.
-    Includes only objects with a 'V-Mag' column. Planets are excluded here (client will merge).
-    Response: {"minMag": float, "maxMag": float}
-    """
+    # Return overall magnitude extremes across star tables; excludes planets
     tables = [HDSTARtable, IndexTable, NGCtable]
     overall_min = None
     overall_max = None
@@ -264,12 +260,7 @@ def star_map():
     return render_template("star_map.html", stars=[], selected_telescope=selected_telescope)
 
 def extract_friendly_common_name(common_names_field: str) -> str:
-    """
-    Extract the first friendly name from commonNames field.
-    commonNames format: 'Sirius, HD 48915, HD48915' or 'Andromeda Galaxy, M31, NGC 224'
-    Returns: 'Sirius' or 'Andromeda Galaxy' or '' if no friendly name found.
-    Skips catalog designations like HD, NGC, IC, M (Messier).
-    """
+    # Extract the first friendly name from commonNames field; skip catalog designations
     if not common_names_field:
         return ''
     parts = [p.strip() for p in common_names_field.split(',')]
@@ -407,7 +398,7 @@ def track_star():
 
 @star_map_bp.route("/get_tracking_status", methods=["GET"])
 def get_tracking_status():
-    """Get the current tracking status from the session"""
+    # Get the current tracking status from the session
     selected_object = session.get("selectedObject")
     
     if selected_object:
@@ -430,7 +421,7 @@ def get_tracking_status():
 
 @star_map_bp.route("/stop_tracking", methods=["POST"])
 def stop_tracking():
-    """Stop tracking the current object"""
+    # Stop tracking the current object
     # Check if a telescope is selected
     selected_telescope = session.get('selected_telescope')
     telescope_id = selected_telescope.get('telescope_id') if selected_telescope else None
@@ -475,7 +466,7 @@ def stop_tracking():
 
 @star_map_bp.route("/api/telescope_position", methods=["GET"])
 def get_telescope_position():
-    """Get the current position (RA/DEC) of the telescope"""
+    # Get the current position (RA/DEC) of the telescope
     # Check if a telescope is selected
     selected_telescope = session.get('selected_telescope')
     telescope_id = selected_telescope.get('telescope_id') if selected_telescope else None
@@ -551,7 +542,7 @@ def get_telescope_position():
 
 @star_map_bp.route("/api/debug/session", methods=["GET"])
 def debug_session():
-    """Debug endpoint to check session state"""
+    # Debug endpoint to check session state
     selected_telescope = session.get('selected_telescope')
     return jsonify({
         "status": "success",

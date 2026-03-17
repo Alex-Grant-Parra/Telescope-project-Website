@@ -17,13 +17,14 @@ try:
 except ImportError:
     # Fallback if import fails
     def exempt(f):
+        # Exempt a view from CSRF (fallback)
         return f
 
 
 @admin_bp.route("/admin")
 @login_required
 def admin():
-    # Check if the current_user is an admin
+    # Render the admin page for administrators
     if current_user.is_admin:
         return render_template('admin.html')  # Render the admin page if the user is an admin
 
@@ -33,7 +34,7 @@ def admin():
 
 
 def _admin_guard():
-    """Helper to check admin privilege; returns (None) if OK or a Flask response to return."""
+    # Check admin privileges and return a proper response if unauthorized
     if not current_user.is_authenticated or not current_user.is_admin:
         if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'status': 'error', 'message': 'Admin access required.'}), 403
@@ -45,6 +46,7 @@ def _admin_guard():
 @admin_bp.route('/admin/user/<int:user_id>/promote', methods=['POST'])
 @login_required
 def promote_user(user_id):
+    # Promote a user to Administrator
     guard = _admin_guard()
     if guard:
         return guard
@@ -73,6 +75,7 @@ def promote_user(user_id):
 @admin_bp.route('/admin/user/<int:user_id>/demote', methods=['POST'])
 @login_required
 def demote_user(user_id):
+    # Demote a user to Standard
     guard = _admin_guard()
     if guard:
         return guard
@@ -101,6 +104,7 @@ def demote_user(user_id):
 @admin_bp.route('/admin/user/<int:user_id>/delete', methods=['POST'])
 @login_required
 def delete_user(user_id):
+    # Delete a user account
     guard = _admin_guard()
     if guard:
         return guard
@@ -138,6 +142,7 @@ def delete_user(user_id):
 @login_required
 @exempt
 def set_role(user_id):
+    # Set a user's role (Administrator/Standard/Limited)
     guard = _admin_guard()
     if guard:
         return guard
@@ -179,6 +184,7 @@ def set_role(user_id):
 @admin_bp.route('/admin/user/<int:user_id>/toggle_enabled', methods=['POST'])
 @login_required
 def toggle_enabled(user_id):
+    # Toggle a user's enabled/disabled status
     guard = _admin_guard()
     if guard:
         return guard
@@ -216,6 +222,7 @@ def toggle_enabled(user_id):
 @admin_bp.route('/admin/security/logs')
 @login_required
 def security_logs():
+    # Display recent account status history logs
     guard = _admin_guard()
     if guard:
         return guard
@@ -228,6 +235,7 @@ def security_logs():
 @admin_bp.route('/admin/security')
 @login_required
 def admin_security_page():
+    # Show admin security overview and blacklist stats
     guard = _admin_guard()
     if guard:
         return guard
@@ -252,6 +260,7 @@ def admin_security_page():
 @admin_bp.route('/admin/security/logfile/<path:filename>')
 @login_required
 def admin_security_logfile(filename):
+    # Return last lines of a specified security logfile
     guard = _admin_guard()
     if guard:
         return guard
@@ -275,6 +284,7 @@ def admin_security_logfile(filename):
 @admin_bp.route('/admin/blacklist/add', methods=['POST'])
 @login_required
 def admin_blacklist_add():
+    # Add an IP address to the manual blacklist
     guard = _admin_guard()
     if guard:
         return guard
@@ -294,6 +304,7 @@ def admin_blacklist_add():
 @admin_bp.route('/admin/blacklist/remove', methods=['POST'])
 @login_required
 def admin_blacklist_remove():
+    # Remove an IP address from the manual blacklist
     guard = _admin_guard()
     if guard:
         return guard
@@ -313,6 +324,7 @@ def admin_blacklist_remove():
 @admin_bp.route('/admin/users')
 @login_required
 def admin_users():
+    # List users and their trusted device counts
     if not current_user.is_admin:
         flash('Access denied. Admin privileges required.', 'danger')
         return redirect(url_for('profile.profile'))
@@ -336,6 +348,7 @@ def admin_users():
 @admin_bp.route('/admin/security/logs')
 @login_required
 def admin_security_logs():
+    # Return a list of security log filenames
     guard = _admin_guard()
     if guard:
         return guard
@@ -364,6 +377,7 @@ def admin_security_logs():
 @admin_bp.route('/admin/security/tokens')
 @login_required
 def admin_security_tokens():
+    # Display API tokens and related telescope info
     guard = _admin_guard()
     if guard:
         return guard
@@ -413,6 +427,7 @@ def admin_security_tokens():
 @admin_bp.route('/admin/security/tokens/generate', methods=['POST'])
 @login_required
 def admin_generate_token():
+    # Generate a new API token and store for one-time display
     guard = _admin_guard()
     if guard:
         return guard
@@ -446,6 +461,7 @@ def admin_generate_token():
 @admin_bp.route('/admin/security/tokens/revoke', methods=['POST'])
 @login_required
 def admin_revoke_token():
+    # Revoke an API token and remove associated telescope
     guard = _admin_guard()
     if guard:
         return guard
@@ -482,6 +498,7 @@ def admin_revoke_token():
 @admin_bp.route('/admin/security/tokens/show', methods=['POST'])
 @login_required
 def admin_show_token():
+    # Attempt to show a token (not available after creation)
     guard = _admin_guard()
     if guard:
         return guard

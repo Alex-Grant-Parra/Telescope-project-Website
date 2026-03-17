@@ -30,7 +30,7 @@ def _allowed_file(filename: str) -> bool:
 
 
 def _store_contact_attachment(uploaded_file):
-    """Store an uploaded support attachment and return (saved_path, original_filename, error_message)."""
+    # Store an uploaded support attachment 
     if not uploaded_file or not getattr(uploaded_file, 'filename', None):
         return None, None, None
 
@@ -140,16 +140,16 @@ def _verify_turnstile_token(token: str, remote_ip: str = None):
     return False, data.get('error-codes', ['verification-failed'])
 
 
-# --- Support landing and user tickets (placeholder) ---
+# Support landing and user tickets
 @contact_bp.route('/support')
 def support_home():
-    """Minimal Support landing page with links to contact form and tickets list."""
+    # Minimal Support landing page with links to contact form and tickets list
     return render_template('support.html')
 
 
 @contact_bp.route('/support/tickets')
 def support_tickets():
-    """List of the current user's tickets (placeholder). If not logged in, show prompt."""
+    # List of the current user's tickets. If not logged in, show prompt
     tickets = []
     require_login = False
     try:
@@ -255,7 +255,7 @@ def submit_contact():
     except Exception:
         pass
 
-    # Handle optional file upload (safer)
+    # Handle optional file upload 
     file = request.files.get('attachment')
     saved_path, original_filename, upload_error = _store_contact_attachment(file)
     if upload_error:
@@ -299,7 +299,7 @@ def submit_contact():
 
     db.session.commit()
 
-    # Send confirmation email (best-effort)
+    # Send confirmation email (best effort)
     try:
         from utility.emailer import send_email
         # Prefer user-provided title in subject when available
@@ -404,9 +404,9 @@ def admin_contact_detail(message_id):
         return redirect(url_for('home.home'))
 
     msg = ContactMessage.query.get_or_404(message_id)
-    # Load conversation entries (ascending)
+    # Load conversation entries
     entries = ContactMessageEntry.query.filter_by(contact_id=msg.id).order_by(ContactMessageEntry.created_at.asc()).all()
-    # Backfill for legacy tickets without entries
+    # Backfill for old tickets without entries
     if not entries:
         seed = ContactMessageEntry(
             contact_id=msg.id,
@@ -424,7 +424,6 @@ def admin_contact_detail(message_id):
     if request.method == 'POST':
         action = request.form.get('action')
         status = request.form.get('status') or msg.status
-        # Build a default reply subject from provided title (if any)
         provided_title = None
         try:
             provided_title = (msg.meta or {}).get('title')
@@ -462,14 +461,14 @@ def admin_contact_detail(message_id):
 @contact_bp.route('/admin/contact/<int:message_id>/delete', methods=['POST'])
 @login_required
 def admin_contact_delete(message_id):
-    """Admin-only hard delete of a support ticket and its conversation entries."""
+    # Admin-only hard delete of a support ticket and its conversation entries
     if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('home.home'))
 
     msg = ContactMessage.query.get_or_404(message_id)
 
-    # Best-effort cleanup of attachments on disk
+    # Best effort cleanup of attachments on disk
     try:
         paths_to_remove = set()
         if msg.file_path:
@@ -492,7 +491,7 @@ def admin_contact_delete(message_id):
             except Exception:
                 pass
     except Exception:
-        # Non-fatal; continue with DB delete
+        # Non fatal, continue with DB delete
         pass
 
     try:
@@ -599,7 +598,7 @@ def support_ticket_entry_attachment(message_id, entry_id):
 @contact_bp.route('/admin/contact/<int:message_id>/attachment')
 @login_required
 def admin_contact_attachment(message_id):
-    # Admin-only access to attachments; serve inline for images
+    # Admin only access to attachments
     if not getattr(current_user, 'is_admin', False):
         flash('Admin access required.', 'danger')
         return redirect(url_for('home.home'))
@@ -608,7 +607,7 @@ def admin_contact_attachment(message_id):
     if not msg.file_path or not os.path.exists(msg.file_path):
         return jsonify({'error': 'Attachment not found'}), 404
 
-    # Ensure the file is inside the uploads directory (prevent path trickery)
+    # Ensure the file is inside the uploads directory
     try:
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         upload_base = ContactMessage.uploads_dir(base_dir)
@@ -627,7 +626,7 @@ def admin_contact_attachment(message_id):
     except Exception:
         as_attachment = True
 
-    # Determine download filename (prefer original if present)
+    # Determine download filename
     download_name = None
     try:
         download_name = (msg.meta or {}).get('original_filename')
