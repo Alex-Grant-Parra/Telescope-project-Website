@@ -39,6 +39,11 @@
         </div>
         {% endif %}
 
+        <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" name="agree_tos" id="agree_tos" required>
+            <label class="form-check-label" for="agree_tos">I agree to the <a href="{{ url_for('about.tos') }}" target="_blank" rel="noopener noreferrer">Terms of Service</a>.</label>
+        </div>
+
         <button type="submit" class="btn btn-primary w-100">Register</button>
     </form>
 </div>

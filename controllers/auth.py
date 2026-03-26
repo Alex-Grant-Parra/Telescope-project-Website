@@ -175,6 +175,11 @@ def register():
         username = request.form['username']
         email = request.form['email']
         password = request.form['password']
+        # Ensure the user agreed to Terms of Service
+        agree_tos = request.form.get('agree_tos')
+        if not agree_tos:
+            flash('You must agree to the Terms of Service to create an account.', 'danger')
+            return redirect(url_for('auth.register'))
 
         user_with_same_username = User.query.filter_by(username=username).first()
         users = User.query.all()
