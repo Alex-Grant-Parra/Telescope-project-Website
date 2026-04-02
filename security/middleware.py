@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from .ip_blacklist import get_blacklist
 from .config import REQUEST_LOGGING_CONFIG
-from logging.handlers import RotatingFileHandler
+from models.logging import RequestLog, SecurityLog
 
 class SecurityMiddleware:
     def __init__(self, app: Flask = None, log_file: str = None):
@@ -29,19 +29,9 @@ class SecurityMiddleware:
         self.security_logger = logging.getLogger('security')
         self.security_logger.setLevel(logging.INFO)
         
-        # Create file handler for security logs
-        file_handler = logging.FileHandler(self.log_file)
-        file_handler.setLevel(logging.INFO)
-        
-        # Create formatter
-        formatter = logging.Formatter(
-            '%(asctime)s - %(levelname)s - %(message)s'
-        )
-        file_handler.setFormatter(formatter)
-        
-        # Add handler if not already added
+        # Security events now persist to DB; avoid binding file handlers here.
         if not self.security_logger.handlers:
-            self.security_logger.addHandler(file_handler)
+            self.security_logger.addHandler(logging.NullHandler())
         
         # Setup request logging if enabled
         self.request_logger = None
@@ -64,48 +54,25 @@ class SecurityMiddleware:
         self.security_logger.info("Security middleware initialized")
     
     def _setup_request_logger(self):
-        request_log_file = Path(__file__).parent / 'logs' / 'requests.log'
-        request_log_file.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Create request logger with unique name to avoid conflicts
-        self.request_logger = logging.getLogger('telescope_requests')
-        self.request_logger.setLevel(logging.INFO)
-        
-        # Clear any existing handlers to avoid duplicates
-        self.request_logger.handlers.clear()
-        
-        # Use rotating file handler to manage log size
-        max_bytes = REQUEST_LOGGING_CONFIG.get('max_log_size_mb', 50) * 1024 * 1024
-        backup_count = REQUEST_LOGGING_CONFIG.get('backup_count', 10)
-        
-        request_handler = RotatingFileHandler(
-            request_log_file,
-            maxBytes=max_bytes,
-            backupCount=backup_count
-        )
-        request_handler.setLevel(logging.INFO)
-        
-        # Create formatter for request logs
-        request_formatter = logging.Formatter('%(asctime)s - %(message)s')
-        request_handler.setFormatter(request_formatter)
-        
-        # Add handler
-        self.request_logger.addHandler(request_handler)
-        
-        # Prevent propagation to root logger
-        self.request_logger.propagate = False
-        
-        # Test that the logger works
+        # Request logging now persists to the request_logs DB table.
+        self.request_logger = True
+
         try:
-            test_log = {"test": "Request logging initialized", "timestamp": datetime.now().isoformat()}
-            self.request_logger.info(json.dumps(test_log))
-            # Force flush
-            for handler in self.request_logger.handlers:
-                handler.flush()
+            RequestLog.save_request({
+                'timestamp': datetime.now().isoformat(),
+                'client_ip': 'system',
+                'method': 'INIT',
+                'path': '/security/request-logging',
+                'url': 'internal://request-logging',
+                'query_string': '',
+                'remote_addr': 'local',
+                'scheme': 'internal',
+                'headers': {'User-Agent': 'security-middleware-init'}
+            })
         except Exception as e:
             self.security_logger.error(f"Failed to initialize request logging: {e}")
         
-        self.security_logger.info("Request logging initialized")
+        self.security_logger.info("Request logging initialized (database table: request_logs)")
     
     def _log_request(self):
         # Log every request with true client IP and details
@@ -140,18 +107,9 @@ class SecurityMiddleware:
             if header_value:
                 request_data['headers'][header_name] = header_value
         
-        # Log in JSON format for easy parsing
+        # Persist request logs to DB table
         try:
-            if REQUEST_LOGGING_CONFIG.get('log_format') == 'json':
-                self.request_logger.info(json.dumps(request_data))
-            else:
-                # Text format
-                log_msg = f"{client_ip} - {request.method} {request.path} - {request.headers.get('User-Agent', 'unknown')}"
-                self.request_logger.info(log_msg)
-            
-            # Force flush to ensure immediate write
-            for handler in self.request_logger.handlers:
-                handler.flush()
+            RequestLog.save_request(request_data)
         except Exception as e:
             self.security_logger.error(f"Error writing request log: {e}")
     
@@ -189,7 +147,8 @@ class SecurityMiddleware:
             'details': details
         }
         
-        # Log to file
+        # Persist security event to DB and keep logger call for diagnostics.
+        SecurityLog.save_event(log_entry, level='INFO')
         self.security_logger.info(json.dumps(log_entry))
         
         return log_entry
@@ -398,18 +357,24 @@ class SecurityMiddleware:
             # Return recent security logs
             # This should be protected by admin authentication
             try:
+                rows = SecurityLog.query.order_by(SecurityLog.id.desc()).limit(100).all()
                 logs = []
-                if self.log_file.exists():
-                    with open(self.log_file, 'r') as f:
-                        # Get last 100 lines
-                        lines = f.readlines()[-100:]
-                        for line in lines:
-                            try:
-                                log_entry = json.loads(line.strip())
-                                logs.append(log_entry)
-                            except json.JSONDecodeError:
-                                continue
-                
+                for row in reversed(rows):
+                    if row.payload_json:
+                        try:
+                            logs.append(json.loads(row.payload_json))
+                            continue
+                        except Exception:
+                            pass
+                    logs.append({
+                        'timestamp': row.event_timestamp,
+                        'event_type': row.event_type,
+                        'client_ip': row.client_ip,
+                        'method': row.method,
+                        'path': row.path,
+                        'url': row.url,
+                    })
+
                 return jsonify({'logs': logs})
             except Exception as e:
                 return jsonify({'error': str(e)}), 500

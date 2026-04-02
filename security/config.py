@@ -71,7 +71,8 @@ LOGGING_CONFIG = {
 # Request logging - logs ALL requests with true client IPs
 REQUEST_LOGGING_CONFIG = {
     'enabled': True,
-    'log_file': 'security/logs/requests.log',
+    'storage': 'database',
+    'table_name': 'request_logs',
     'log_format': 'json',  
     'exclude_paths': [     # Don't log these paths to reduce noise
         '/static/',
@@ -84,7 +85,5 @@ REQUEST_LOGGING_CONFIG = {
         'Accept-Language',
         'X-Forwarded-For',
         'X-Real-IP'
-    ],
-    'max_log_size_mb': 50, # Larger size for request logs
-    'backup_count': 10     # Keep more backups for request logs
+    ]
 }

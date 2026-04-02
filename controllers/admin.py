@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from models.user import User
 from app.db import db
 from models.user import AccountStatusHistory
+from models.logging import RequestLog, SecurityLog, WebsocketSecurityLog
 from datetime import datetime
 from security.ip_blacklist import get_blacklist
 import logging
@@ -254,7 +255,12 @@ def admin_security_page():
     except Exception:
         files = []
 
-    return render_template('admin_security.html', blacklist_stats=blacklist.get_stats(), blacklisted=sorted(list(blacklist.blacklisted_ips)), log_files=files)
+    # Keep DB-backed log streams visible in admin UI.
+    for db_log_name in ('requests.log', 'security.log', 'websocket_security.log'):
+        if db_log_name not in files:
+            files.append(db_log_name)
+
+    return render_template('admin_security.html', blacklist_stats=blacklist.get_stats(), blacklisted=sorted(list(blacklist.blacklisted_ips)), log_files=sorted(files))
 
 
 @admin_bp.route('/admin/security/logfile/<path:filename>')
@@ -266,7 +272,31 @@ def admin_security_logfile(filename):
         return guard
 
     import os
-    from flask import abort
+
+    if filename == 'requests.log':
+        try:
+            rows = RequestLog.query.order_by(RequestLog.id.desc()).limit(500).all()
+            lines = [row.to_log_line() for row in reversed(rows)]
+            return jsonify({'file': filename, 'lines': lines})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    if filename == 'security.log':
+        try:
+            rows = SecurityLog.query.order_by(SecurityLog.id.desc()).limit(500).all()
+            lines = [row.to_log_line() for row in reversed(rows)]
+            return jsonify({'file': filename, 'lines': lines})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    if filename == 'websocket_security.log':
+        try:
+            rows = WebsocketSecurityLog.query.order_by(WebsocketSecurityLog.id.desc()).limit(500).all()
+            lines = [row.to_log_line() for row in reversed(rows)]
+            return jsonify({'file': filename, 'lines': lines})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
     # Prevent path traversal: only serve files from security/logs directory
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'security', 'logs'))
     requested = os.path.abspath(os.path.join(base_dir, filename))

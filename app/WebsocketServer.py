@@ -130,6 +130,11 @@ def _security_log(event, **kwargs):
     try:
         payload = {'event': event}
         payload.update(kwargs)
+        try:
+            from models.logging import WebsocketSecurityLog
+            WebsocketSecurityLog.save_event(event, kwargs, level='WARNING')
+        except Exception:
+            pass
         sec_logger.warning(json.dumps(payload))
     except Exception:
         try:

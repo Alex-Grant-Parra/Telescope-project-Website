@@ -313,6 +313,7 @@ generate_routes_file()
 # User Loader for Flask-Login
 from models.user import User
 from models.trusted_device import TrustedDevice  # Import to register the model
+from models.logging import RequestLog, SecurityLog, WebsocketSecurityLog  # Import to register log tables
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -361,6 +362,31 @@ def enforce_enabled_account():
 with app.app_context():
     db.create_all()
     print("Database tables created/verified")
+
+    # One-time migration: import legacy requests.log rows when request_logs is empty.
+    try:
+        legacy_request_log = os.path.join(BASE_DIR, 'security', 'logs', 'requests.log')
+        migration_result = RequestLog.import_legacy_file_if_empty(legacy_request_log)
+        if migration_result.get('imported', 0) > 0:
+            print(f"Imported {migration_result.get('imported')} request log row(s) into request_logs")
+    except Exception as e:
+        print(f"[WARNING] Could not migrate legacy request logs: {e}")
+
+    try:
+        legacy_security_log = os.path.join(BASE_DIR, 'security', 'logs', 'security.log')
+        migration_result = SecurityLog.import_legacy_file_if_empty(legacy_security_log)
+        if migration_result.get('imported', 0) > 0:
+            print(f"Imported {migration_result.get('imported')} security log row(s) into security_logs")
+    except Exception as e:
+        print(f"[WARNING] Could not migrate legacy security logs: {e}")
+
+    try:
+        legacy_ws_security_log = os.path.join(BASE_DIR, 'security', 'logs', 'websocket_security.log')
+        migration_result = WebsocketSecurityLog.import_legacy_file_if_empty(legacy_ws_security_log)
+        if migration_result.get('imported', 0) > 0:
+            print(f"Imported {migration_result.get('imported')} websocket security log row(s) into websocket_security_logs")
+    except Exception as e:
+        print(f"[WARNING] Could not migrate legacy websocket security logs: {e}")
 
     # Ensure contact thread attachment columns exist for existing DBs
     try:
