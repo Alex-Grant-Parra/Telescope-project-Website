@@ -1,6 +1,6 @@
 # ASTRA Personal Use License (APUL) v1.0
 
-Copyright (c) 2026 Alex Grant
+Copyright (c) 2026 Alex Grant-Parra
 
 ---
 
