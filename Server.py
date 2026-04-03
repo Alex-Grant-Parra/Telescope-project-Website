@@ -459,6 +459,13 @@ def register_client():
 def admin_ws_disconnect(client_id):
     return admin_disconnect_ws_client_handler(client_id)
 
+@app.route("/wiki")
+def wikiRedirect():
+    return redirect(
+        "https://github.com/Alex-Grant-Parra/ASTRA/wiki",
+        code=301
+    )
+
 # Exempt client registration endpoint from CSRF checks (used by non-browser clients)
 try:
     csrf.exempt(register_client)
