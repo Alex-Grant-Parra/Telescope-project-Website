@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
-"""
-Token Management Utility for Telescope WebSocket Server
-Use this script to generate and manage authentication tokens for your clients.
-"""
+# Token management utility for Telescope WebSocket Server
+# Use this script to generate and manage authentication tokens for clients.
 
 import secrets
-import json
 import os
 import sys
-from datetime import datetime
 
 # Add parent directory to path so we can import from the server
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-TOKENS_FILE = "security/api_tokens.json"
-
 
 def _with_app_context():
     from Server import app
@@ -22,7 +15,7 @@ def _with_app_context():
 
 
 def load_tokens():
-    """Load tokens from DB and return display-safe mapping keyed by token ID."""
+    # Load tokens from DB and return display-safe mapping keyed by token ID
     from security.token_store import list_tokens
 
     view = {}
@@ -36,26 +29,19 @@ def load_tokens():
             }
     return view
 
-
-def save_tokens(tokens):
-    """Legacy no-op: tokens are stored in DB."""
-    return tokens
-
 def generate_token():
-    """Generate a secure token"""
+    # Generate a secure token
     return secrets.token_urlsafe(32)
 
 def add_token(name, client_type="observer", telescope_type=None):
-    """Add a new token for a client"""
+    # Add a new token for a client
     from security.token_store import create_token_record
 
     with _with_app_context():
         token, _ = create_token_record(name, client_type)
     
-    # If this is a telescope, add it to the database
     if client_type == "telescope":
         try:
-            from app.db import db
             from models.tables import Telescope
             from Server import app
             
@@ -67,17 +53,17 @@ def add_token(name, client_type="observer", telescope_type=None):
                     last_seen=None
                 )
                 if result["status"] == "success":
-                    print(f"✓ Telescope added to database with ID: {result.get('id')}")
+                    print(f"Telescope added to database with ID: {result.get('id')}")
                 else:
-                    print(f"⚠️  Warning: Failed to add telescope to database: {result['message']}")
+                    print(f"Warning: Failed to add telescope to database: {result['message']}")
         except Exception as e:
-            print(f"⚠️  Warning: Could not add telescope to database: {str(e)}")
-            print("   (Token was still created successfully)")
+            print(f"Warning: Could not add telescope to database: {str(e)}")
+            print("Token was still created successfully.")
     
     return token
 
 def list_tokens():
-    """List all existing tokens"""
+    # List all existing tokens
     tokens = load_tokens()
     if not tokens:
         print("No tokens found.")
@@ -94,7 +80,7 @@ def list_tokens():
         print()
 
 def revoke_token(token):
-    """Revoke a token"""
+    # Revoke a token
     from security.token_store import revoke_token_by_id
 
     with _with_app_context():
@@ -140,7 +126,7 @@ def main():
             print(f"Type: {client_type}")
             if telescope_type:
                 print(f"Telescope Type: {telescope_type}")
-            print("\n⚠️  IMPORTANT: Store this token securely! You won't be able to retrieve it again.")
+            print("\nIMPORTANT: Store this token securely. You will not be able to retrieve it again.")
             
         elif choice == "2":
             list_tokens()

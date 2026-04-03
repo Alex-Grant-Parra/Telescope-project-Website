@@ -26,20 +26,17 @@ def get_jpeg_files():
     files = []
     for fname in os.listdir(user_dir):
         if fname.lower().endswith(".jpg") or fname.lower().endswith(".jpeg"):
-            # Extract date from filename supporting both formats:
-            # 1) photo_YYYYMMDD_HHMMSS.jpg (current)
-            # 2) photoYYYYMMDDHHMMSS.jpg   (legacy)
+            # Extract date from filename
+            # photo_YYYYMMDD_HHMMSS.jpg
             date = None
             display_str = "Unknown"
             try:
                 name_no_ext = os.path.splitext(fname)[0]
-                # Try current format first
                 m = re.match(r"^photo_(\d{8})_(\d{6})$", name_no_ext)
                 if m:
                     ymd, hms = m.groups()
                     date = datetime.strptime(ymd + hms, "%Y%m%d%H%M%S")
                 else:
-                    # Try legacy format (time optional)
                     m2 = re.match(r"^photo(\d{8})(\d{6})?$", name_no_ext)
                     if m2:
                         ymd, hms = m2.groups()
@@ -65,7 +62,6 @@ def get_jpeg_files():
 @login_required
 def album_photo_delete():
     data = request.get_json() or {}
-    # support either a single filename or a list of files under keys 'filename' or 'files'/'filenames'
     files = []
     if isinstance(data.get('files'), list):
         files = data.get('files')
@@ -162,13 +158,13 @@ def album_download():
     for fname in files:
         jpeg_path = os.path.join(user_dir, fname)
         cr2_path = os.path.splitext(jpeg_path)[0] + ".cr2"
-        # Always add the jpeg if it exists
+        # Add the jpeg if it exists
         if os.path.isfile(jpeg_path):
             abs_files.append(jpeg_path)
-        # Always add the raw file if it exists
+        # Add the raw file if it exists
         if os.path.isfile(cr2_path):
             abs_files.append(cr2_path)
-    # Always zip for consistency
+    # Always zip 
     mem_zip = io.BytesIO()
     with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in abs_files:

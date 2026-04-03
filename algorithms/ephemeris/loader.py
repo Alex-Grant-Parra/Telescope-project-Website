@@ -16,10 +16,6 @@ def load_planets():
     # Load all planet objects from VSOP87 pickle.
     with open(VSOP_PICKLE, "rb") as f:
         vsop_data = pickle.load(f)
-    # The VSOP pickle may have several shapes. Common forms:
-    # - {'Mercury': {...}, 'Venus': {...}, ...}
-    # - {'VSOP87A': {'Mercury': {...}, ...}}
-    # If nested under a top-level key, descend one level.
     if isinstance(vsop_data, dict) and len(vsop_data) == 1:
         # check if the single value is another dict of planets
         first_val = next(iter(vsop_data.values()))
@@ -38,8 +34,6 @@ def load_moon():
     # Load Moon object from ELP82b pickle.
     with open(MOON_PICKLE, "rb") as f:
         elp_data = pickle.load(f)
-    # The pickled ELP data may be a dict (e.g. {'ELP82B': [...]}) or
-    # already the series list. If it's a dict, extract the first value.
     if isinstance(elp_data, dict):
         # take the first series list available
         series_list = next(iter(elp_data.values()))
@@ -50,7 +44,6 @@ def load_moon():
     moon = Moon("Moon", series_list)
     return moon
 
-# Optional convenience: load everything at once
 def load_all():
     planets = load_planets()
     moon = load_moon()

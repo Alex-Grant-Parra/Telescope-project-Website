@@ -6,17 +6,11 @@ import json
 from pathlib import Path
 from .ip_blacklist import get_blacklist
 from .config import REQUEST_LOGGING_CONFIG
-from logging.handlers import RotatingFileHandler
+from models.logging import RequestLog, SecurityLog
 
 class SecurityMiddleware:
     def __init__(self, app: Flask = None, log_file: str = None):
-        """
-        Initialize Security Middleware
-        
-        Args:
-            app: Flask application instance
-            log_file: Path to security log file
-        """
+        # Initialize security middleware
         self.app = app
         self.blacklist = get_blacklist()
         
@@ -35,19 +29,9 @@ class SecurityMiddleware:
         self.security_logger = logging.getLogger('security')
         self.security_logger.setLevel(logging.INFO)
         
-        # Create file handler for security logs
-        file_handler = logging.FileHandler(self.log_file)
-        file_handler.setLevel(logging.INFO)
-        
-        # Create formatter
-        formatter = logging.Formatter(
-            '%(asctime)s - %(levelname)s - %(message)s'
-        )
-        file_handler.setFormatter(formatter)
-        
-        # Add handler if not already added
+        # Security events now persist to DB; avoid binding file handlers here.
         if not self.security_logger.handlers:
-            self.security_logger.addHandler(file_handler)
+            self.security_logger.addHandler(logging.NullHandler())
         
         # Setup request logging if enabled
         self.request_logger = None
@@ -58,7 +42,7 @@ class SecurityMiddleware:
             self.init_app(app)
     
     def init_app(self, app: Flask):
-        """Initialize middleware with Flask app"""
+        # Initialize middleware with Flask app
         self.app = app
         
         # Register before_request handler
@@ -70,51 +54,28 @@ class SecurityMiddleware:
         self.security_logger.info("Security middleware initialized")
     
     def _setup_request_logger(self):
-        request_log_file = Path(__file__).parent / 'logs' / 'requests.log'
-        request_log_file.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Create request logger with unique name to avoid conflicts
-        self.request_logger = logging.getLogger('telescope_requests')
-        self.request_logger.setLevel(logging.INFO)
-        
-        # Clear any existing handlers to avoid duplicates
-        self.request_logger.handlers.clear()
-        
-        # Use rotating file handler to manage log size
-        max_bytes = REQUEST_LOGGING_CONFIG.get('max_log_size_mb', 50) * 1024 * 1024
-        backup_count = REQUEST_LOGGING_CONFIG.get('backup_count', 10)
-        
-        request_handler = RotatingFileHandler(
-            request_log_file,
-            maxBytes=max_bytes,
-            backupCount=backup_count
-        )
-        request_handler.setLevel(logging.INFO)
-        
-        # Create formatter for request logs
-        request_formatter = logging.Formatter('%(asctime)s - %(message)s')
-        request_handler.setFormatter(request_formatter)
-        
-        # Add handler
-        self.request_logger.addHandler(request_handler)
-        
-        # Prevent propagation to root logger
-        self.request_logger.propagate = False
-        
-        # Test that the logger works
+        # Request logging now persists to the request_logs DB table.
+        self.request_logger = True
+
         try:
-            test_log = {"test": "Request logging initialized", "timestamp": datetime.now().isoformat()}
-            self.request_logger.info(json.dumps(test_log))
-            # Force flush
-            for handler in self.request_logger.handlers:
-                handler.flush()
+            RequestLog.save_request({
+                'timestamp': datetime.now().isoformat(),
+                'client_ip': 'system',
+                'method': 'INIT',
+                'path': '/security/request-logging',
+                'url': 'internal://request-logging',
+                'query_string': '',
+                'remote_addr': 'local',
+                'scheme': 'internal',
+                'headers': {'User-Agent': 'security-middleware-init'}
+            })
         except Exception as e:
             self.security_logger.error(f"Failed to initialize request logging: {e}")
         
-        self.security_logger.info("Request logging initialized")
+        self.security_logger.info("Request logging initialized (database table: request_logs)")
     
     def _log_request(self):
-        """Log every request with true client IP and details"""
+        # Log every request with true client IP and details
         if not self.request_logger:
             return
             
@@ -146,23 +107,14 @@ class SecurityMiddleware:
             if header_value:
                 request_data['headers'][header_name] = header_value
         
-        # Log in JSON format for easy parsing
+        # Persist request logs to DB table
         try:
-            if REQUEST_LOGGING_CONFIG.get('log_format') == 'json':
-                self.request_logger.info(json.dumps(request_data))
-            else:
-                # Text format
-                log_msg = f"{client_ip} - {request.method} {request.path} - {request.headers.get('User-Agent', 'unknown')}"
-                self.request_logger.info(log_msg)
-            
-            # Force flush to ensure immediate write
-            for handler in self.request_logger.handlers:
-                handler.flush()
+            RequestLog.save_request(request_data)
         except Exception as e:
             self.security_logger.error(f"Error writing request log: {e}")
     
     def _get_client_ip(self) -> str:
-        """Get the real client IP address"""
+        # Get the real client IP address
         # Check for various forwarded headers (for reverse proxy scenarios)
         forwarded_headers = [
             'CF-Connecting-IP',  # Cloudflare
@@ -181,7 +133,7 @@ class SecurityMiddleware:
         return request.remote_addr or 'unknown'
     
     def _log_security_event(self, event_type: str, details: Dict[str, Any]):
-        """Log security events"""
+        # Log security events
         client_ip = self._get_client_ip()
         
         log_entry = {
@@ -195,13 +147,14 @@ class SecurityMiddleware:
             'details': details
         }
         
-        # Log to file
+        # Persist security event to DB and keep logger call for diagnostics.
+        SecurityLog.save_event(log_entry, level='INFO')
         self.security_logger.info(json.dumps(log_entry))
         
         return log_entry
     
     def _is_suspicious_request(self) -> Dict[str, Any]:
-        """Check if request is suspicious"""
+        # Check whether the request looks suspicious
         suspicious_indicators = {}
         
         # Check for common attack patterns in URL
@@ -256,10 +209,7 @@ class SecurityMiddleware:
         return suspicious_indicators
     
     def _check_rate_limit(self, client_ip: str, is_suspicious: bool = False) -> bool:
-        """
-        Check if client has exceeded rate limit.
-        Returns True if limit exceeded (should block), False if OK.
-        """
+        # Check whether client has exceeded rate limit; return True when blocked
         from .config import RATE_LIMITS
         
         # Rate limiting disabled for normal users
@@ -273,7 +223,6 @@ class SecurityMiddleware:
         if is_suspicious:
             limit = RATE_LIMITS.get('suspicious', 10)
         # else:
-        #     limit = RATE_LIMITS.get('default', 60)
         
         # Initialize tracking for this IP
         if client_ip not in self.request_history:
@@ -294,7 +243,7 @@ class SecurityMiddleware:
         return False  # OK to proceed
     
     def _before_request(self):
-        """Handle request before processing"""
+        # Handle request before processing
         # Get client IP early so can remove some processing for blacklisted
         # clients and avoid doing extra work (like heavy request logging).
         client_ip = self._get_client_ip()
@@ -310,7 +259,6 @@ class SecurityMiddleware:
                 'blocked_ip': client_ip
             })
 
-            # Return 403 Forbidden
             abort(403)
 
         # Only log requests after we've cleared the blacklist check so that
@@ -327,7 +275,6 @@ class SecurityMiddleware:
                 self.suspicious_request_counts[client_ip] = 0
             self.suspicious_request_counts[client_ip] += 1
             
-            # For highly suspicious requests, consider blocking
             high_risk_indicators = ['suspicious_path', 'unusual_method']
             if any(indicator in suspicious_indicators for indicator in high_risk_indicators):
                 # Check if this is part of a scanning/enumeration attack
@@ -361,11 +308,11 @@ class SecurityMiddleware:
     
     
     def _register_security_routes(self):
-        """Register security management routes"""
+        # Register security management routes
         
         @self.app.route('/admin/security/status')
         def security_status():
-            """Get security system status"""
+            # Return security system status
             # This should be protected by admin authentication
             stats = self.blacklist.get_stats()
             return jsonify({
@@ -377,7 +324,7 @@ class SecurityMiddleware:
         
         @self.app.route('/admin/security/blacklist/add', methods=['POST'])
         def add_to_blacklist():
-            """Manually add IP to blacklist"""
+            # Manually add an IP to blacklist
             # This should be protected by admin authentication
             data = request.get_json()
             if not data or 'ip' not in data:
@@ -392,7 +339,7 @@ class SecurityMiddleware:
         
         @self.app.route('/admin/security/blacklist/remove', methods=['POST'])
         def remove_from_blacklist():
-            """Remove IP from blacklist"""
+            # Remove an IP from blacklist
             # This should be protected by admin authentication
             data = request.get_json()
             if not data or 'ip' not in data:
@@ -407,32 +354,38 @@ class SecurityMiddleware:
         
         @self.app.route('/admin/security/logs')
         def get_security_logs():
-            """Get recent security logs"""
+            # Return recent security logs
             # This should be protected by admin authentication
             try:
+                rows = SecurityLog.query.order_by(SecurityLog.id.desc()).limit(100).all()
                 logs = []
-                if self.log_file.exists():
-                    with open(self.log_file, 'r') as f:
-                        # Get last 100 lines
-                        lines = f.readlines()[-100:]
-                        for line in lines:
-                            try:
-                                log_entry = json.loads(line.strip())
-                                logs.append(log_entry)
-                            except json.JSONDecodeError:
-                                continue
-                
+                for row in reversed(rows):
+                    if row.payload_json:
+                        try:
+                            logs.append(json.loads(row.payload_json))
+                            continue
+                        except Exception:
+                            pass
+                    logs.append({
+                        'timestamp': row.event_timestamp,
+                        'event_type': row.event_type,
+                        'client_ip': row.client_ip,
+                        'method': row.method,
+                        'path': row.path,
+                        'url': row.url,
+                    })
+
                 return jsonify({'logs': logs})
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
 
 # Error handlers for security responses
 def register_security_error_handlers(app: Flask):
-    """Register custom error handlers for security responses"""
+    # Register custom error handlers for security responses
     
     @app.errorhandler(403)
     def forbidden(e):
-        """Custom 403 response"""
+        # Return custom 403 response
         return jsonify({
             'error': 'Access forbidden',
             'message': 'Your request was blocked for security reasons'
@@ -440,7 +393,7 @@ def register_security_error_handlers(app: Flask):
     
     @app.errorhandler(429)
     def too_many_requests(e):
-        """Custom 429 response"""
+        # Return custom 429 response
         return jsonify({
             'error': 'Too many requests',
             'message': 'Rate limit exceeded'

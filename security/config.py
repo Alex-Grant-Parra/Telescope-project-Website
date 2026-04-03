@@ -1,11 +1,9 @@
-"""
-Security Configuration for Telescope Project
-"""
+# Security configuration for telescope project
 
 # IP Blacklist Configuration
 BLACKLIST_CONFIG = {
     'update_interval': 3600,  # Update every hour (3600 seconds)
-    'blacklist_file': 'security/blacklist.txt',  # Simple text file with one IP per line
+    'blacklist_file': 'security/blacklist.txt', 
     'log_file': 'security/logs/security.log',
     'enable_auto_blacklist': True,  # Automatically blacklist aggressive attackers
     'aggressive_threshold': 3,  # Number of suspicious requests before auto-blacklist
@@ -19,7 +17,7 @@ THREAT_SOURCES = {
         'description': 'Spamhaus DROP list - known bad networks'
     },
     'spamhaus_edrop': {
-        'enabled': False,
+        'enabled': True,
         'description': 'Spamhaus EDROP list - extended bad networks'
     },
     'emergingthreats': {
@@ -31,7 +29,7 @@ THREAT_SOURCES = {
         'description': 'Blocklist.de - failed login attempts and compromised hosts'
     },
     'cinsscore': {
-        'enabled': False,  # Sometimes unreliable
+        'enabled': True,
         'description': 'CINS Score bad guys list'
     },
     'greensnow': {
@@ -39,14 +37,6 @@ THREAT_SOURCES = {
         'description': 'GreenSnow blacklist'
     }
 }
-
-# Manual IP blocks (IPs that are always blocked)
-MANUAL_BLOCKS = [
-    '38.211.193.130',  # Previous attack
-    '38.211.193.0/24',  # Block the entire subnet for safety
-    '204.76.203.210',  # Config/env file enumeration attack Feb 5 2026
-    '204.76.203.0/24'   # Block entire subnet
-]
 
 # Suspicious request patterns
 SUSPICIOUS_PATTERNS = {
@@ -81,8 +71,9 @@ LOGGING_CONFIG = {
 # Request logging - logs ALL requests with true client IPs
 REQUEST_LOGGING_CONFIG = {
     'enabled': True,
-    'log_file': 'security/logs/requests.log',
-    'log_format': 'json',  # 'json' or 'text'
+    'storage': 'database',
+    'table_name': 'request_logs',
+    'log_format': 'json',  
     'exclude_paths': [     # Don't log these paths to reduce noise
         '/static/',
         '/favicon.ico',
@@ -94,7 +85,5 @@ REQUEST_LOGGING_CONFIG = {
         'Accept-Language',
         'X-Forwarded-For',
         'X-Real-IP'
-    ],
-    'max_log_size_mb': 50, # Larger size for request logs
-    'backup_count': 10     # Keep more backups for request logs
+    ]
 }

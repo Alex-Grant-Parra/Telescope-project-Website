@@ -92,7 +92,6 @@ def get_stars():
         except Exception:
             _dt = None
 
-    # If include_planets, compute planets for given or current UTC
     planets = []
     if include_planets:
         if _dt is None:
@@ -145,7 +144,6 @@ def get_stars():
                         magv = float(mag_val) if mag_val is not None else 30
                     except Exception:
                         magv = 30
-                    # If DB-side filter not possible, enforce min/max in Python
                     if 'V-Mag' not in col_map and (magv < min_mag or magv > max_mag):
                         continue
                     stars_list.append({
@@ -182,11 +180,7 @@ def get_stars():
 
 @star_map_bp.route("/api/stars_meta")
 def get_stars_meta():
-    """
-    Return overall magnitude extremes across star tables.
-    Includes only objects with a 'V-Mag' column. Planets are excluded here (client will merge).
-    Response: {"minMag": float, "maxMag": float}
-    """
+    # Return overall magnitude extremes across star tables; excludes planets
     tables = [HDSTARtable, IndexTable, NGCtable]
     overall_min = None
     overall_max = None
@@ -261,18 +255,12 @@ def get_planets():
 
 @star_map_bp.route("/StarMap")
 def star_map():
-    # For fast initial load, render without embedding the entire star dataset
     # The client will fetch stars and planets via APIs progressively
     selected_telescope = session.get('selected_telescope')
     return render_template("star_map.html", stars=[], selected_telescope=selected_telescope)
 
 def extract_friendly_common_name(common_names_field: str) -> str:
-    """
-    Extract the first friendly name from commonNames field.
-    commonNames format: 'Sirius, HD 48915, HD48915' or 'Andromeda Galaxy, M31, NGC 224'
-    Returns: 'Sirius' or 'Andromeda Galaxy' or '' if no friendly name found.
-    Skips catalog designations like HD, NGC, IC, M (Messier).
-    """
+    # Extract the first friendly name from commonNames field; skip catalog designations
     if not common_names_field:
         return ''
     parts = [p.strip() for p in common_names_field.split(',')]
@@ -303,7 +291,6 @@ def star_info(star_name):
                 "type": "star"
             }
             # Add friendly common name if available
-            # Try both 'commonNames' (HDSTARtable) and 'Common names' (NGCtable)
             common_names_raw = getattr(result, 'commonNames', None) or getattr(result, 'Common names', None)
             if common_names_raw:
                 friendly_name = extract_friendly_common_name(common_names_raw)
@@ -411,7 +398,7 @@ def track_star():
 
 @star_map_bp.route("/get_tracking_status", methods=["GET"])
 def get_tracking_status():
-    """Get the current tracking status from the session"""
+    # Get the current tracking status from the session
     selected_object = session.get("selectedObject")
     
     if selected_object:
@@ -434,7 +421,7 @@ def get_tracking_status():
 
 @star_map_bp.route("/stop_tracking", methods=["POST"])
 def stop_tracking():
-    """Stop tracking the current object"""
+    # Stop tracking the current object
     # Check if a telescope is selected
     selected_telescope = session.get('selected_telescope')
     telescope_id = selected_telescope.get('telescope_id') if selected_telescope else None
@@ -479,7 +466,7 @@ def stop_tracking():
 
 @star_map_bp.route("/api/telescope_position", methods=["GET"])
 def get_telescope_position():
-    """Get the current position (RA/DEC) of the telescope"""
+    # Get the current position (RA/DEC) of the telescope
     # Check if a telescope is selected
     selected_telescope = session.get('selected_telescope')
     telescope_id = selected_telescope.get('telescope_id') if selected_telescope else None
@@ -504,7 +491,6 @@ def get_telescope_position():
         dec = None
         
         if coords and isinstance(coords, dict):
-            # Try nested "result" first (from /sendCommand wrapper)
             if "result" in coords:
                 result = coords["result"]
                 if isinstance(result, dict):
@@ -556,7 +542,7 @@ def get_telescope_position():
 
 @star_map_bp.route("/api/debug/session", methods=["GET"])
 def debug_session():
-    """Debug endpoint to check session state"""
+    # Debug endpoint to check session state
     selected_telescope = session.get('selected_telescope')
     return jsonify({
         "status": "success",

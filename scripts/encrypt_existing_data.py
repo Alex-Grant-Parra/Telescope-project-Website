@@ -39,11 +39,9 @@ def _encrypt_in_place(model, obj, attr: str) -> bool:
         return False
     if val is None:
         return False
-    # If decrypt_text returns the same value, it may be plaintext; encrypt explicitly
     try:
         # Attempt to see if value is decryptable
         dec = decrypt_text(val, fallback_plaintext=False)  # will raise if not ciphertext
-        # If we got here, it's already encrypted; nothing to do
         return False
     except Exception:
         # Not decryptable -> likely plaintext; encrypt now via direct assignment

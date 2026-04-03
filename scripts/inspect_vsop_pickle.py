@@ -14,7 +14,6 @@ if isinstance(data, dict):
     if isinstance(sample, dict):
         subkeys = list(sample.keys())
         print('Subkeys (first 20):', subkeys[:20])
-        # if subkeys look like planet names, inspect one
         if len(subkeys) > 0:
             s0 = sample[subkeys[0]]
             print('\nSample subkey:', subkeys[0], 'type', type(s0))

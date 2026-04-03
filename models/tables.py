@@ -47,17 +47,11 @@ class HDSTARtable(BaseTable):
 
     @staticmethod
     def query_by_name_flexible(name_or_hd: str):
-        """
-        Query HDSTARtable matching HD name case/space-insensitively.
-        Examples accepted: "HD48915", "hd48915", "HD 48915".
-        Also tries exact Name match for non-HD inputs.
-        Returns a dict of row data or None.
-        """
+        # Query HDSTARtable matching HD name case/space-insensitively, returns dict or None
         try:
             from sqlalchemy import text
             # Normalize: remove spaces and uppercase for comparison
             norm = (name_or_hd or "").strip().replace(" ", "").upper()
-            # If it looks like an HD pattern without prefix, leave as-is for exact fallthrough
             if norm.startswith("HD"):
                 stmt = text(
                     "SELECT * FROM HDSTARTable WHERE REPLACE(UPPER(Name),' ', '') = :norm LIMIT 1"
@@ -75,10 +69,7 @@ class HDSTARtable(BaseTable):
 
     @staticmethod
     def query_by_common_name(common_name: str):
-        """
-        Query HDSTARtable by commonNames column using case-insensitive substring match.
-        Requires the 'commonNames' column to exist; returns dict or None.
-        """
+        # Query HDSTARtable by commonNames column using case-insensitive substring match
         try:
             col_map = getattr(HDSTARtable, "__table__").c
             if 'commonNames' not in col_map:
@@ -129,9 +120,7 @@ class NGCtable(BaseTable):
 
     @staticmethod
     def query_by_messier(messier_designation):
-        """
-        Query NGCtable by Messier designation (e.g., 'M1', 'M31', 'M104')
-        """
+        # Query NGCtable by Messier designation (e.g., 'M1', 'M31', 'M104')
         print(f"Querying NGCtable for Messier: {messier_designation}")
         result = db.session.query(NGCtable).filter_by(Messier=messier_designation).first()
         if result:
@@ -143,9 +132,7 @@ class NGCtable(BaseTable):
 
     @staticmethod
     def query_by_common_name(common_name):
-        """
-        Query NGCtable by common name using case-insensitive exact matching
-        """
+        # Query NGCtable by common name using case-insensitive exact matching
         print(f"Querying NGCtable for common name: {common_name}")
         # Use ilike for case-insensitive exact matching
         result = db.session.query(NGCtable).filter(
@@ -176,9 +163,8 @@ class PlanetsTable(BaseTable):
 
     @staticmethod
     def load_planets():
-        """
-        Load all planets into a dictionary for easy access by name.
-        """
+        # Load all planets into a dictionary for easy access by name
+
         planets = db.session.query(PlanetsTable).all()
         return {row.name.lower(): row for row in planets if hasattr(row, 'name')}  # Assuming 'name' is a column
 
@@ -215,17 +201,13 @@ class Telescope(db.Model):
     
     @staticmethod
     def get_all_telescopes():
-        """
-        Get all telescopes from the database.
-        """
+        # Get all telescopes from the database
         telescopes = db.session.query(Telescope).all()
         return telescopes
     
     @staticmethod
     def get_telescope_by_id(telescope_id):
-        """
-        Get a specific telescope by its telescope_id (human-readable name).
-        """
+        # Get a specific telescope by its telescope_id (human-readable name)
         result = db.session.query(Telescope).filter_by(telescope_id=telescope_id).first()
         if result:
             return {
@@ -239,9 +221,7 @@ class Telescope(db.Model):
     
     @staticmethod
     def is_telescope_online(telescope_id):
-        """
-        Check if a telescope is considered online (seen within last 5 minutes).
-        """
+        # Check if a telescope is considered online (seen within last 5 minutes)
         import time
         current_time = time.time()
         telescope = db.session.query(Telescope).filter_by(telescope_id=telescope_id).first()
@@ -252,18 +232,7 @@ class Telescope(db.Model):
     
     @staticmethod
     def add_telescope(telescope_id, ip_address=None, telescope_type=None, last_seen=None):
-        """
-        Add a new telescope to the database.
-        
-        Args:
-            telescope_id (str): Unique identifier for the telescope (name)
-            ip_address (str, optional): IP address of the telescope
-            telescope_type (str, optional): Client type (telescope/observer)
-            last_seen (float, optional): Unix timestamp of last contact. Defaults to current time.
-        
-        Returns:
-            dict: Success/error status and message
-        """
+        # Add a new telescope to the database, returns status dict
         try:
             import time
             if last_seen is None:
@@ -294,15 +263,7 @@ class Telescope(db.Model):
     
     @staticmethod
     def remove_telescope(telescope_id):
-        """
-        Remove a telescope from the database by telescope ID.
-        
-        Args:
-            telescope_id (str): The telescope ID to remove
-        
-        Returns:
-            dict: Success/error status and message
-        """
+        # Remove a telescope from the database by telescope ID, returns status dict
         try:
             # Check if telescope exists
             telescope = db.session.query(Telescope).filter_by(telescope_id=telescope_id).first()
@@ -322,16 +283,7 @@ class Telescope(db.Model):
     
     @staticmethod
     def update_last_seen(telescope_id, last_seen=None):
-        """
-        Update the last seen timestamp for a telescope.
-        
-        Args:
-            telescope_id (str): The telescope ID to update
-            last_seen (float, optional): Unix timestamp. Defaults to current time.
-        
-        Returns:
-            dict: Success/error status and message
-        """
+        # Update the last seen timestamp for a telescope, returns status dict
         try:
             import time
             if last_seen is None:
@@ -354,16 +306,7 @@ class Telescope(db.Model):
     
     @staticmethod
     def update_ip_address(telescope_id, ip_address):
-        """
-        Update the IP address for a telescope.
-        
-        Args:
-            telescope_id (str): The telescope ID to update
-            ip_address (str): New IP address
-        
-        Returns:
-            dict: Success/error status and message
-        """
+        # Update the IP address for a telescope, returns status dict
         try:
             telescope = db.session.query(Telescope).filter_by(telescope_id=telescope_id).first()
             

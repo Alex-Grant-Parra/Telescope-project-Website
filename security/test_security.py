@@ -1,6 +1,4 @@
-"""
-Test script for the IP blacklist security system
-"""
+# Test script for the IP blacklist security system
 
 import sys
 import os
@@ -10,7 +8,7 @@ from security.ip_blacklist import IPBlacklist
 import logging
 
 def test_blacklist():
-    """Test the IP blacklist functionality"""
+    # Test the IP blacklist functionality
     print("Testing IP Blacklist System")
     print("=" * 40)
     
@@ -64,7 +62,7 @@ def test_blacklist():
     except FileNotFoundError:
         pass
     
-    print("\n✓ All tests completed!")
+    print("\nAll tests completed.")
 
 if __name__ == "__main__":
     test_blacklist()

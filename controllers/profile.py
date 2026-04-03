@@ -11,13 +11,13 @@ profile_bp = Blueprint('profile', __name__)
 @profile_bp.route("/profile")
 @login_required
 def profile():
-    """Main profile page"""
+    # Main profile page
     return render_template('profile.html')
 
 @profile_bp.route("/profile/edit", methods=['GET', 'POST'])
 @login_required
 def edit_profile():
-    """Edit profile information (email, password)"""
+    # Edit profile information (email, password)
     if request.method == 'POST':
         action = request.form.get('action')
         
@@ -82,7 +82,7 @@ def edit_profile():
 @profile_bp.route("/profile/trusted_devices")
 @login_required
 def profile_trusted_devices():
-    """Show trusted devices in profile context"""
+    # Show trusted devices in profile context
     devices = TrustedDevice.get_user_trusted_devices(current_user.id)
     return render_template('profile_trusted_devices.html', devices=devices)
 
@@ -90,7 +90,7 @@ def profile_trusted_devices():
 @profile_bp.route('/profile/trust_debug')
 @login_required
 def trust_debug():
-    """Debug endpoint: return computed fingerprint and the user's trusted devices (JSON)"""
+    # Return computed fingerprint and the user's trusted devices
     try:
         fingerprint = TrustedDevice.generate_device_fingerprint()
         devices = TrustedDevice.get_user_trusted_devices(current_user.id)
@@ -113,7 +113,7 @@ def trust_debug():
 @profile_bp.route("/profile/revoke_device/<int:device_id>", methods=['POST'])
 @login_required
 def profile_revoke_device(device_id):
-    """Revoke trust for a specific device from profile"""
+    # Revoke trust for a specific device from profile
     if TrustedDevice.revoke_device(current_user.id, device_id):
         flash('Device trust revoked successfully.', 'success')
     else:
@@ -123,14 +123,14 @@ def profile_revoke_device(device_id):
 @profile_bp.route("/profile/account_info")
 @login_required
 def account_info():
-    """Show account information"""
+    # Show account information
     return render_template('account_info.html')
 
 
 @profile_bp.route('/profile/disable_account', methods=['POST'])
 @login_required
 def disable_account():
-    """Allow a user to disable their own account (soft-disable)"""
+    # Allow a user to disable their own account (soft-disable)
     try:
         current_user.set_enabled(False, changed_by_id=current_user.id, reason='User self-disabled')
         flash('Your account has been disabled. You will be logged out.', 'info')
@@ -146,7 +146,7 @@ def disable_account():
 @profile_bp.route("/profile/admin/users")
 @login_required
 def admin_users():
-    """Redirect to the admin blueprint users page"""
+    # Redirect to the admin blueprint users page
     if not current_user.is_admin:
         flash('Access denied. Admin privileges required.', 'danger')
         return redirect(url_for('profile.profile'))

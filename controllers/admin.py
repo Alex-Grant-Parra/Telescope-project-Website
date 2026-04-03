@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from models.user import User
 from app.db import db
 from models.user import AccountStatusHistory
+from models.logging import RequestLog, SecurityLog, WebsocketSecurityLog
 from datetime import datetime
 from security.ip_blacklist import get_blacklist
 import logging
@@ -12,19 +13,19 @@ sec_logger = logging.getLogger('security')
 # Define the blueprint for admin routes
 admin_bp = Blueprint('admin', __name__)
 
-# Import csrf for exemption
 try:
     from flask_wtf.csrf import exempt
 except ImportError:
     # Fallback if import fails
     def exempt(f):
+        # Exempt a view from CSRF (fallback)
         return f
 
 
 @admin_bp.route("/admin")
 @login_required
 def admin():
-    # Check if the current_user is an admin
+    # Render the admin page for administrators
     if current_user.is_admin:
         return render_template('admin.html')  # Render the admin page if the user is an admin
 
@@ -34,9 +35,8 @@ def admin():
 
 
 def _admin_guard():
-    """Helper to check admin privilege; returns (None) if OK or a Flask response to return."""
+    # Check admin privileges and return a proper response if unauthorized
     if not current_user.is_authenticated or not current_user.is_admin:
-        # If this was an AJAX request, return JSON so frontend can handle it
         if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'status': 'error', 'message': 'Admin access required.'}), 403
         flash('Admin access required.', 'danger')
@@ -47,6 +47,7 @@ def _admin_guard():
 @admin_bp.route('/admin/user/<int:user_id>/promote', methods=['POST'])
 @login_required
 def promote_user(user_id):
+    # Promote a user to Administrator
     guard = _admin_guard()
     if guard:
         return guard
@@ -75,6 +76,7 @@ def promote_user(user_id):
 @admin_bp.route('/admin/user/<int:user_id>/demote', methods=['POST'])
 @login_required
 def demote_user(user_id):
+    # Demote a user to Standard
     guard = _admin_guard()
     if guard:
         return guard
@@ -103,6 +105,7 @@ def demote_user(user_id):
 @admin_bp.route('/admin/user/<int:user_id>/delete', methods=['POST'])
 @login_required
 def delete_user(user_id):
+    # Delete a user account
     guard = _admin_guard()
     if guard:
         return guard
@@ -140,6 +143,7 @@ def delete_user(user_id):
 @login_required
 @exempt
 def set_role(user_id):
+    # Set a user's role (Administrator/Standard/Limited)
     guard = _admin_guard()
     if guard:
         return guard
@@ -160,7 +164,6 @@ def set_role(user_id):
     json_data = request.get_json(silent=True) if request.is_json else None
     role = (json_data or {}).get('role') or request.form.get('role')
 
-    # For non-JSON submissions, empty form data usually indicates a validation issue.
     if not request.is_json and not request.form:
         flash('Security validation failed. Please try again.', 'danger')
         return redirect(request.referrer or url_for('admin.admin'))
@@ -182,6 +185,7 @@ def set_role(user_id):
 @admin_bp.route('/admin/user/<int:user_id>/toggle_enabled', methods=['POST'])
 @login_required
 def toggle_enabled(user_id):
+    # Toggle a user's enabled/disabled status
     guard = _admin_guard()
     if guard:
         return guard
@@ -219,6 +223,7 @@ def toggle_enabled(user_id):
 @admin_bp.route('/admin/security/logs')
 @login_required
 def security_logs():
+    # Display recent account status history logs
     guard = _admin_guard()
     if guard:
         return guard
@@ -231,6 +236,7 @@ def security_logs():
 @admin_bp.route('/admin/security')
 @login_required
 def admin_security_page():
+    # Show admin security overview and blacklist stats
     guard = _admin_guard()
     if guard:
         return guard
@@ -249,25 +255,54 @@ def admin_security_page():
     except Exception:
         files = []
 
-    return render_template('admin_security.html', blacklist_stats=blacklist.get_stats(), blacklisted=sorted(list(blacklist.blacklisted_ips)), log_files=files)
+    # Keep DB-backed log streams visible in admin UI.
+    for db_log_name in ('requests.log', 'security.log', 'websocket_security.log'):
+        if db_log_name not in files:
+            files.append(db_log_name)
+
+    return render_template('admin_security.html', blacklist_stats=blacklist.get_stats(), blacklisted=sorted(list(blacklist.blacklisted_ips)), log_files=sorted(files))
 
 
 @admin_bp.route('/admin/security/logfile/<path:filename>')
 @login_required
 def admin_security_logfile(filename):
+    # Return last lines of a specified security logfile
     guard = _admin_guard()
     if guard:
         return guard
 
     import os
-    from flask import abort
+
+    if filename == 'requests.log':
+        try:
+            rows = RequestLog.query.order_by(RequestLog.id.desc()).limit(500).all()
+            lines = [row.to_log_line() for row in reversed(rows)]
+            return jsonify({'file': filename, 'lines': lines})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    if filename == 'security.log':
+        try:
+            rows = SecurityLog.query.order_by(SecurityLog.id.desc()).limit(500).all()
+            lines = [row.to_log_line() for row in reversed(rows)]
+            return jsonify({'file': filename, 'lines': lines})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    if filename == 'websocket_security.log':
+        try:
+            rows = WebsocketSecurityLog.query.order_by(WebsocketSecurityLog.id.desc()).limit(500).all()
+            lines = [row.to_log_line() for row in reversed(rows)]
+            return jsonify({'file': filename, 'lines': lines})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
     # Prevent path traversal: only serve files from security/logs directory
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'security', 'logs'))
     requested = os.path.abspath(os.path.join(base_dir, filename))
     if not requested.startswith(base_dir) or not os.path.exists(requested):
         return jsonify({'error': 'File not found'}), 404
 
-    # Return last 100 lines
     try:
         with open(requested, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()[-500:]
@@ -279,6 +314,7 @@ def admin_security_logfile(filename):
 @admin_bp.route('/admin/blacklist/add', methods=['POST'])
 @login_required
 def admin_blacklist_add():
+    # Add an IP address to the manual blacklist
     guard = _admin_guard()
     if guard:
         return guard
@@ -298,6 +334,7 @@ def admin_blacklist_add():
 @admin_bp.route('/admin/blacklist/remove', methods=['POST'])
 @login_required
 def admin_blacklist_remove():
+    # Remove an IP address from the manual blacklist
     guard = _admin_guard()
     if guard:
         return guard
@@ -317,6 +354,7 @@ def admin_blacklist_remove():
 @admin_bp.route('/admin/users')
 @login_required
 def admin_users():
+    # List users and their trusted device counts
     if not current_user.is_admin:
         flash('Access denied. Admin privileges required.', 'danger')
         return redirect(url_for('profile.profile'))
@@ -340,6 +378,7 @@ def admin_users():
 @admin_bp.route('/admin/security/logs')
 @login_required
 def admin_security_logs():
+    # Return a list of security log filenames
     guard = _admin_guard()
     if guard:
         return guard
@@ -368,6 +407,7 @@ def admin_security_logs():
 @admin_bp.route('/admin/security/tokens')
 @login_required
 def admin_security_tokens():
+    # Display API tokens and related telescope info
     guard = _admin_guard()
     if guard:
         return guard
@@ -387,7 +427,6 @@ def admin_security_tokens():
             'db_info': None
         }
         
-        # If it's a telescope, get database info
         if rec.client_type == 'telescope':
             try:
                 telescope_name = rec.name
@@ -418,6 +457,7 @@ def admin_security_tokens():
 @admin_bp.route('/admin/security/tokens/generate', methods=['POST'])
 @login_required
 def admin_generate_token():
+    # Generate a new API token and store for one-time display
     guard = _admin_guard()
     if guard:
         return guard
@@ -451,6 +491,7 @@ def admin_generate_token():
 @admin_bp.route('/admin/security/tokens/revoke', methods=['POST'])
 @login_required
 def admin_revoke_token():
+    # Revoke an API token and remove associated telescope
     guard = _admin_guard()
     if guard:
         return guard
@@ -466,7 +507,6 @@ def admin_revoke_token():
     rec = get_token_by_id(identifier)
     if rec:
         
-        # If it's a telescope, remove from database too
         if rec.client_type == 'telescope':
             try:
                 telescope_name = rec.name
@@ -488,6 +528,7 @@ def admin_revoke_token():
 @admin_bp.route('/admin/security/tokens/show', methods=['POST'])
 @login_required
 def admin_show_token():
+    # Attempt to show a token (not available after creation)
     guard = _admin_guard()
     if guard:
         return guard

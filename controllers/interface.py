@@ -62,12 +62,7 @@ def update_camera():
     return jsonify(response)
 
 def extract_friendly_common_name(common_names_field: str) -> str:
-    """
-    Extract the first friendly name from commonNames field.
-    commonNames format: 'Sirius, HD 48915, HD48915' or 'Andromeda Galaxy, M31, NGC 224'
-    Returns: 'Sirius' or 'Andromeda Galaxy' or '' if no friendly name found.
-    Skips catalog designations like HD, NGC, IC, M (Messier).
-    """
+    # Extract the first friendly name from commonNames field; skip catalog designations
     if not common_names_field:
         return ''
     parts = [p.strip() for p in common_names_field.split(',')]
@@ -136,9 +131,7 @@ def search_object():
                 print("Celestial object not found.")
 
         else:
-            # Try searching by common name in HD stars first, then in NGC table
             print(f"Searching by common name across stars and NGC: {norm}")
-            # Try HD table commonNames (case-insensitive contains)
             result = HDSTARtable.query_by_common_name(norm)
             if not result:
                 # Then try NGC common names (exact ilike on full cell)
@@ -152,14 +145,11 @@ def search_object():
         print(f"Error during search: {e}")
         return jsonify({"status": "error", "message": "Invalid search format"})
 
-    # If result is found, process the result and return as JSON
     if result:
         # Check if result is a dictionary
         if isinstance(result, dict):
-            # If it's a dictionary, return it directly
             result_data = result
         else:
-            # If it's an SQLAlchemy model instance, use dynamic reflection
             result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
 
         name = result_data.get('Name', "Null")
@@ -168,13 +158,11 @@ def search_object():
         mag = result_data.get('V-Mag', 0)  # Default to 0 if V-Mag is missing or None
 
         # Extract friendly common name (non-HD variant) if available
-        # Try both 'commonNames' (HDSTARtable) and 'Common names' (NGCtable/IndexTable)
         common_names_raw = result_data.get('commonNames', '') or result_data.get('Common names', '')
         friendly_name = extract_friendly_common_name(common_names_raw)
         if friendly_name:
             result_data['friendlyName'] = friendly_name
 
-        # print(f"\n[TRACKING] {name} at RA: {ra}°, DEC: {dec}° with magnitude {mag}.\n", flush=True)
 
         # session["selectedObject"] = { # Adds to flask's session
         #     "name": name,
@@ -191,10 +179,9 @@ def search_object():
 
 def format_celestial_data(name, data):
     ra_hours = convert.HrMinSecToDegrees(data['ra'][0], data['ra'][1], data['ra'][2])
-    ra_degrees = ra_hours * 15  # Convert hours to degrees (360°/24h = 15°/h)
+    ra_degrees = ra_hours * 15  # Convert hours to degrees (360/24h = 15/h)
     
     dec_degrees = convert.HrMinSecToDegrees(data['dec'][0], data['dec'][1], data['dec'][2])
-    # DEC doesn't need the *15 factor - it's already degrees:arcminutes:arcseconds
     
     return {
         "Name": name.capitalize(),
@@ -237,9 +224,7 @@ def take_photo():
 
 @interface_bp.route("/get_telescopes", methods=["GET"])
 def get_telescopes():
-    """
-    Get all available telescopes from the database
-    """
+    # Get all available telescopes from the database
     try:
         from models.tables import Telescope
         telescopes = Telescope.get_all_telescopes()
@@ -262,9 +247,7 @@ def get_telescopes():
 
 @interface_bp.route("/select_telescope", methods=["POST"])
 def select_telescope():
-    """
-    Set the selected telescope in the user's session
-    """
+    # Set the selected telescope in the user's session
     from flask_login import current_user
     if not current_user.is_authenticated:
         return jsonify({"status": "error", "message": "Must be logged in to select telescope"}), 401
@@ -302,9 +285,7 @@ def select_telescope():
 
 @interface_bp.route("/get_selected_telescope", methods=["GET"])
 def get_selected_telescope():
-    """
-    Get the currently selected telescope from session
-    """
+    # Get the currently selected telescope from session
     selected_telescope = session.get('selected_telescope')
     if selected_telescope:
         return jsonify({"status": "success", "telescope": selected_telescope})
@@ -313,9 +294,7 @@ def get_selected_telescope():
 
 @interface_bp.route("/add_telescope", methods=["POST"])
 def add_telescope():
-    """
-    Add a new telescope to the database
-    """
+    # Add a new telescope to the database
     from flask_login import current_user
     if not current_user.is_authenticated:
         return jsonify({"status": "error", "message": "Must be logged in to manage telescopes"}), 401
@@ -343,9 +322,7 @@ def add_telescope():
 
 @interface_bp.route("/remove_telescope", methods=["POST"])
 def remove_telescope():
-    """
-    Remove a telescope from the database
-    """
+    # Remove a telescope from the database
     from flask_login import current_user
     if not current_user.is_authenticated:
         return jsonify({"status": "error", "message": "Must be logged in to manage telescopes"}), 401
@@ -360,7 +337,6 @@ def remove_telescope():
         from models.tables import Telescope
         result = Telescope.remove_telescope(telescope_id)
         
-        # If we removed the currently selected telescope, clear the session
         selected = session.get('selected_telescope', {})
         if result.get("status") == "success" and selected.get('telescope_id') == telescope_id:
             session.pop('selected_telescope', None)
@@ -372,9 +348,7 @@ def remove_telescope():
 
 @interface_bp.route("/update_telescope_heartbeat", methods=["POST"])
 def update_telescope_heartbeat():
-    """
-    Update the last seen timestamp for a telescope (heartbeat)
-    """
+    # Update the last seen timestamp for a telescope (heartbeat)
     try:
         data = request.json
         telescope_id = data.get("telescopeId") or data.get("telescope_id")
@@ -392,7 +366,7 @@ def update_telescope_heartbeat():
 
 @interface_bp.route("/start_live_view", methods=["POST"])
 def start_live_view():
-    """Start live view on the telescope"""
+    # Start live view on the telescope
     from flask_login import current_user
     if not current_user.is_authenticated:
         return jsonify({"status": "error", "message": "Must be logged in to control telescope"}), 401
@@ -410,7 +384,7 @@ def start_live_view():
 
 @interface_bp.route("/stop_live_view", methods=["POST"])
 def stop_live_view():
-    """Stop live view on the telescope"""
+    # Stop live view on the telescope
     from flask_login import current_user
     if not current_user.is_authenticated:
         return jsonify({"status": "error", "message": "Must be logged in to control telescope"}), 401
@@ -428,7 +402,7 @@ def stop_live_view():
 
 @interface_bp.route("/motor_command", methods=["POST"])
 def motor_command():
-    """Execute motor commands on the telescope"""
+    # Execute motor commands on the telescope
     from flask_login import current_user
     if not current_user.is_authenticated:
         return jsonify({"status": "error", "message": "Must be logged in to control telescope"}), 401
@@ -438,7 +412,7 @@ def motor_command():
         telescope_id = data.get("telescope_id") or data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescope_id')
         command = data.get("command")
         args = data.get("args")
-        motor_id = data.get("motor_id", "motor1")  # Default to motor1 for backward compatibility
+        motor_id = data.get("motor_id", "motor1") 
         
         if not telescope_id:
             return jsonify({"status": "error", "message": "No telescope selected"}), 400
@@ -493,7 +467,7 @@ def motor_command():
 
 @interface_bp.route("/get_motors", methods=["POST"])
 def get_motors():
-    """Get list of available motors for the selected telescope"""
+    # Get list of available motors for the selected telescope
     try:
         data = request.json or {}
         telescope_id = data.get("telescope_id") or data.get("telescopeId") or (session.get('selected_telescope') or {}).get('telescope_id')
@@ -516,6 +490,5 @@ def get_motors():
             return jsonify({"status": "success", "motors": ["motor1"]})
         
     except Exception as e:
-        # If query fails, return default motor
         print(f"Failed to get motors: {str(e)}")
         return jsonify({"status": "success", "motors": ["motor1"]})

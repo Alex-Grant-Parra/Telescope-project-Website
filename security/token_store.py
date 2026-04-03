@@ -109,7 +109,7 @@ def verify_token(raw_token: str, *, required_scope=None, client_ip=None, client_
 
 
 def migrate_json_tokens_to_db(tokens_file='security/api_tokens.json'):
-    """Best-effort one-way import from legacy JSON token file into DB."""
+    # Best-effort one-way import from legacy JSON token file into DB
     Telescope = _get_telescope_model()
     ensure_telescope_token_columns()
 
@@ -157,7 +157,7 @@ def migrate_json_tokens_to_db(tokens_file='security/api_tokens.json'):
 
 
 def ensure_telescope_token_columns():
-    """Ensure token-related columns exist in telescopes table."""
+    # Ensure token-related columns exist in telescopes table
     engine = db.engine
     inspector = inspect(engine)
 
@@ -201,7 +201,7 @@ def ensure_telescope_token_columns():
 
 
 def migrate_api_token_table_to_telescopes(drop_source_table=True):
-    """Migrate legacy api_token table rows into telescopes table and optionally drop source table."""
+    # Migrate legacy api_token rows into telescopes table and optionally drop source table
     Telescope = _get_telescope_model()
     ensure_telescope_token_columns()
 

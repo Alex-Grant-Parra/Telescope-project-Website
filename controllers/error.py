@@ -9,7 +9,6 @@ error_bp = Blueprint('error', __name__)
 VALID_ERROR_CODES = [400, 401, 403, 404, 500, 502, 503, 504]
 
 def _admin_guard():
-    """Helper to check admin privilege; returns (None) if OK or a Flask response to return."""
     if not current_user.is_authenticated or not current_user.is_admin:
         flash('Admin access required.', 'danger')
         return redirect(url_for('home.home'))
@@ -19,7 +18,7 @@ def _admin_guard():
 @error_bp.route('/errors/<int:code>')
 @login_required
 def test_error(code):
-    """Manually trigger error pages for testing purposes - Admin only"""
+    # Manually trigger error pages for testing purposes - Admin only
     
     guard = _admin_guard()
     if guard:
@@ -42,7 +41,7 @@ def test_error(code):
 @error_bp.route('/errors')
 @login_required
 def error_list():
-    """Show a list of available error pages for testing - Admin only"""
+    # Show a list of available error pages for testing - Admin only
     
     guard = _admin_guard()
     if guard:

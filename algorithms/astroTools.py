@@ -32,7 +32,7 @@ class CelestialObject:
         self.w = kwargs.get("ArgPeri") # Arugument of periapsis
         self.M = kwargs.get("MeanAnomaly") # Mean anomaly
 
-        self.T = 2451545.0 # Time at perihelion, epoch, currently julian date
+        self.T = SpaceTime.J2000_JD # Time at perihelion, epoch, currently julian date
 
         self.q = self.a * (1 - self.e) # Customary to give perihelion distance instead of a for hyperbolic orbits
 
@@ -57,12 +57,9 @@ class CelestialObject:
         self.r = None # Heliocentric distance
 
 def solveKepler(M_deg, e):
-    """
-    Solve Kepler's equation M = E - e*sin(E) for E (eccentric anomaly).
-    - Input M in degrees, e dimensionless.
-    - Returns E in degrees.
-    Uses a radian-space Newton iteration internally for numerical correctness.
-    """
+    # Solve Kepler's equation M = E - e*sin(E) for E (eccentric anomaly).
+    # Input M in degrees, e dimensionless, returns E in degrees.
+
     import math
     if e < 0 or e >= 1:
         raise ValueError("Eccentricity must be in [0, 1)")
@@ -93,21 +90,8 @@ data, planets = getPlanetsData(), {}
 for key, value in data.items():
     planets[key] = CelestialObject(**value)
 
-# example usage to get data
-# print(planets.get("mars").a) # returns 1.523688
-# print(planets.get("mars").e) # returns 0.093405
-# print(planets.get("mars").i) # returns 0.093405
-# print(planets.get("mars").N) # returns 1.8497
-# print(planets.get("mars").W) 
-# print(planets.get("mars").M) # returns 18.6021
-# print(planets.get("mars").P) # returns 18.6021
-
 def findAxialTilt(julianDate):
-    JD = julianDate-2451545.0 # The constant is the JD for J2000 1.5
-    T = JD/36525.0 # Days in a centuary
-    ChangeInTilt = ((46.815*T)+(0.0006*T**2)-(0.00181*T**3))/3600
-    Tilt = 23.439292-ChangeInTilt
-    return Tilt
+    return SpaceTime.getMeanObliquityDeg(julianDate)
 
 def findPlanet(year, month, day, planetChoice, hour: int = 0, minute: int = 0, second: float = 0.0):
 
@@ -122,19 +106,17 @@ def findPlanet(year, month, day, planetChoice, hour: int = 0, minute: int = 0, s
     J1990JD = 2447892.5
     JDdifference = currentJD - J1990JD + 1
 
-    # For the planet:
     Np = (360/365.242191 * JDdifference/planets.get(planetChoice).P)%360
     Mp = Np + planets.get(planetChoice).l - planets.get(planetChoice).W
     l = (Np + 360/pi * planets.get(planetChoice).e * sin(Mp) + planets.get(planetChoice).l)%360
     vp = l - planets.get(planetChoice).W
     r = (planets.get(planetChoice).a * (1 - planets.get(planetChoice).e ** 2)) / (1 + planets.get(planetChoice).e * cos(vp))
 
-    # For the earth
     Ne = (360/365.242191 * JDdifference/EarthPeriod)%360
     Me = Ne + EarthLongAtEpoch - EarthLongOfPeri
     L = (Ne + 360/pi * EarthEccentricity * sin(Me) + EarthLongAtEpoch)%360
     ve = L - EarthLongOfPeri
-    R = (EarthSemiMajorAxis * (1 - EarthEccentricity ** 2)) / (1 + EarthEccentricity * cos(ve)) # correct up to here
+    R = (EarthSemiMajorAxis * (1 - EarthEccentricity ** 2)) / (1 + EarthEccentricity * cos(ve))
     
     # Merged
 
@@ -155,12 +137,10 @@ def findPlanet(year, month, day, planetChoice, hour: int = 0, minute: int = 0, s
         EclipLong = (atan((R * sin(lPrime - L)) / (rPrime - R * cos (lPrime - L))) + lPrime)%360
         EclipLat = atan((rPrime * tan(Psi) * sin (EclipLong - lPrime)) / (R * sin(lPrime - L)))
 
-    # Convert ecliptic to equatorial coordinates # the converter is brocken, the ecliptic outputs are correct
     hmsLong = convert.DecimalToHrMinSec(EclipLat)
     hmsLat = convert.DecimalToHrMinSec(EclipLong)
 
     result = convert.EclipticToEquatorial(hmsLong, hmsLat, findAxialTilt(currentJD))
-    # result = convert.EclipticToEquatorial(hmsLong, hmsLat, 23.435992)
 
     return result
     
@@ -179,17 +159,16 @@ def findSun(year, month, day, usedForMoon=False, hour: int = 0, minute: int = 0,
     LR_e = GD_SUNDATA.get("Eccentricity")
     LR_daysBetween = LR_julianDate - SpaceTime.getJD(1990, 1, 0, 0, 0, 0.0)
     LR_N = ((360/365.242191)*LR_daysBetween)%360
-    # Mean anomaly in DEGREES
+    # Mean anomaly in degrees
     LR_M = LR_N + GD_SUNDATA.get("Ecliptic longitude (epoch)") - GD_SUNDATA.get("Ecliptic longitude (perigee)")
-    # Solve Kepler's equation using degree-based trig
+    # Solve kepler's equation for eccentric anomaly E
     LR_E = solveKepler(LR_M, GD_SUNDATA.get("Eccentricity"))
-    # True anomaly (degrees); atan returns degrees due to overrides
+    # True anomaly atan returns degrees due to overrides
     LR_V = 2 * atan(((1 + LR_e) / (1 - LR_e))**0.5 * tan(LR_E / 2))
     LR_EclLong = (LR_V + GD_SUNDATA.get("Ecliptic longitude (perigee)"))%360 
     if usedForMoon == False:
         return convert.EclipticToEquatorial(convert.DecimalToHrMinSec(0), convert.DecimalToHrMinSec(LR_EclLong), findAxialTilt(LR_julianDate))
     else:
-        # Return M (degrees) and ecliptic longitude for Moon phase computations
         return (LR_M, LR_EclLong)
 
 
@@ -239,7 +218,6 @@ def findMoon(year, month, day, hour: int = 0, minute: int = 0, second: float = 0
 
 
 def ra_dec_to_vector(ra, dec):
-    # print(ra, dec)
     return (
     cos(dec) * cos(ra),
     cos(dec) * sin(ra),
@@ -260,10 +238,7 @@ def phase_angle(ra_moon, dec_moon, ra_sun, dec_sun):
 
 
 def get_vmag_for_object(name, phaseDeg=None):
-    """Return V magnitude for a body without hitting the DB on every call.
-    Uses in-memory 'data' loaded at module import for planets and sun.
-    Moon remains dynamic (phase-dependent).
-    """
+    # Return V magnitude for a body without hitting the DB on every call
     name_l = name.lower()
 
     if name_l == "moon":
@@ -286,10 +261,7 @@ def get_vmag_for_object(name, phaseDeg=None):
 
 @timer
 def getAllCelestialData(year, month, day, hour: int = 0, minute: int = 0, second: float = 0.0):
-    """Primary implementation now delegates to ephemeris.get_positions.
-    Old algorithmic implementation is preserved below (commented out) for reference.
-    Returns data in the form expected by controllers: ra as [H,M,S], dec as [D,M,S], vmag.
-    """
+    # Primary implementation now delegates to ephemeris.get_positions; map results to controller format
     results = {}
 
     try:
@@ -341,20 +313,5 @@ def getAllCelestialData(year, month, day, hour: int = 0, minute: int = 0, second
         results["moon"] = {"ra": ra_moon, "dec": dec_moon, "vmag": vmag_moon}
     except Exception as e:
         print(f"findMoon calculation failed: {e}")
-
-    # If ephemeris didn't provide some bodies (fallback to previous implementation), keep old code commented
-    # --- begin legacy (commented) ---
-    # for planet_name in planets.keys():
-    #     if planet_name.lower() in ["sun", "moon"]:
-    #         continue
-    #     ra, dec = findPlanet(year, month, day, planet_name, hour=hour, minute=minute, second=second)
-    #     vmag = get_vmag_for_object(planet_name)
-    #     results[planet_name] = {"ra": ra, "dec": dec, "vmag": vmag}
-    # ra_sun, dec_sun = findSun(year, month, day, hour=hour, minute=minute, second=second)
-    # vmag = get_vmag_for_object("sun")
-    # results["sun"] = {"ra": ra_sun, "dec": dec_sun, "vmag": vmag}
-    # ra_moon, dec_moon = findMoon(year, month, day, hour=hour, minute=minute, second=second)
-    # results["moon"] = {"ra": ra_moon, "dec": dec_moon, "vmag": get_vmag_for_object("moon")}
-    # --- end legacy ---
 
     return results

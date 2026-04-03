@@ -39,7 +39,7 @@ def upload_file():
     except Exception as e:
         print(f"[WARN] Failed to print request diagnostics: {e}")
 
-    # Basic validation: ensure multipart form
+    # Ensure multipart form
     if not (request.mimetype or '').startswith('multipart/'):
         print("[ERROR] Request is not multipart/form-data")
         return jsonify({"status": "error", "message": "Content-Type must be multipart/form-data"}), 400

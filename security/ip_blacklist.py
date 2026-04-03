@@ -1,8 +1,6 @@
-"""
-IP Blacklist Manager for Telescope Project
-Fetches malicious IPs from multiple threat intelligence sources
-and provides blocking functionality for Flask applications.
-"""
+# IP blacklist manager for Telescope project
+# Fetches malicious IPs from multiple threat intelligence sources
+# and provides blocking functionality for Flask applications.
 
 import requests
 import ipaddress
@@ -16,13 +14,7 @@ import os
 
 class IPBlacklist:
     def __init__(self, blacklist_file='blacklist.txt', update_interval=3600):
-        """
-        Initialize IP Blacklist Manager
-        
-        Args:
-            blacklist_file: Local txt file to store blacklisted IPs
-            update_interval: How often to update the blacklist (seconds)
-        """
+        # Initialize the IP blacklist manager
         self.blacklist_file = Path(blacklist_file)
         self.update_interval = update_interval
         self.blacklisted_ips = set()
@@ -65,7 +57,7 @@ class IPBlacklist:
         self._start_background_updater()
     
     def _parse_spamhaus_drop(self, content: str) -> Set[str]:
-        """Parse Spamhaus DROP/EDROP format"""
+        # Parse Spamhaus DROP/EDROP format
         ips = set()
         for line in content.split('\n'):
             line = line.strip()
@@ -78,7 +70,7 @@ class IPBlacklist:
         return ips
     
     def _parse_simple_list(self, content: str) -> Set[str]:
-        """Parse simple IP list format"""
+        # Parse simple IP list format
         ips = set()
         for line in content.split('\n'):
             line = line.strip()
@@ -88,7 +80,7 @@ class IPBlacklist:
         return ips
     
     def _is_valid_ip_or_cidr(self, ip_str: str) -> bool:
-        """Check if string is valid IP address or CIDR block"""
+        # Check whether a string is a valid IP address or CIDR block
         try:
             ipaddress.ip_network(ip_str, strict=False)
             return True
@@ -96,7 +88,7 @@ class IPBlacklist:
             return False
     
     def _is_valid_cidr(self, cidr_str: str) -> bool:
-        """Check if string is valid CIDR block"""
+        # Check whether a string is a valid CIDR block
         try:
             ipaddress.ip_network(cidr_str, strict=False)
             return '/' in cidr_str
@@ -104,7 +96,7 @@ class IPBlacklist:
             return False
     
     def _fetch_from_source(self, source_name: str, source_config: Dict) -> Set[str]:
-        """Fetch IPs from a single source"""
+        # Fetch IPs from a single source
         try:
             self.logger.info(f"Fetching IPs from {source_name}")
             response = requests.get(
@@ -123,7 +115,7 @@ class IPBlacklist:
             return set()
     
     def update_blacklist(self) -> bool:
-        """Update blacklist from all sources"""
+        # Update blacklist from all configured sources
         self.logger.info("Starting blacklist update")
         new_ips = set()
         
@@ -141,7 +133,7 @@ class IPBlacklist:
         return True
     
     def is_ip_blacklisted(self, ip: str) -> bool:
-        """Check if an IP address is blacklisted"""
+        # Check whether an IP address is blacklisted
         try:
             client_ip = ipaddress.ip_address(ip)
             
@@ -167,7 +159,7 @@ class IPBlacklist:
             return False
     
     def add_manual_ip(self, ip: str) -> bool:
-        """Manually add an IP to the blacklist"""
+        # Manually add an IP to the blacklist
         if self._is_valid_ip_or_cidr(ip):
             with self._lock:
                 self.blacklisted_ips.add(ip)
@@ -177,7 +169,7 @@ class IPBlacklist:
         return False
     
     def remove_ip(self, ip: str) -> bool:
-        """Remove an IP from the blacklist"""
+        # Remove an IP from the blacklist
         with self._lock:
             if ip in self.blacklisted_ips:
                 self.blacklisted_ips.remove(ip)
@@ -187,7 +179,7 @@ class IPBlacklist:
         return False
     
     def get_stats(self) -> Dict:
-        """Get blacklist statistics"""
+        # Return blacklist statistics
         with self._lock:
             return {
                 'total_entries': len(self.blacklisted_ips),
@@ -197,7 +189,7 @@ class IPBlacklist:
             }
     
     def _save_blacklist(self):
-        """Save blacklist to text file"""
+        # Save blacklist to text file
         try:
             # Ensure directory exists
             self.blacklist_file.parent.mkdir(parents=True, exist_ok=True)
@@ -224,7 +216,7 @@ class IPBlacklist:
             self.logger.error(f"Failed to save blacklist: {str(e)}")
     
     def _load_blacklist(self):
-        """Load blacklist from text file"""
+        # Load blacklist from text file
         try:
             if self.blacklist_file.exists():
                 with open(self.blacklist_file, 'r') as f:
@@ -241,7 +233,6 @@ class IPBlacklist:
                 self.blacklisted_ips = loaded_ips
                 self.logger.info(f"Loaded {len(self.blacklisted_ips)} IPs from {self.blacklist_file}")
                 
-                # Try to extract last update time from file header
                 with open(self.blacklist_file, 'r') as f:
                     for line in f:
                         if line.startswith('# Last updated:'):
@@ -263,7 +254,7 @@ class IPBlacklist:
             self._save_blacklist()
     
     def _start_background_updater(self):
-        """Start background thread for periodic updates"""
+        # Start background thread for periodic updates
         def updater():
             while True:
                 try:
@@ -283,26 +274,10 @@ class IPBlacklist:
 _blacklist_instance = None
 
 def get_blacklist():
-    """Get global blacklist instance"""
+    # Return the global blacklist instance
     global _blacklist_instance
     if _blacklist_instance is None:
         # Store blacklist.txt in the security directory
         blacklist_file = Path(__file__).parent / 'blacklist.txt'
         _blacklist_instance = IPBlacklist(blacklist_file=blacklist_file)
     return _blacklist_instance
-
-if __name__ == "__main__":
-    # Test the blacklist
-    logging.basicConfig(level=logging.INFO)
-    blacklist = IPBlacklist(blacklist_file="test_blacklist.txt")
-    
-    # Test with the malicious IP
-    test_ip = "38.211.193.130"
-    print(f"Is {test_ip} blacklisted? {blacklist.is_ip_blacklisted(test_ip)}")
-    
-    # Show stats
-    stats = blacklist.get_stats()
-    print(f"Blacklist stats: {stats}")
-    
-    # Show location of blacklist file
-    print(f"Blacklist file: {blacklist.blacklist_file}")

@@ -50,7 +50,6 @@ def decrypt_text(value: Optional[str], *, fallback_plaintext: bool = True) -> Op
         f = _get_fernet()
         return f.decrypt(str(value).encode('utf-8')).decode('utf-8')
     except Exception:
-        # If it's not valid ciphertext (legacy plaintext in DB), optionally pass through
         if fallback_plaintext:
             return value
         raise

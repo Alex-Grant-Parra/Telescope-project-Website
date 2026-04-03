@@ -1,82 +1,121 @@
-from math import sin, cos, tan, asin, acos, atan, atan2, degrees, radians, pi, floor, sqrt
+from math import sin, cos, asin, atan2, degrees, radians
 
 class convert:
+
+    @staticmethod
+    def _apply_matrix_3x3(M, v):
+        return (
+            M[0][0] * v[0] + M[0][1] * v[1] + M[0][2] * v[2],
+            M[1][0] * v[0] + M[1][1] * v[1] + M[1][2] * v[2],
+            M[2][0] * v[0] + M[2][1] * v[1] + M[2][2] * v[2],
+        )
+
+    @staticmethod
+    def _rotate_x(v, angle_rad):
+        c = cos(angle_rad)
+        s = sin(angle_rad)
+        R = (
+            (1.0, 0.0, 0.0),
+            (0.0, c, -s),
+            (0.0, s, c),
+        )
+        return convert._apply_matrix_3x3(R, v)
+
+    @staticmethod
+    def _spherical_to_cartesian(lon_rad, lat_rad):
+        clat = cos(lat_rad)
+        return (
+            clat * cos(lon_rad),
+            clat * sin(lon_rad),
+            sin(lat_rad),
+        )
+
+    @staticmethod
+    def _cartesian_to_spherical(v):
+        x, y, z = v
+        lat = asin(max(-1.0, min(1.0, z)))
+        lon = atan2(y, x)
+        return lon, lat
     
     @staticmethod
     def HorizonToEquatorial(LL_AZ, LL_ELV, LR_latitude, LR_LST):
-
         LR_latitudeRAD = radians(LR_latitude)
-        LR_LSTRAD = radians(LR_LST)
+        LR_AZ = radians(convert.HrMinSecToDegrees(LL_AZ[0], LL_AZ[1], LL_AZ[2]))
+        LR_ELV = radians(convert.HrMinSecToDegrees(LL_ELV[0], LL_ELV[1], LL_ELV[2]))
 
-        LR_AZ = radians(convert.HrMinSecToDegrees(LL_AZ[0], LL_AZ[1], LL_AZ[2])) # Input Azimith
-        LR_ELV = radians(convert.HrMinSecToDegrees(LL_ELV[0], LL_ELV[1], LL_ELV[2])) # Input Elevation
+        # Horizon vector (north, east, up), with azimuth measured from north toward east.
+        v_hor = (
+            cos(LR_ELV) * cos(LR_AZ),
+            cos(LR_ELV) * sin(LR_AZ),
+            sin(LR_ELV),
+        )
 
-        # Finds the declination
-        LR_DEC = asin(sin(LR_ELV)*sin(LR_latitudeRAD) + cos(LR_ELV)*cos(LR_latitudeRAD)*cos(LR_AZ))
+        sphi = sin(LR_latitudeRAD)
+        cphi = cos(LR_latitudeRAD)
+        # Inverse of equatorial->horizon rotation.
+        R_hor_to_eq = (
+            (-sphi, 0.0, cphi),
+            (0.0, -1.0, 0.0),
+            (cphi, 0.0, sphi),
+        )
+        x_eq, y_eq, z_eq = convert._apply_matrix_3x3(R_hor_to_eq, v_hor)
 
-        # Finds the hour angle
-        LR_H = acos((sin(LR_ELV)-sin(LR_latitudeRAD)*sin(LR_DEC)) / (cos(LR_latitudeRAD)*cos(LR_DEC)))/15
+        LR_DEC_RAD = asin(max(-1.0, min(1.0, z_eq)))
+        LR_H_RAD = atan2(y_eq, x_eq)
+        LR_H_HOURS = (degrees(LR_H_RAD) / 15.0) % 24.0
+        LR_RA_HOURS = (LR_LST - LR_H_HOURS) % 24.0
 
-        if degrees(sin(LR_AZ)) > 0:
-            LR_H = 360 - LR_H
-
-        # Finds right ascension
-        LR_RA = (LR_LSTRAD - LR_H)%radians(24) # Calculates the right ascention
-        return(convert.DecimalToHrMinSec(degrees(LR_RA)), convert.DecimalToHrMinSec(degrees(LR_DEC))) # Returns a tuple of (Right Ascention, Declination)
+        return (
+            convert.DecimalToHrMinSec(LR_RA_HOURS),
+            convert.DecimalToHrMinSec(degrees(LR_DEC_RAD)),
+        )
 
     @staticmethod
     def EquatorialToHorizon(LL_RA, LL_DEC, LR_latitude, LR_LST):
-
-        def getHourAngle(LL_RA, LR_LST): # Getting hour angle, all units in degrees
-            LR_RA = convert.HrMinSecToDegrees(LL_RA[0], LL_RA[1], LL_RA[2])
-            LR_H = LR_LST - LR_RA
-
-            if LR_H < 0:
-                LR_H = LR_H + 24
-            return LR_H
-             
         LR_latitude_RAD = radians(LR_latitude)
-        LR_H_RAD = radians(getHourAngle(LL_RA, LR_LST)*15)
+
+        LR_RA_HOURS = convert.HrMinSecToDegrees(LL_RA[0], LL_RA[1], LL_RA[2])
         LR_DEC_RAD = radians(convert.HrMinSecToDegrees(LL_DEC[0], LL_DEC[1], LL_DEC[2]))
-        # print(getHourAngle(LL_RA, LR_LST))
-        # print(degrees(LR_H_RAD))
-        LR_ELV_RAD = asin(sin(LR_DEC_RAD) * sin(LR_latitude_RAD) + cos(LR_DEC_RAD) * cos(LR_latitude_RAD) * cos(LR_H_RAD))
+        LR_H_RAD = radians(((LR_LST - LR_RA_HOURS) % 24.0) * 15.0)
 
-        LR_AZ_RAD = acos((sin(LR_DEC_RAD) - sin(LR_latitude_RAD)*sin(LR_ELV_RAD)) / (cos(LR_latitude_RAD)*cos(LR_ELV_RAD)))
+        # Equatorial unit vector in (x, y, z) = (cos(dec)cos(H), cos(dec)sin(H), sin(dec)).
+        v_eq = (
+            cos(LR_DEC_RAD) * cos(LR_H_RAD),
+            cos(LR_DEC_RAD) * sin(LR_H_RAD),
+            sin(LR_DEC_RAD),
+        )
 
-        if sin(LR_H_RAD) > 0:
-            LR_AZ_DEG = 360 - degrees(LR_AZ_RAD)
-        else:
-            LR_AZ_DEG = degrees(LR_AZ_RAD)
+        sphi = sin(LR_latitude_RAD)
+        cphi = cos(LR_latitude_RAD)
+        R_eq_to_hor = (
+            (-sphi, 0.0, cphi),
+            (0.0, -1.0, 0.0),
+            (cphi, 0.0, sphi),
+        )
+        n, e, u = convert._apply_matrix_3x3(R_eq_to_hor, v_eq)
 
-        LR_ELV_DEG = degrees(LR_ELV_RAD)
+        LR_AZ_DEG = (degrees(atan2(e, n)) + 360.0) % 360.0
+        LR_ELV_DEG = degrees(asin(max(-1.0, min(1.0, u))))
 
-        return(convert.DecimalToHrMinSec(LR_AZ_DEG), convert.DecimalToHrMinSec(LR_ELV_DEG)) # Returns a tuple of (Azimuth, Elevation)
+        return (
+            convert.DecimalToHrMinSec(LR_AZ_DEG),
+            convert.DecimalToHrMinSec(LR_ELV_DEG),
+        )
 
     @staticmethod
     def EclipticToEquatorial(LL_EclLat, LL_EclLong, LR_AxialTiltDeg):
-        from math import sin, cos, tan, atan2, asin, radians, degrees
-
-        # Convert input H:M:S to decimal degrees, then to radians
         LR_EclLong = radians(convert.HrMinSecToDegrees(*LL_EclLong))
         LR_EclLat = radians(convert.HrMinSecToDegrees(*LL_EclLat))
         LR_AxialTiltRad = radians(LR_AxialTiltDeg)
 
-        # Compute declination
-        sinDEC = sin(LR_EclLat)*cos(LR_AxialTiltRad) + cos(LR_EclLat)*sin(LR_AxialTiltRad)*sin(LR_EclLong)
-        LR_DEC = degrees(asin(sinDEC))  # Now safely in [-90°, +90°]
+        v_ecl = convert._spherical_to_cartesian(LR_EclLong, LR_EclLat)
+        v_eq = convert._rotate_x(v_ecl, LR_AxialTiltRad)
+        LR_RA_RAD, LR_DEC_RAD = convert._cartesian_to_spherical(v_eq)
 
-        # Compute right ascension
-        Y = sin(LR_EclLong)*cos(LR_AxialTiltRad) - tan(LR_EclLat)*sin(LR_AxialTiltRad)
-        X = cos(LR_EclLong)
-        RA_rad = atan2(Y, X)
-        LR_RA = (degrees(RA_rad) / 15) % 24  # Convert to hours and wrap to [0, 24)
+        LR_RA = (degrees(LR_RA_RAD) / 15.0) % 24.0
+        LR_DEC = degrees(LR_DEC_RAD)
 
-        # Convert both to H:M:S format
-        LR_RA = convert.DecimalToHrMinSec(LR_RA)
-        LR_DEC = convert.DecimalToHrMinSec(LR_DEC)
-
-        return LR_RA, LR_DEC
+        return convert.DecimalToHrMinSec(LR_RA), convert.DecimalToHrMinSec(LR_DEC)
 
     
     @staticmethod
@@ -89,14 +128,11 @@ class convert:
         LR_RA = radians(LR_RA*15)
         LR_DEC = radians(LR_DEC)
 
-        LR_EclLat = asin(sin(LR_DEC)*cos(LR_AxialTiltRad) - cos(LR_DEC)*sin(LR_AxialTiltRad)*sin(LR_RA))
+        v_eq = convert._spherical_to_cartesian(LR_RA, LR_DEC)
+        v_ecl = convert._rotate_x(v_eq, -LR_AxialTiltRad)
+        LR_EclLong, LR_EclLat = convert._cartesian_to_spherical(v_ecl)
 
-        LR_Y = sin(LR_RA)*cos(LR_AxialTiltRad) + tan(LR_DEC)*sin(LR_AxialTiltRad)
-        LR_X = cos(LR_RA)
-
-        LR_EclLong = atan2(LR_Y, LR_X)
-
-        LR_EclLong = convert.DecimalToHrMinSec(degrees(LR_EclLong))
+        LR_EclLong = convert.DecimalToHrMinSec((degrees(LR_EclLong) + 360.0) % 360.0)
         LR_EclLat = convert.DecimalToHrMinSec(degrees(LR_EclLat))
 
         return (LR_EclLat, LR_EclLong)
@@ -119,7 +155,7 @@ class convert:
 
     @staticmethod
     def DegreesToHMS(LR_degrees):
-        """Convert decimal degrees to [hour, minute, second] with rollover handling."""
+        # Convert decimal degrees to [hour, minute, second] with rollover handling
         LR_hours = (LR_degrees / 15.0) % 24.0
         LI_hours = int(LR_hours)
         LR_minutes = (LR_hours - LI_hours) * 60.0
@@ -137,7 +173,7 @@ class convert:
 
     @staticmethod
     def DegreesToDMS(LR_degrees):
-        """Convert signed decimal degrees to [degree, minute, second] with rollover handling."""
+        # Convert signed decimal degrees to [degree, minute, second] with rollover handling
         LI_sign = -1 if LR_degrees < 0 else 1
         LR_absDegrees = abs(LR_degrees)
         LI_degrees = int(LR_absDegrees)

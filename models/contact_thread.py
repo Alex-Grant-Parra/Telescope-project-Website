@@ -21,7 +21,7 @@ class ContactMessageEntry(db.Model):
 
 
 def ensure_contact_entry_attachment_columns():
-    """Ensure attachment-related columns exist on contact_message_entry."""
+    # Ensure attachment related columns exist on contact_message_entry
     engine = db.engine
     inspector = inspect(engine)
 

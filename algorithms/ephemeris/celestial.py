@@ -6,7 +6,7 @@ class CelestialBody:
         self.series = series
 
     def position(self, jd):
-        """Compute RA, Dec, distance. To be implemented in subclass."""
+        # Compute RA, Dec, distance
         raise NotImplementedError
 
 class Planet(CelestialBody):
