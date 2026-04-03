@@ -1,4 +1,4 @@
-# Telescope Project (Canary)
+# ASTRA (Automated Sidereal Tracking & Remote Astronomy)
 
 An open-source web UI and control stack for an automatic tracking telescope and small planetarium. The repository contains a Flask web application, plate-solver helpers, camera control utilities, and a client-side planetarium view.
 

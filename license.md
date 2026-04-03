@@ -1,13 +1,13 @@
 # ASTRA Personal Use License (APUL) v1.0
 
-Copyright (c) 2026 Alex Grant
+Copyright (c) 2026 Alex Grant-Parra
 
 ---
 
 ## 1. Definitions
 
 - **"Software"** refers to all source code, binaries, documentation, and associated materials provided under this licence.  
-- **"Author"** refers to Alex Grant.  
+- **"Author"** refers to Alex Grant-Parra.  
 - **"Official Service"** refers to any server, API, or infrastructure operated by the Author.  
 - **"Modified Version"** refers to any version of the Software that has been altered from its original form.  
 - **"Public Service"** refers to any server, platform, or system made accessible to users beyond a single private individual or organisation.  
