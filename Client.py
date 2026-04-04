@@ -3,7 +3,6 @@
 from asyncio import run
 import time
 from core.networking.websocket import websocketClient, cleanup_camera
-from core.system.hotspot import HotspotController
 from core.camera.controller import Camera
 from utils.location import update_location_config
 from utils.camera_state import camera_state
@@ -61,13 +60,9 @@ if __name__ == "__main__":
         update_location_config()
         
         cfg = load_local_config()
-        # CLIENT_ID = cfg["client_id"]
-        # hotspot = HotspotController()
-        # hotspot.startHotspot(ssid=CLIENT_ID, password="telescope")
         
         # Run the main websocket client (camera scanner runs as background task)
         run(websocketClient(cfg))
     except KeyboardInterrupt:
         print("[global] KeyboardInterrupt received, exiting and releasing camera...")
         cleanup_camera()
-        HotspotController.stopHotspot()
