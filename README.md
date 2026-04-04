@@ -14,6 +14,14 @@ Before running, fill these required values in `config/client_profile.json`:
 - `client_config.base_url` (example: `https://telescopes.dev/`)
 - `client_config.api_token`
 
+Set up a venv:
+
+- `python -m venv venv`
+
+And finally install packages
+
+- `pip install -r requirements.txt`
+
 ## Run
 
 ```bash
