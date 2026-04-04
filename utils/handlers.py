@@ -8,6 +8,7 @@ from core.camera.controller import Camera # type: ignore
 from core.networking.csrf import get_csrf_token, SESSION
 from utils.liveview_state import load_liveview_state, save_liveview_state
 from utils.camera_state import camera_state
+from utils.config_state import get_client_config, build_service_urls, load_static_state
 from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig
 from core.hardware.tracking import trackCoordinates, stop_tracking
 from utils.telescope_state import get_telescope_coords
@@ -47,10 +48,8 @@ def requires_camera(operation_name: str = "operation"):
 # Default server URL; will be overridden by config if present
 SERVER_URL = "https://telescopes.dev"
 try:
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'r') as cf:
-            cfg = json.load(cf)
-            SERVER_URL = cfg.get('server_http_url', SERVER_URL)
+    cfg = get_client_config()
+    SERVER_URL = build_service_urls(cfg.get("base_url", SERVER_URL))["http_url"].rstrip("/")
 except Exception:
     # If the config can't be read, continue with default
     pass
@@ -235,13 +234,11 @@ _ESP32_CONN: Optional[ESP32Connection] = None
 def _load_motor_config() -> dict:
     """Load motor configuration from config/client_config.json"""
     try:
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r') as f:
-                config = json.load(f)
-                esp32_config = config.get('esp32', {})
-                if esp32_config:
-                    print(f"[MOTORS] Loaded ESP32 configuration from {CONFIG_FILE}")
-                    return esp32_config
+        config = load_static_state()
+        esp32_config = config.get('esp32', {})
+        if esp32_config:
+            print(f"[MOTORS] Loaded ESP32 configuration from {CONFIG_FILE}")
+            return esp32_config
     except Exception as e:
         print(f"[MOTORS] Warning: Could not load ESP32 config: {e}")
     

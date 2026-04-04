@@ -1,28 +1,16 @@
-import os
-import json
-from typing import Optional
-
-LIVEVIEW_STATE_FILE = "config/liveview_state.json"
+from utils.config_state import load_runtime_state, save_runtime_state
 
 def load_liveview_state() -> bool:
-    """Load live view state from file; defaults to False if missing or unreadable."""
-    if os.path.exists(LIVEVIEW_STATE_FILE):
-        try:
-            with open(LIVEVIEW_STATE_FILE, 'r') as f:
-                state = json.load(f)
-                return bool(state.get("enabled", False))
-        except Exception:
-            pass
-    return False
+    """Load live view state from runtime state file."""
+    state = load_runtime_state()
+    return bool(state.get("liveview_enabled", False))
 
 
 def save_liveview_state(enabled: bool) -> None:
-    """Persist live view state to file."""
-    try:
-        with open(LIVEVIEW_STATE_FILE, 'w') as f:
-            json.dump({"enabled": bool(enabled)}, f)
-    except Exception:
-        pass
+    """Persist live view state to runtime state file."""
+    state = load_runtime_state()
+    state["liveview_enabled"] = bool(enabled)
+    save_runtime_state(state)
 
 
 def is_liveview_enabled() -> bool:

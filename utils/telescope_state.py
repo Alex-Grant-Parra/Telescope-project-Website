@@ -1,34 +1,16 @@
-import json
-import os
 from datetime import datetime
 from typing import Optional, Dict, Any
-
-TELESCOPE_STATE_FILE = os.path.join("config", "telescope_state.json")
+from utils.config_state import load_runtime_state, save_runtime_state, get_slew_config as get_static_slew_config
 
 _STATE_CACHE: Optional[Dict[str, Any]] = None
 
 
 def _load_state_from_disk() -> Optional[Dict[str, Any]]:
-    if not os.path.exists(TELESCOPE_STATE_FILE):
-        return None
-    try:
-        with open(TELESCOPE_STATE_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"[telescope_state] Failed to read state: {e}")
-        return None
+    return load_runtime_state()
 
 
 def _write_state_to_disk(state: Dict[str, Any]) -> None:
-    os.makedirs(os.path.dirname(TELESCOPE_STATE_FILE), exist_ok=True)
-    try:
-        with open(TELESCOPE_STATE_FILE, "w") as f:
-            json.dump(state, f, indent=2)
-            f.flush()  # Force write to disk
-            os.fsync(f.fileno())  # Ensure OS writes to disk
-        # print(f"[telescope_state] State written to disk")  # Uncomment for debugging
-    except Exception as e:
-        print(f"[telescope_state] Failed to write state: {e}")
+    save_runtime_state(state)
 
 
 def get_telescope_coords() -> Optional[Dict[str, float]]:
@@ -190,32 +172,6 @@ def update_hour_angle() -> Optional[float]:
 
 
 def get_slew_config() -> Dict[str, float]:
-    """Return slewing configuration (speeds and thresholds)."""
-    global _STATE_CACHE
-    if _STATE_CACHE is None:
-        _STATE_CACHE = _load_state_from_disk()
-    if not _STATE_CACHE:
-        # Return defaults if no config found
-        return {
-            "slew_speed_sps": 1200.0,
-            "refine_speed_sps": 150.0,
-            "tracking_speed_sps": 6.7,
-            "slew_threshold_degrees": 1.0,
-            "center_threshold_degrees": 0.1,
-            "centered_threshold_degrees": 0.01,
-            "ra_gear_ratio": 360.0,
-            "dec_gear_ratio": 144.0,
-        }
-    config = _STATE_CACHE.get("slew_config", {})
-    # Return with defaults for any missing keys
-    return {
-        "slew_speed_sps": float(config.get("slew_speed_sps", 1200.0)),
-        "refine_speed_sps": float(config.get("refine_speed_sps", 150.0)),
-        "tracking_speed_sps": float(config.get("tracking_speed_sps", 6.7)),
-        "slew_threshold_degrees": float(config.get("slew_threshold_degrees", 1.0)),
-        "center_threshold_degrees": float(config.get("center_threshold_degrees", 0.1)),
-        "centered_threshold_degrees": float(config.get("centered_threshold_degrees", 0.01)),
-        "ra_gear_ratio": float(config.get("ra_gear_ratio", 360.0)),
-        "dec_gear_ratio": float(config.get("dec_gear_ratio", 144.0)),
-    }
+    """Return slewing configuration (speeds and thresholds) from static state."""
+    return get_static_slew_config()
 

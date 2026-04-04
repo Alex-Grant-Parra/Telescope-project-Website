@@ -1,12 +1,12 @@
 """
 GPS Location Module
-Retrieves GPS coordinates (latitude and longitude) and stores them in config/location.json
+Retrieves GPS coordinates (latitude and longitude) and stores them in static client config state
 Supports both hardware GPS (via gpsd) and IP-based geolocation as fallback
 """
 
-import os
 import json
 from datetime import datetime
+from utils.config_state import save_location, get_location
 
 
 def get_gps_from_hardware():
@@ -78,12 +78,6 @@ def update_location_config():
     Update the location configuration file with current GPS coordinates
     Tries hardware GPS first, falls back to IP geolocation
     """
-    config_dir = "config"
-    config_path = os.path.join(config_dir, "location.json")
-    
-    # Ensure config directory exists
-    os.makedirs(config_dir, exist_ok=True)
-    
     print("[location] Attempting to retrieve GPS coordinates...")
     
     # Try hardware GPS first
@@ -101,10 +95,9 @@ def update_location_config():
     # Add metadata
     location_data['last_updated'] = datetime.utcnow().isoformat()
     
-    # Save to file
+    # Save to static config state
     try:
-        with open(config_path, 'w') as f:
-            json.dump(location_data, f, indent=2)
+        save_location(location_data)
         
         source = location_data.get('source', 'unknown')
         lat = location_data.get('latitude', 'N/A')
@@ -121,14 +114,9 @@ def get_current_location():
     Read the current location from the config file
     Returns: dict with location data if file exists, None otherwise
     """
-    config_path = os.path.join("config", "location.json")
-    
-    if not os.path.exists(config_path):
-        return None
-    
     try:
-        with open(config_path, 'r') as f:
-            return json.load(f)
+        location = get_location()
+        return location or None
     except Exception as e:
         print(f"[location] Failed to read location data: {e}")
         return None

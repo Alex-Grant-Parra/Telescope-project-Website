@@ -8,29 +8,34 @@ This guide explains how to configure and run the telescope client with the new a
 
 Run the setup command:
 ```bash
-python websocket_client.py setup
+python Client.py setup
 ```
 
 This will prompt you to enter:
 - **Client ID**: Unique identifier for your telescope (e.g., "pi-001", "telescope-main")
-- **Server URI**: WebSocket server address (e.g., "ws://telescopes.dev:4000")
+- **Base URL**: Server URL (e.g., "https://telescopes.dev/")
 - **API Token**: Authentication token from the server administrator
+
+The client automatically derives:
+- command websocket URL: `wss://ws.<host>/`
+- liveview websocket URL: `wss://liveview.<host>/`
+- HTTP URL: `<base_url>`
 
 ### Method 2: Manual Configuration
 
-1. Copy the example config file:
-   ```bash
-   cp client_config_example.json client_config.json
-   ```
-
-2. Edit `client_config.json` with your settings:
+Edit `config/client_profile.json` with your settings:
    ```json
    {
-     "client_id": "your-unique-telescope-id",
-     "server_uri": "ws://your-server-ip:4000",
-     "api_token": "your-api-token-from-server-admin"
+       "client_config": {
+          "client_id": "your-unique-telescope-id",
+          "base_url": "https://telescopes.dev/",
+          "api_token": "your-api-token-from-server-admin"
+       },
+       "location": {}
    }
    ```
+
+Static hardware/slewing settings stay in `config/client_config.json`.
 
 ## Getting an API Token
 
@@ -49,7 +54,7 @@ Contact your telescope server administrator to get an API token. They need to:
 
 Once configured, simply run:
 ```bash
-python websocket_client.py
+python Client.py
 ```
 
 The client will:
@@ -61,8 +66,8 @@ The client will:
 ## Troubleshooting
 
 ### "No API token configured"
-- Run `python websocket_client.py setup` to configure
-- Or ensure `client_config.json` exists with valid `api_token`
+- Run `python Client.py setup` to configure
+- Or ensure `config/client_profile.json` exists with valid `client_config.api_token`
 
 ### "Authentication failed"
 - Check that your API token is valid and not revoked
@@ -75,7 +80,7 @@ The client will:
 - Contact administrator if this persists
 
 ### Connection Issues
-- Verify the server URI is correct (IP address and port)
+- Verify the base URL is correct (domain and protocol)
 - Check network connectivity to the server
 - Ensure firewall allows outbound connections on the specified port
 
@@ -83,16 +88,22 @@ The client will:
 
 ```json
 {
-  "client_id": "unique-telescope-identifier",
-  "server_uri": "ws://server-ip:4000",
-  "api_token": "your-authentication-token"
+   "client_config": {
+      "client_id": "unique-telescope-identifier",
+      "base_url": "https://telescopes.dev/",
+      "api_token": "your-authentication-token"
+   },
+   "location": {}
 }
 ```
 
 ### Fields:
-- **client_id**: Unique identifier for your telescope client
-- **server_uri**: WebSocket server address (include ws:// prefix)
-- **api_token**: Authentication token provided by server administrator
+- **client_config.client_id**: Unique identifier for your telescope client
+- **client_config.base_url**: Base server URL used to derive all endpoints
+- **client_config.api_token**: Authentication token provided by server administrator
+- **location**: Static/slow-changing site location metadata
+
+The client will exit at startup if required values (`client_id`, `base_url`, `api_token`) are missing or empty.
 
 ## Security Notes
 

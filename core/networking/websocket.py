@@ -4,38 +4,15 @@ import ujson as json  # Using ujson for faster serialization
 import time
 import subprocess
 import sys
-import re
 import signal
-import os
 from datetime import datetime
 from utils.handlers import function_map
 from utils.liveview_state import is_liveview_enabled, save_liveview_state
 from utils.camera_state import camera_state, camera_scanner_task
+from utils.config_state import get_client_config, save_client_config, build_service_urls
 
 
-def _to_ws_uri(raw: str, default_subdomain: str | None = None) -> str:
-    """Normalize a configured URI to a WebSocket URI.
-
-    - If `raw` already starts with ws:// or wss:// it's returned unchanged.
-    - If `raw` starts with http:// or https:// the scheme is converted to ws:// or wss://.
-    - If `raw` contains no scheme and `default_subdomain` is provided, the subdomain is prepended
-      and `wss://` is used.
-    """
-    if not raw:
-        return raw
-    raw = raw.strip()
-    if raw.startswith("ws://") or raw.startswith("wss://"):
-        return raw
-    if raw.startswith("http://"):
-        return "ws://" + raw[len("http://"):]
-    if raw.startswith("https://"):
-        return "wss://" + raw[len("https://"):]
-    # No scheme provided; assume secure websocket and optionally add subdomain
-    if default_subdomain:
-        return f"wss://{default_subdomain}.{raw}"
-    return f"wss://{raw}"
-
-# Configuration values are provided via `config/client_config.json` at runtime.
+# Configuration values are provided via `config/client_profile.json` at runtime.
 # No hard-coded defaults are kept here.
 
 # Module-level placeholders (populated from the config passed into websocketClient)
@@ -45,51 +22,37 @@ LIVEVIEW_URI = None
 SERVER_HTTP_URL = None
 
 def load_config(allow_missing: bool = False):
-    """Load client configuration from `config/client_config.json`.
-
-    If `allow_missing` is False (default) this will raise FileNotFoundError when
-    the config file does not exist. When `allow_missing` is True an empty dict
-    is returned to allow interactive setup to proceed.
-    """
-    config_path = "config/client_config.json"
-    if not os.path.exists(config_path):
+    """Load client configuration from static state."""
+    try:
+        return get_client_config()
+    except Exception:
         if allow_missing:
             return {}
-        raise FileNotFoundError(
-            f"Configuration file '{config_path}' not found. Run 'python Client.py setup' to create it."
-        )
-
-    try:
-        with open(config_path, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        # Propagate the error to make failures explicit
         raise
 
 def save_config(config):
-    """Save client configuration"""
+    """Save client configuration to static state."""
     try:
-        with open("config/client_config.json", 'w') as f:
-            json.dump(config, f, indent=2)
-        print(f"[config] Configuration saved to config/client_config.json")
+        save_client_config(config)
+        print(f"[config] Configuration saved to config/client_profile.json")
     except Exception as e:
         print(f"[config] Error saving config: {e}")
 
 # Note: configuration is now loaded at runtime inside `websocketClient()` so
 # that the `setup` command can create the config file when it doesn't exist.
 # There are no hard-coded defaults — the values must come from
-# `config/client_config.json`.
+# `config/client_profile.json`.
 API_TOKEN = None
 
 async def authenticate_with_server(ws):
     """Send authentication message to server"""
     if not API_TOKEN:
         print("[auth] ERROR: No API token configured!")
-        print("[auth] Please set your API token in config/client_config.json")
+        print("[auth] Please set your API token in config/client_profile.json")
         print("[auth] Example config:")
         print(json.dumps({
             "client_id": CLIENT_ID,
-            "server_uri": SERVER_URI,
+            "base_url": SERVER_HTTP_URL,
             "api_token": "your-token-here"
         }, indent=2))
         raise Exception("No API token configured")
@@ -479,10 +442,10 @@ def setup_client_config():
     if new_client_id:
         current_config['client_id'] = new_client_id
     
-    print(f"Current server URI: {current_config.get('server_uri', 'Not set')}")
-    new_server_uri = input("Enter server URI (press Enter to keep current): ").strip()
-    if new_server_uri:
-        current_config['server_uri'] = new_server_uri
+    print(f"Current base URL: {current_config.get('base_url', 'Not set')}")
+    new_base_url = input("Enter base URL (e.g. https://telescopes.dev/, press Enter to keep current): ").strip()
+    if new_base_url:
+        current_config['base_url'] = new_base_url
     
     print(f"Current API token: {'***set***' if current_config.get('api_token') else 'Not set'}")
     new_token = input("Enter API token (press Enter to keep current): ").strip()
@@ -503,39 +466,21 @@ async def websocketClient(cfg: dict = None):
     if cfg is None:
         cfg = load_config()
 
-    # Ensure required keys are present in the config (no defaults)
-    # Accept either `server_url` (host) or `server_uri` (full ws host) in config.
-    required_keys = ["client_id", "api_token"]
-    missing = [k for k in required_keys if k not in cfg]
+    # Ensure required keys are present in the config
+    required_keys = ["client_id", "base_url", "api_token"]
+    missing = [k for k in required_keys if not isinstance(cfg.get(k), str) or not cfg.get(k).strip()]
     if missing:
-        raise KeyError(f"Missing keys in config/client_config.json: {', '.join(missing)}. Run 'python Client.py setup' to create or fix the config.")
+        raise KeyError(f"Missing required values in config/client_profile.json: {', '.join(missing)}. Run 'python Client.py setup' to create or fix the config.")
 
     # Export values to module-level globals used by other functions
     global CLIENT_ID, SERVER_URI, LIVEVIEW_URI, SERVER_HTTP_URL, API_TOKEN
 
     CLIENT_ID = cfg["client_id"]
     API_TOKEN = cfg["api_token"]
-
-    # Determine HTTP host (server_url or http_uri)
-    SERVER_HTTP_URL = cfg.get("server_url") or cfg.get("http_uri") or cfg.get("http")
-
-    # If the config already provides full websocket/liveview hosts, use them.
-    # Otherwise construct secure websocket addresses from the HTTP host.
-    if cfg.get("server_uri"):
-        SERVER_URI = _to_ws_uri(cfg["server_uri"], default_subdomain="ws")
-    elif SERVER_HTTP_URL:
-        host = re.sub(r"^https?://", "", SERVER_HTTP_URL)
-        SERVER_URI = f"wss://ws.{host}"
-    else:
-        raise KeyError("No server host configured. Provide 'server_url' or 'server_uri' in config/client_config.json")
-
-    if cfg.get("liveview_uri"):
-        LIVEVIEW_URI = _to_ws_uri(cfg["liveview_uri"], default_subdomain="liveview")
-    elif SERVER_HTTP_URL:
-        host = re.sub(r"^https?://", "", SERVER_HTTP_URL)
-        LIVEVIEW_URI = f"wss://liveview.{host}"
-    else:
-        LIVEVIEW_URI = None
+    urls = build_service_urls(cfg["base_url"])
+    SERVER_HTTP_URL = urls["http_url"]
+    SERVER_URI = urls["server_uri"]
+    LIVEVIEW_URI = urls["liveview_uri"]
     
     
     

@@ -1,26 +1,37 @@
 # Main client entry point
 
 from asyncio import run
-import os
 import time
-import ujson as json
 from core.networking.websocket import websocketClient, cleanup_camera
 from core.system.hotspot import HotspotController
 from core.camera.controller import Camera
 from utils.location import update_location_config
 from utils.camera_state import camera_state
+from utils.config_state import (
+    get_client_config,
+    ensure_state_files,
+    get_missing_required_client_fields,
+)
+
+
+def _validate_required_client_config() -> None:
+    missing = get_missing_required_client_fields()
+    if not missing:
+        return
+
+    print("\n[config] Missing required client configuration fields.")
+    print("[config] Required: client_id, base_url, api_token")
+    print("[config] Update config/client_profile.json and rerun Client.py")
+    raise SystemExit(78)
 
 
 def load_local_config():
-    path = "config/client_config.json"
-    if not os.path.exists(path):
-        print(f"Configuration file '{path}' not found. Run 'python Client.py setup' to create it.")
-        raise SystemExit(1)
     try:
-        with open(path, 'r') as f:
-            return json.load(f)
+        ensure_state_files()
+        _validate_required_client_config()
+        return get_client_config()
     except Exception as e:
-        print(f"Failed to read {path}: {e}")
+        print(f"Failed to read configuration files: {e}")
         raise SystemExit(1)
 
 
