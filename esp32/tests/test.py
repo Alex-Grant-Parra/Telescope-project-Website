@@ -1,3 +1,8 @@
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from interfaceESP32 import ESP32Connection, ESP32Motor, ESP32SerialConfig
 import time
 import random
@@ -27,7 +32,7 @@ motor2 = ESP32Motor.create(
 )
 
 
-motor2.set_speed_sps(1600)
-motor2.turn_degrees(360)
-# motor1.disengage()
-# motor2.disengage()
+motor1.turn_degrees(360, forward=True, waitUntilFinished=True)
+motor2.turn_degrees(180, forward=False, waitUntilFinished=True)
+print(motor1.get_position())
+print(motor2.get_position())
