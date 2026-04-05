@@ -96,11 +96,12 @@ async def handle_server(ws):
                     all_args = ", ".join(filter(None, [args_str, kwargs_str]))
                     print(f"[function_call] Calling {function_name}({all_args})")
                     
-                    # Call function with both args and kwargs
+                    # Run handlers off the event loop so frame streaming and ping/pong
+                    # are not blocked by long camera or motor operations.
                     if kwargs:
-                        result = func(*args, **kwargs)
+                        result = await asyncio.to_thread(func, *args, **kwargs)
                     else:
-                        result = func(*args)
+                        result = await asyncio.to_thread(func, *args)
                     
                     response = json.dumps({"result": result, "id": data.get("id")})
                 else:
@@ -197,6 +198,33 @@ async def send_frames():
     consecutive_failures = 0  # Track consecutive camera start failures
     process_start_time = 0  # Track when process was started
 
+    def _read_proc_stderr_text(p):
+        """Best-effort stderr extraction for terminated gphoto2 processes."""
+        if not p or p.stderr is None:
+            return ""
+        try:
+            data = p.stderr.read()
+            if not data:
+                return ""
+            if isinstance(data, bytes):
+                return data.decode("utf-8", errors="replace").strip()
+            return str(data).strip()
+        except Exception:
+            return ""
+
+    def _cleanup_usb_camera_lockers() -> None:
+        """Best-effort cleanup of processes that commonly lock camera USB endpoints."""
+        locker_patterns = [
+            "gvfs-gphoto2-volume-monitor",
+            "gvfsd-gphoto2",
+            "gphoto2",
+        ]
+        for pattern in locker_patterns:
+            try:
+                subprocess.run(["pkill", "-f", pattern], capture_output=True, timeout=2)
+            except Exception:
+                pass
+
     while True:  # Outer reconnection loop
         connection_start_time = time.time()
         ws = None
@@ -265,10 +293,22 @@ async def send_frames():
                     try:
                         # Small delay before starting gphoto2 to allow any pending camera commands to complete
                         await asyncio.sleep(0.3)
+
+                        # Some cameras require viewfinder/liveview to be explicitly enabled
+                        # before --capture-movie produces frames.
+                        try:
+                            subprocess.run(
+                                ["gphoto2", "--set-config", "viewfinder=1"],
+                                capture_output=True,
+                                text=True,
+                                timeout=3,
+                            )
+                        except Exception:
+                            pass
                         
                         proc = subprocess.Popen([
                             "gphoto2", "--capture-movie", "--stdout"
-                        ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                         
                         # Set non-blocking mode on stdout
                         flags = fcntl.fcntl(proc.stdout, fcntl.F_GETFL)
@@ -293,7 +333,14 @@ async def send_frames():
                             current_time = time.time()
                             if current_time - last_process_check_time >= process_check_interval:
                                 if proc.poll() is not None:
+                                    stderr_text = _read_proc_stderr_text(proc)
                                     print(f"[send_frames] Camera process terminated unexpectedly (exit code: {proc.returncode})")
+                                    if stderr_text:
+                                        print(f"[send_frames] gphoto2 stderr: {stderr_text}")
+                                        if "could not claim the usb device" in stderr_text.lower():
+                                            print("[send_frames] USB busy detected. Releasing camera lock holders...")
+                                            _cleanup_usb_camera_lockers()
+                                            await asyncio.sleep(1.5)
                                     break
                                 last_process_check_time = current_time
                             
@@ -303,7 +350,14 @@ async def send_frames():
                                 if not chunk:
                                     # Empty read may mean no data available (non-blocking) or EOF
                                     if proc.poll() is not None:
-                                        print(f"[send_frames] Camera process ended (reached EOF)")
+                                        stderr_text = _read_proc_stderr_text(proc)
+                                        print(f"[send_frames] Camera process ended (reached EOF, exit code: {proc.returncode})")
+                                        if stderr_text:
+                                            print(f"[send_frames] gphoto2 stderr: {stderr_text}")
+                                            if "could not claim the usb device" in stderr_text.lower():
+                                                print("[send_frames] USB busy detected. Releasing camera lock holders...")
+                                                _cleanup_usb_camera_lockers()
+                                                await asyncio.sleep(1.5)
                                         break
                                     # No data available right now, yield to event loop
                                     await asyncio.sleep(0.01)

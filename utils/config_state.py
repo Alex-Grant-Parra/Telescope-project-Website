@@ -261,7 +261,9 @@ def load_runtime_state() -> Dict[str, Any]:
 
 def save_runtime_state(state: Dict[str, Any]) -> None:
     global _STATE_READY
-    normalized = _merge_defaults(_default_runtime_state(), state)
+    existing = _load_json(RUNTIME_STATE_FILE) or {}
+    normalized = _merge_defaults(_default_runtime_state(), existing)
+    normalized = _merge_defaults(normalized, state)
     _save_json(RUNTIME_STATE_FILE, normalized)
     _STATE_READY = True
 

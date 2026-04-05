@@ -9,8 +9,18 @@ def _load_state_from_disk() -> Optional[Dict[str, Any]]:
     return load_runtime_state()
 
 
-def _write_state_to_disk(state: Dict[str, Any]) -> None:
-    save_runtime_state(state)
+def _write_state_to_disk(state_update: Dict[str, Any]) -> None:
+    """Merge partial updates into latest runtime state and persist atomically.
+
+    This avoids clobbering unrelated keys (for example liveview state) when
+    telescope tracking updates run frequently.
+    """
+    global _STATE_CACHE
+    latest = load_runtime_state() or {}
+    merged = latest.copy()
+    merged.update(state_update)
+    save_runtime_state(merged)
+    _STATE_CACHE = merged
 
 
 def get_telescope_coords() -> Optional[Dict[str, float]]:
@@ -83,23 +93,17 @@ def set_telescope_coords(right_ascension: float, declination: float, source: str
         source: Source of the coordinate update
         hour_angle: Optional current hour angle (for live tracking display)
     """
-    global _STATE_CACHE
-    if _STATE_CACHE is None:
-        _STATE_CACHE = _load_state_from_disk() or {}
-    
-    state = _STATE_CACHE.copy()
-    state.update({
+    update = {
         "current_right_ascension": float(right_ascension),
         "current_declination": float(declination),
         "source": source,
         "updated_at": datetime.utcnow().isoformat(),
-    })
+    }
     # Add hour angle if provided (for live tracking feedback)
     if hour_angle is not None:
-        state["current_hour_angle"] = float(hour_angle)
-    
-    _STATE_CACHE = state
-    _write_state_to_disk(state)
+        update["current_hour_angle"] = float(hour_angle)
+
+    _write_state_to_disk(update)
     print(f"[telescope_state] Current coords set: RA={right_ascension:.4f}°, Dec={declination:.4f}°")
 
 
@@ -113,19 +117,13 @@ def set_target_coords(right_ascension: float, declination: float, source: str = 
         declination: Target Declination in degrees
         source: Source of the target update
     """
-    global _STATE_CACHE
-    if _STATE_CACHE is None:
-        _STATE_CACHE = _load_state_from_disk() or {}
-    
-    state = _STATE_CACHE.copy()
-    state.update({
+    update = {
         "target_right_ascension": float(right_ascension),
         "target_declination": float(declination),
         "updated_at": datetime.utcnow().isoformat(),
-    })
-    
-    _STATE_CACHE = state
-    _write_state_to_disk(state)
+    }
+
+    _write_state_to_disk(update)
     print(f"[telescope_state] Target coords set: RA={right_ascension:.4f}°, Dec={declination:.4f}°")
 
 
@@ -141,7 +139,7 @@ def update_hour_angle() -> Optional[float]:
     global _STATE_CACHE
     if _STATE_CACHE is None:
         _STATE_CACHE = _load_state_from_disk() or {}
-    
+
     # Get current RA (which is time-invariant)
     current_ra = _STATE_CACHE.get("current_right_ascension", 0.0)
     
@@ -160,13 +158,11 @@ def update_hour_angle() -> Optional[float]:
     # Recalculate hour angle based on current time
     current_ha = calculate_hour_angle(current_ra, longitude)
     
-    # Update state with new hour angle
-    state = _STATE_CACHE.copy()
-    state["current_hour_angle"] = float(current_ha)
-    state["updated_at"] = datetime.utcnow().isoformat()
-    
-    _STATE_CACHE = state
-    _write_state_to_disk(state)
+    # Write only fields this function owns; preserve liveview and other flags.
+    _write_state_to_disk({
+        "current_hour_angle": float(current_ha),
+        "updated_at": datetime.utcnow().isoformat(),
+    })
     
     return current_ha
 

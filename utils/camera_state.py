@@ -3,6 +3,7 @@ import asyncio
 import time
 import subprocess
 from threading import Lock
+from utils.liveview_state import is_liveview_enabled
 
 class CameraState:
     """Thread-safe camera availability state"""
@@ -81,6 +82,12 @@ async def camera_scanner_task(check_interval: float = 2.0):
     
     while True:
         try:
+            # Do not probe camera while liveview is actively streaming.
+            # Running gphoto2 auto-detect concurrently can contend for USB access.
+            if is_liveview_enabled():
+                await asyncio.sleep(check_interval)
+                continue
+
             # Quick check without retries for the background scanner
             from subprocess import run
             result = run(["gphoto2", "--auto-detect"], 
