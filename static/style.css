@@ -249,6 +249,10 @@ html, body {
     max-width: 350px;
 }
 
+.text-muted {
+    color: #ffffff !important;
+}
+
 /* Custom site-wide styles */
 
 body {
