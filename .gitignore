@@ -2,3 +2,5 @@ photos
 venv
 __pycache__
 config
+packager.py
+verssions.txt
