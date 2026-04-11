@@ -1,77 +1,88 @@
-# ASTRA (Automated Sidereal Tracking & Remote Astronomy)
+# ASTRA
 
-An open-source web UI and control stack for an automatic tracking telescope and small planetarium. The repository contains a Flask web application, plate-solver helpers, camera control utilities, and a client-side planetarium view.
+ASTRA is a Flask-based telescope control and astronomy web platform.
 
-## Repository layout (important locations)
+It combines:
+- a web app
+- a live star map
+- real-time WebSocket channels for telescope commands and live view streaming
+- security features
 
-- `Server.py` — main Flask entrypoint used for local development.
-- `WebsocketServer.py` — WebSocket server logic for live camera feeds and commands.
-- `controllers/` — Flask blueprints: pages and API endpoints (including the star map controller).
-- `templates/` — Jinja2 templates; star map is `templates/star_map.html`.
-- `static/` — Frontend assets (CSS, JS). The planetarium renderer is in `static/js/star_map.js`.
-- `models/` — SQLAlchemy models and DB helpers.
-- `instance/` — Instance-specific runtime files (`Data.db`, optional `.env`).
-- `infrastructure/` — Deployment artifacts (Caddy binary, cloudflared, `config.yml`).
-- `algorithms/` and `algorithms2.py` — Astronomy and conversion utilities.
-- `utility/` — Helper scripts and `requirements.txt`.
+## What This Repo Contains
 
-## Quickstart (development)
+- Main server: Server.py
+- Controllers (Flask blueprints): controllers/
+- Realtime services: app/WebsocketServer.py
+- Data models and database layer: models/
+- Astronomy logic and coordinate tools: algorithms/
+- Security modules: security/
+- Frontend templates and assets: templates/ and static/
+- Operations scripts: scripts/
 
-Prereqs: Python 3.11+, Git, optional tools (Caddy/cloudflared) for local tunnelling.
+## Quick Start
 
-1. Activate the virtual environment (Windows PowerShell example):
+1. Create and activate a virtual environment.
 
-```powershell
-.\.venv\bin\Activate.ps1
-pip install -r utility\requirements.txt
+Linux/macOS:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-2. Create an `instance/.env` with required variables (do not commit):
+Windows PowerShell:
 
-```text
-FLASK_SECRET_KEY=replace-with-a-strong-secret
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+2. Install dependencies:
+
+```bash
+pip install -r utility/requirements.txt
+```
+
+3. Create instance/.env (recommended) with at least:
+
+```env
+FLASK_SECRET_KEY=change-me
+ENCRYPTION_KEY=change-me
 MAIL_USERNAME=you@example.com
-MAIL_PASSWORD=super-secret
-ENCRYPTION_KEY=some-random-key
-SQLALCHEMY_TRACK_MODIFICATIONS=False
-EXECUTER=your-windows-username
+MAIL_PASSWORD=change-me
 ```
 
-3. Run the server from project root:
+4. Start the server:
 
-```powershell
+```bash
 python Server.py
 ```
 
-The app will try to start optional infrastructure binaries (Caddy and cloudflared) from `infrastructure/` when configured to do so. If you do not want those started locally, set `ifOnline` to false
+Default HTTP port is 5000.
 
-## Configuration
+## Core Runtime Behavior
 
-- The app loads `instance/.env` (if present).
-- Database: SQLite DB file is `instance/Data.db` by default. `Server.py` sets `SQLALCHEMY_DATABASE_URI` accordingly.
-- Email: configured in `Server.py`
-- Upload size limit: set `MAX_UPLOAD_BYTES` (defaults to `134217728`, i.e. 128 MiB).
-- WebSocket keepalive for slow operations: `WS_PING_INTERVAL` (default `20`) and `WS_PING_TIMEOUT` (default `120`).
+- Flask app boots from Server.py.
+- Blueprints are auto-loaded from controllers/.
+- SQLite database is stored at instance/Data.db.
+- WebSocket services start with the app:
+	- Command server: port 4000
+	- LiveView server: port 8000
+- Route list is auto-generated to templates/routes.txt at startup.
 
-## Infrastructure and deployment files
+## Important Environment Variables
 
-You moved the infrastructure artifacts into `infrastructure/` — good call. Keep these files out of the repo if they contain sensitive data.
+- FLASK_SECRET_KEY: Flask session secret
+- ENCRYPTION_KEY: application encryption key
+- FLASK_USE_SSL: enable Flask TLS mode (True/False)
+- SSL_CERT_PATH, SSL_KEY_PATH: cert and key when FLASK_USE_SSL is enabled
+- FLASK_SERVER_HOST, FLASK_SERVER_PORT: host/port display and overrides
+- MAX_UPLOAD_BYTES: max upload size (default 128 MiB)
+- WS_IP: WebSocket bind IP (default 0.0.0.0)
+- WS_PING_INTERVAL, WS_PING_TIMEOUT: WebSocket keepalive settings
+- TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY: CAPTCHA support
 
-If you move them again, update `Server.py` paths (already configured to use `infrastructure/`). On production, prefer host-installed or containerized Caddy/cloudflared instead of keeping binaries in the repo.
+## Notes
 
-## Development tips
-
-- To reduce noise and accidental commits, do not keep `venv/` in the repository; prefer `.venv` ignored by `.gitignore`.
-- Use `pip freeze > utility/requirements.txt` when updating dependencies.
-- If you refactor Python modules (e.g., move `algorithms2.py` into `algorithms/`), update imports (or expose functions via `algorithms/__init__.py`).
-
-## Troubleshooting
-
-- `.env not found`: verify `instance/.env` exists or use system env vars.
-- Caddy/cloudflared fail to start: check `infrastructure/` paths, file permissions, and `infrastructure/config.yml` contents.
-- Planetarium UI broken: open browser DevTools; `static/js/star_map.js` logs helpful debug messages.
-
-## Google Docs project file:
-
-- https://docs.google.com/document/d/1ntlr__WV3JdlY7PkM1GIIkk02cW5x_GakHwJQ8XlgZw/
-
+- instance/.env contains secrets and should not be committed.
+- infrastructure/ contains deployment-related files and logs.
