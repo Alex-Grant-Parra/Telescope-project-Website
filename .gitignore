@@ -3,4 +3,4 @@ venv
 __pycache__
 config
 packager.py
-verssions.txt
+versions.txt
