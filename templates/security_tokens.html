@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}API Tokens - Security{% endblock %}
+{% block title %}Manage Telescopes{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <h2>API Tokens</h2>
+    <h2>Manage Telescopes</h2>
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
@@ -15,7 +15,7 @@
 
     {% if generated_token %}
     <div class="card border-success mb-3">
-        <div class="card-header bg-success text-white">New Token Generated</div>
+        <div class="card-header bg-success text-white">New Telescope Token Generated</div>
         <div class="card-body">
             <p class="mb-2">
                 {% if generated_token_name %}
@@ -35,26 +35,27 @@
 
     <div class="card mb-3">
         <div class="card-body">
-            <form method="post" action="{{ url_for('admin.admin_generate_token') }}" class="row g-2" id="tokenForm">
+            <form method="post" action="{{ url_for('admin.admin_generate_telescope_token') }}" class="row g-2" id="tokenForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                 <div class="col-sm-4">
-                    <input name="name" class="form-control" placeholder="Client name" required />
+                    <input name="name" class="form-control" placeholder="Telescope/client name" required />
                 </div>
                 <div class="col-sm-3">
                     <select name="client_type" class="form-select" id="clientTypeSelect">
                         <option value="observer">Observer</option>
                         <option value="telescope">Telescope</option>
+                        <option value="developer">Developer</option>
                     </select>
                 </div>
                 <div class="col-sm-2">
-                    <button class="btn btn-primary">Generate</button>
+                    <button class="btn btn-primary">Generate Token</button>
                 </div>
             </form>
         </div>
     </div>
 
     <div class="card">
-        <div class="card-header bg-dark text-white">Existing Tokens</div>
+        <div class="card-header bg-dark text-white">Existing Telescope Tokens</div>
         <div class="card-body">
             {% if tokens %}
             <div class="table-responsive">
@@ -62,7 +63,7 @@
                     <thead>
                         <tr>
                             <th>Token</th>
-                            <th>Name</th>
+                            <th>Name / ID</th>
                             <th>Type</th>
                             <th>Details</th>
                             <th>Created</th>
@@ -78,9 +79,18 @@
                                 </td>
                                 <td>{{ t.name }}</td>
                                 <td>
-                                    <span class="badge bg-{{ 'primary' if t.client_type == 'telescope' else 'secondary' }}">
+                                    <span class="badge bg-{{ 'primary' if t.client_type == 'telescope' else ('warning text-dark' if t.client_type == 'developer' else 'secondary') }}">
                                         {{ t.client_type }}
                                     </span>
+                                    <form method="post" action="{{ url_for('admin.admin_update_telescope_type', telescope_id=t.id) }}" class="mt-1 d-flex gap-1">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                        <select name="client_type" class="form-select form-select-sm">
+                                            <option value="observer" {% if t.client_type == 'observer' %}selected{% endif %}>Observer</option>
+                                            <option value="telescope" {% if t.client_type == 'telescope' %}selected{% endif %}>Telescope</option>
+                                            <option value="developer" {% if t.client_type == 'developer' %}selected{% endif %}>Developer</option>
+                                        </select>
+                                        <button class="btn btn-sm btn-outline-primary">Update</button>
+                                    </form>
                                 </td>
                                 <td>
                                     {% if t.db_info %}
@@ -98,7 +108,7 @@
                                 </td>
                                 <td><small>{{ t.created }}</small></td>
                                 <td>
-                                    <form method="post" action="{{ url_for('admin.admin_revoke_token') }}" style="display:inline">
+                                    <form method="post" action="{{ url_for('admin.admin_revoke_telescope_token') }}" style="display:inline">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                                         <input type="hidden" name="token" value="{{ t.id }}" />
                                         <button class="btn btn-sm btn-outline-danger">Revoke</button>
@@ -110,7 +120,7 @@
                 </table>
             </div>
             {% else %}
-                <p class="text-muted">No tokens found.</p>
+                <p class="text-muted">No telescope tokens found.</p>
             {% endif %}
         </div>
     </div>

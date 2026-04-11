@@ -1,9 +1,13 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, session
+import os
+import shutil
+
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, session, send_file
 from flask_login import login_required, current_user
 from models.user import User
 from app.db import db
 from models.user import AccountStatusHistory
 from models.logging import RequestLog, SecurityLog, WebsocketSecurityLog
+from models.client_release import ClientReleaseSubmission
 from datetime import datetime
 from security.ip_blacklist import get_blacklist
 import logging
@@ -403,11 +407,17 @@ def admin_security_logs():
     return {'logs': files}
 
 
-# Token management routes (moved from security controller)
+# Telescope management routes
 @admin_bp.route('/admin/security/tokens')
 @login_required
-def admin_security_tokens():
-    # Display API tokens and related telescope info
+def admin_security_tokens_legacy():
+    return redirect(url_for('admin.admin_manage_telescopes'))
+
+
+@admin_bp.route('/admin/telescopes')
+@login_required
+def admin_manage_telescopes():
+    # Display telescope tokens and related telescope info
     guard = _admin_guard()
     if guard:
         return guard
@@ -415,9 +425,9 @@ def admin_security_tokens():
     from security.token_store import list_tokens
     from models.tables import Telescope
 
-    tokens = list_tokens()
+    telescope_tokens = list_tokens()
     view_tokens = []
-    for rec in tokens:
+    for rec in telescope_tokens:
         token_data = {
             'id': rec.id,
             'truncated': (rec.token_prefix or 'token') + '...',
@@ -426,25 +436,24 @@ def admin_security_tokens():
             'created': rec.created_at.isoformat() if rec.created_at else 'Unknown',
             'db_info': None
         }
-        
-        if rec.client_type == 'telescope':
-            try:
-                telescope_name = rec.name
-                telescope = Telescope.get_telescope_by_id(telescope_name)
-                if telescope:
-                    token_data['db_info'] = {
-                        'type': telescope.get('type'),
-                        'ip_address': telescope.get('ip_address'),
-                        'last_seen': telescope.get('last_seen'),
-                        'online': Telescope.is_telescope_online(telescope_name)
-                    }
-            except Exception as e:
-                logging.error(f"Error fetching telescope data: {e}")
+
+        try:
+            # Telescope/token rows are unified in the same SQLAlchemy model.
+            # Always expose available DB metadata, even if current type is not "telescope".
+            telescope_name = rec.name
+            token_data['db_info'] = {
+                'type': rec.client_type,
+                'ip_address': rec.ip_address,
+                'last_seen': rec.last_seen,
+                'online': Telescope.is_telescope_online(telescope_name) if telescope_name else False,
+            }
+        except Exception as e:
+            logging.error(f"Error fetching telescope data: {e}")
         
         view_tokens.append(token_data)
 
-    generated_token = session.pop('new_api_token', None)
-    generated_token_name = session.pop('new_api_token_name', None)
+    generated_token = session.pop('new_telescope_token', None)
+    generated_token_name = session.pop('new_telescope_token_name', None)
 
     return render_template(
         'security_tokens.html',
@@ -454,80 +463,101 @@ def admin_security_tokens():
     )
 
 
+@admin_bp.route('/admin/telescopes/generate', methods=['POST'])
 @admin_bp.route('/admin/security/tokens/generate', methods=['POST'])
 @login_required
-def admin_generate_token():
-    # Generate a new API token and store for one-time display
+def admin_generate_telescope_token():
+    # Generate a new telescope token and store for one-time display
     guard = _admin_guard()
     if guard:
         return guard
 
     from security.token_store import create_token_record, list_tokens
-    name = request.form.get('name') or 'unnamed'
-    client_type = request.form.get('client_type') or 'observer'
+    name = (request.form.get('name') or 'unnamed').strip()
+    client_type = (request.form.get('client_type') or 'observer').strip().lower()
     request.form.get('telescope_type') or None
+
+    if client_type not in {'observer', 'telescope', 'developer'}:
+        flash('Invalid telescope type selected.', 'danger')
+        return redirect(url_for('admin.admin_manage_telescopes'))
     
     # Check for duplicate names
     tokens = list_tokens()
     for rec in tokens:
         if rec.name == name:
             flash(f'Token with name "{name}" already exists. Please choose a different name.', 'danger')
-            return redirect(url_for('admin.admin_security_tokens'))
+            return redirect(url_for('admin.admin_manage_telescopes'))
 
     token, _ = create_token_record(name, client_type)
     sec_logger.info(f"token_generated: token={token[:12]}..., name={name}, type={client_type}, by={current_user.id}")
 
     # One-time token reveal after redirect
-    session['new_api_token'] = token
-    session['new_api_token_name'] = name
+    session['new_telescope_token'] = token
+    session['new_telescope_token_name'] = name
     
     flash_msg = f'Generated token for {name}: {token} (store securely)'
     if client_type == 'telescope':
         flash_msg += ' - Telescope added to database.'
     flash(flash_msg, 'success')
-    return redirect(url_for('admin.admin_security_tokens'))
+    return redirect(url_for('admin.admin_manage_telescopes'))
 
 
+@admin_bp.route('/admin/telescopes/revoke', methods=['POST'])
 @admin_bp.route('/admin/security/tokens/revoke', methods=['POST'])
 @login_required
-def admin_revoke_token():
-    # Revoke an API token and remove associated telescope
+def admin_revoke_telescope_token():
+    # Revoke a telescope token
     guard = _admin_guard()
     if guard:
         return guard
 
     from security.token_store import get_token_by_id, revoke_token_by_id
-    from models.tables import Telescope
     
     identifier = request.form.get('token')
     if not identifier:
         flash('No token specified.', 'danger')
-        return redirect(url_for('admin.admin_security_tokens'))
+        return redirect(url_for('admin.admin_manage_telescopes'))
 
     rec = get_token_by_id(identifier)
     if rec:
-        
-        if rec.client_type == 'telescope':
-            try:
-                telescope_name = rec.name
-                result = Telescope.remove_telescope(telescope_name)
-                if result['status'] == 'success':
-                    sec_logger.info(f"telescope_removed: token_id={rec.id}, by={current_user.id}")
-            except Exception as e:
-                logging.error(f"Error removing telescope from database: {e}")
-
         revoke_token_by_id(identifier)
         sec_logger.info(f"token_revoked: token_id={rec.id}, by={current_user.id}")
-        flash('Token revoked and telescope removed from database.', 'success')
+        flash('Telescope token revoked.', 'success')
     else:
         flash('Token not found.', 'danger')
 
-    return redirect(url_for('admin.admin_security_tokens'))
+    return redirect(url_for('admin.admin_manage_telescopes'))
 
 
+@admin_bp.route('/admin/telescopes/<int:telescope_id>/type', methods=['POST'])
+@login_required
+def admin_update_telescope_type(telescope_id):
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    from security.token_store import get_token_by_id
+
+    new_type = (request.form.get('client_type') or '').strip().lower()
+    if new_type not in {'observer', 'telescope', 'developer'}:
+        flash('Invalid telescope type selected.', 'danger')
+        return redirect(url_for('admin.admin_manage_telescopes'))
+
+    rec = get_token_by_id(telescope_id)
+    if not rec:
+        flash('Telescope token not found.', 'danger')
+        return redirect(url_for('admin.admin_manage_telescopes'))
+
+    rec.type = new_type
+    db.session.commit()
+    flash(f'Telescope "{rec.name}" set to type {new_type}.', 'success')
+    return redirect(url_for('admin.admin_manage_telescopes'))
+
+
+@admin_bp.route('/admin/telescopes/show', methods=['POST'])
 @admin_bp.route('/admin/security/tokens/show', methods=['POST'])
 @login_required
-def admin_show_token():
+def admin_show_telescope_token():
     # Attempt to show a token (not available after creation)
     guard = _admin_guard()
     if guard:
@@ -537,5 +567,116 @@ def admin_show_token():
     if not token_id:
         return jsonify({'error': 'Token ID required'}), 400
 
-    # Tokens are stored hashed in DB and cannot be recovered after creation.
     return jsonify({'error': 'Full token display is unavailable after creation (stored hashed).'}), 410
+
+
+@admin_bp.route('/admin/releases/review')
+@login_required
+def admin_release_review():
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    submissions = ClientReleaseSubmission.list_for_review()
+    return render_template('admin_release_review.html', submissions=submissions)
+
+
+@admin_bp.route('/admin/releases/review/<int:submission_id>/download')
+@login_required
+def admin_release_download(submission_id):
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    submission = ClientReleaseSubmission.get_by_id(submission_id)
+    if not submission:
+        flash('Submission not found.', 'danger')
+        return redirect(url_for('admin.admin_release_review'))
+
+    candidate_path = submission.candidate_file_path()
+    published_path = submission.published_file_path()
+    file_path = candidate_path if os.path.exists(candidate_path) else published_path
+
+    if not os.path.exists(file_path):
+        flash('Submission file was not found on the server.', 'danger')
+        return redirect(url_for('admin.admin_release_review'))
+
+    return send_file(file_path, as_attachment=True, download_name=f"{submission.version}.zip")
+
+
+@admin_bp.route('/admin/releases/review/<int:submission_id>/in-progress', methods=['POST'])
+@login_required
+def admin_release_mark_in_progress(submission_id):
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    submission = ClientReleaseSubmission.get_by_id(submission_id)
+    if not submission:
+        flash('Submission not found.', 'danger')
+        return redirect(url_for('admin.admin_release_review'))
+
+    submission.mark_in_progress(admin_user_id=current_user.id)
+    flash(f'Release {submission.version} marked in progress.', 'info')
+    return redirect(url_for('admin.admin_release_review'))
+
+
+@admin_bp.route('/admin/releases/review/<int:submission_id>/approve', methods=['POST'])
+@login_required
+def admin_release_approve(submission_id):
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    submission = ClientReleaseSubmission.get_by_id(submission_id)
+    if not submission:
+        flash('Submission not found.', 'danger')
+        return redirect(url_for('admin.admin_release_review'))
+
+    source_path = submission.candidate_file_path()
+    if not os.path.exists(source_path):
+        flash('Submission file is missing. Cannot approve.', 'danger')
+        return redirect(url_for('admin.admin_release_review'))
+
+    target_path = submission.published_file_path()
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    try:
+        if os.path.exists(target_path):
+            os.remove(target_path)
+        shutil.move(source_path, target_path)
+    except Exception as e:
+        flash(f'Failed to publish release: {e}', 'danger')
+        return redirect(url_for('admin.admin_release_review'))
+
+    submission.mark_approved(admin_user_id=current_user.id)
+    flash(f'Release {submission.version} approved and published to downloads.', 'success')
+    return redirect(url_for('admin.admin_release_review'))
+
+
+@admin_bp.route('/admin/releases/review/<int:submission_id>/delete', methods=['POST'])
+@login_required
+def admin_release_delete(submission_id):
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    submission = ClientReleaseSubmission.get_by_id(submission_id)
+    if not submission:
+        flash('Submission not found.', 'danger')
+        return redirect(url_for('admin.admin_release_review'))
+
+    candidate_path = submission.candidate_file_path()
+    published_path = submission.published_file_path()
+
+    try:
+        if os.path.exists(candidate_path):
+            os.remove(candidate_path)
+        if os.path.exists(published_path):
+            os.remove(published_path)
+    except Exception as e:
+        flash(f'Failed to delete release file: {e}', 'danger')
+        return redirect(url_for('admin.admin_release_review'))
+
+    submission.mark_deleted(admin_user_id=current_user.id)
+    flash(f'Release {submission.version} deleted from server.', 'warning')
+    return redirect(url_for('admin.admin_release_review'))

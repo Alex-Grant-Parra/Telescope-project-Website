@@ -40,8 +40,8 @@
             <div class="card shadow-sm">
                 <div class="card-body">
                     <h5 class="card-title">Security</h5>
-                    <p class="card-text">Manage API tokens, blacklist, and other security features.</p>
-                    <a href="{{ url_for('admin.admin_security_tokens') }}" class="btn btn-outline-danger">Manage Tokens</a>
+                    <p class="card-text">Manage telescopes, token types, blacklist, and other security features.</p>
+                    <a href="{{ url_for('admin.admin_manage_telescopes') }}" class="btn btn-outline-danger">Manage Telescopes</a>
                     <a href="{{ url_for('admin.admin_security_page') }}" class="btn btn-outline-primary ms-2">Security Dashboard</a>
                 </div>
             </div>
@@ -55,6 +55,16 @@
                     <h5 class="card-title">Contact Messages</h5>
                     <p class="card-text">Review, track, and respond to user contact requests.</p>
                     <a href="{{ url_for('contact.admin_contact_list') }}" class="btn btn-outline-success">Open Contact Inbox</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Client Release Reviews</h5>
+                    <p class="card-text">Review developer-submitted client versions before publishing to downloads.</p>
+                    <a href="{{ url_for('admin.admin_release_review') }}" class="btn btn-outline-secondary">Open Review Queue</a>
                 </div>
             </div>
         </div>
