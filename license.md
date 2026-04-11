@@ -2,6 +2,8 @@
 
 Copyright (c) 2026 Alex Grant-Parra
 
+Last Updated: 11th of April 2026
+
 ---
 
 ## 1. Definitions
@@ -107,3 +109,12 @@ This licence shall be governed by and interpreted in accordance with the laws of
 ## 11. Acceptance
 
 By using, modifying, or distributing the Software, you agree to the terms of this licence.
+
+## 12. Related Policies
+
+If you use the Author's hosted service or any official deployment of the Software, you are also subject to the Service's Terms of Service and Privacy Policy.
+
+- Terms of Service: /about/tos
+- Privacy Policy: /about/privacy
+
+This licence governs the Software itself. The Terms of Service and Privacy Policy govern use of the hosted Service.
