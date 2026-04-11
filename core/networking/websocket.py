@@ -4,37 +4,15 @@ import ujson as json  # Using ujson for faster serialization
 import time
 import subprocess
 import sys
-import re
 import signal
-import os
 from datetime import datetime
 from utils.handlers import function_map
-from utils.liveview_state import is_liveview_enabled
+from utils.liveview_state import is_liveview_enabled, save_liveview_state
+from utils.camera_state import camera_state, camera_scanner_task
+from utils.config_state import get_client_config, save_client_config, build_service_urls
 
 
-def _to_ws_uri(raw: str, default_subdomain: str | None = None) -> str:
-    """Normalize a configured URI to a WebSocket URI.
-
-    - If `raw` already starts with ws:// or wss:// it's returned unchanged.
-    - If `raw` starts with http:// or https:// the scheme is converted to ws:// or wss://.
-    - If `raw` contains no scheme and `default_subdomain` is provided, the subdomain is prepended
-      and `wss://` is used.
-    """
-    if not raw:
-        return raw
-    raw = raw.strip()
-    if raw.startswith("ws://") or raw.startswith("wss://"):
-        return raw
-    if raw.startswith("http://"):
-        return "ws://" + raw[len("http://"):]
-    if raw.startswith("https://"):
-        return "wss://" + raw[len("https://"):]
-    # No scheme provided; assume secure websocket and optionally add subdomain
-    if default_subdomain:
-        return f"wss://{default_subdomain}.{raw}"
-    return f"wss://{raw}"
-
-# Configuration values are provided via `config/client_config.json` at runtime.
+# Configuration values are provided via `config/client_profile.json` at runtime.
 # No hard-coded defaults are kept here.
 
 # Module-level placeholders (populated from the config passed into websocketClient)
@@ -44,51 +22,37 @@ LIVEVIEW_URI = None
 SERVER_HTTP_URL = None
 
 def load_config(allow_missing: bool = False):
-    """Load client configuration from `config/client_config.json`.
-
-    If `allow_missing` is False (default) this will raise FileNotFoundError when
-    the config file does not exist. When `allow_missing` is True an empty dict
-    is returned to allow interactive setup to proceed.
-    """
-    config_path = "config/client_config.json"
-    if not os.path.exists(config_path):
+    """Load client configuration from static state."""
+    try:
+        return get_client_config()
+    except Exception:
         if allow_missing:
             return {}
-        raise FileNotFoundError(
-            f"Configuration file '{config_path}' not found. Run 'python Client.py setup' to create it."
-        )
-
-    try:
-        with open(config_path, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        # Propagate the error to make failures explicit
         raise
 
 def save_config(config):
-    """Save client configuration"""
+    """Save client configuration to static state."""
     try:
-        with open("config/client_config.json", 'w') as f:
-            json.dump(config, f, indent=2)
-        print(f"[config] Configuration saved to config/client_config.json")
+        save_client_config(config)
+        print(f"[config] Configuration saved to config/client_profile.json")
     except Exception as e:
         print(f"[config] Error saving config: {e}")
 
 # Note: configuration is now loaded at runtime inside `websocketClient()` so
 # that the `setup` command can create the config file when it doesn't exist.
 # There are no hard-coded defaults — the values must come from
-# `config/client_config.json`.
+# `config/client_profile.json`.
 API_TOKEN = None
 
 async def authenticate_with_server(ws):
     """Send authentication message to server"""
     if not API_TOKEN:
         print("[auth] ERROR: No API token configured!")
-        print("[auth] Please set your API token in config/client_config.json")
+        print("[auth] Please set your API token in config/client_profile.json")
         print("[auth] Example config:")
         print(json.dumps({
             "client_id": CLIENT_ID,
-            "server_uri": SERVER_URI,
+            "base_url": SERVER_HTTP_URL,
             "api_token": "your-token-here"
         }, indent=2))
         raise Exception("No API token configured")
@@ -132,11 +96,12 @@ async def handle_server(ws):
                     all_args = ", ".join(filter(None, [args_str, kwargs_str]))
                     print(f"[function_call] Calling {function_name}({all_args})")
                     
-                    # Call function with both args and kwargs
+                    # Run handlers off the event loop so frame streaming and ping/pong
+                    # are not blocked by long camera or motor operations.
                     if kwargs:
-                        result = func(*args, **kwargs)
+                        result = await asyncio.to_thread(func, *args, **kwargs)
                     else:
-                        result = func(*args)
+                        result = await asyncio.to_thread(func, *args)
                     
                     response = json.dumps({"result": result, "id": data.get("id")})
                 else:
@@ -221,6 +186,7 @@ async def send_frames():
     """Send live camera frames via WebSocket with automatic reconnection"""
     import fcntl
     import os as os_module
+    from core.camera.controller import Camera
     
     JPEG_START = b'\xff\xd8'
     JPEG_END = b'\xff\xd9'
@@ -229,6 +195,35 @@ async def send_frames():
     frame_interval = 1 / 10  # 10 FPS
     last_process_check_time = 0
     process_check_interval = 1.0  # Check process health every 1 second
+    consecutive_failures = 0  # Track consecutive camera start failures
+    process_start_time = 0  # Track when process was started
+
+    def _read_proc_stderr_text(p):
+        """Best-effort stderr extraction for terminated gphoto2 processes."""
+        if not p or p.stderr is None:
+            return ""
+        try:
+            data = p.stderr.read()
+            if not data:
+                return ""
+            if isinstance(data, bytes):
+                return data.decode("utf-8", errors="replace").strip()
+            return str(data).strip()
+        except Exception:
+            return ""
+
+    def _cleanup_usb_camera_lockers() -> None:
+        """Best-effort cleanup of processes that commonly lock camera USB endpoints."""
+        locker_patterns = [
+            "gvfs-gphoto2-volume-monitor",
+            "gvfsd-gphoto2",
+            "gphoto2",
+        ]
+        for pattern in locker_patterns:
+            try:
+                subprocess.run(["pkill", "-f", pattern], capture_output=True, timeout=2)
+            except Exception:
+                pass
 
     while True:  # Outer reconnection loop
         connection_start_time = time.time()
@@ -255,29 +250,79 @@ async def send_frames():
                 
                 # Start camera capture process
                 if proc is None or proc.poll() is not None:
+                    # Check if camera is available before attempting to start
+                    if not camera_state.is_available():
+                        # Camera not available, wait and retry
+                        if proc is not None:
+                            try:
+                                proc.terminate()
+                                proc.wait(timeout=2)
+                            except:
+                                pass
+                            proc = None
+                        await asyncio.sleep(2)
+                        continue
+                    
                     if proc is not None:
                         try:
                             proc.terminate()
                             proc.wait(timeout=2)
                         except:
                             pass
+                        
+                        # Check if process failed quickly (within 3 seconds = likely startup failure)
+                        if time.time() - process_start_time < 3:
+                            consecutive_failures += 1
+                            print(f"[send_frames] Camera process failed quickly (failure #{consecutive_failures})")
+                            
+                            # After 3 consecutive quick failures, do deep cleanup
+                            if consecutive_failures >= 3:
+                                print(f"[send_frames] Multiple failures detected, performing camera reset...")
+                                cleanup_camera()
+                                await asyncio.sleep(2)
+                                Camera.releaseViewfinder()
+                                await asyncio.sleep(2)
+                                consecutive_failures = 0  # Reset counter after cleanup
+                            else:
+                                # Short delay for temporary issues
+                                await asyncio.sleep(1)
+                        else:
+                            # Process ran for a while before failing - reset failure counter
+                            consecutive_failures = 0
                     
                     try:
+                        # Small delay before starting gphoto2 to allow any pending camera commands to complete
+                        await asyncio.sleep(0.3)
+
+                        # Some cameras require viewfinder/liveview to be explicitly enabled
+                        # before --capture-movie produces frames.
+                        try:
+                            subprocess.run(
+                                ["gphoto2", "--set-config", "viewfinder=1"],
+                                capture_output=True,
+                                text=True,
+                                timeout=3,
+                            )
+                        except Exception:
+                            pass
+                        
                         proc = subprocess.Popen([
                             "gphoto2", "--capture-movie", "--stdout"
-                        ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                         
                         # Set non-blocking mode on stdout
                         flags = fcntl.fcntl(proc.stdout, fcntl.F_GETFL)
                         fcntl.fcntl(proc.stdout, fcntl.F_SETFL, flags | os_module.O_NONBLOCK)
                         
-                        # Reset process check timer when we start a new process
+                        # Track when process started and reset check timer
+                        process_start_time = time.time()
                         last_process_check_time = time.time()
                         
                         print(f"[send_frames] Started gphoto2 process (PID: {proc.pid})")
                     except Exception as proc_error:
                         print(f"[send_frames] Failed to start gphoto2: {proc_error}")
-                        await asyncio.sleep(1)
+                        consecutive_failures += 1
+                        await asyncio.sleep(2)
                         continue
                 
                 buffer = b''
@@ -288,7 +333,14 @@ async def send_frames():
                             current_time = time.time()
                             if current_time - last_process_check_time >= process_check_interval:
                                 if proc.poll() is not None:
+                                    stderr_text = _read_proc_stderr_text(proc)
                                     print(f"[send_frames] Camera process terminated unexpectedly (exit code: {proc.returncode})")
+                                    if stderr_text:
+                                        print(f"[send_frames] gphoto2 stderr: {stderr_text}")
+                                        if "could not claim the usb device" in stderr_text.lower():
+                                            print("[send_frames] USB busy detected. Releasing camera lock holders...")
+                                            _cleanup_usb_camera_lockers()
+                                            await asyncio.sleep(1.5)
                                     break
                                 last_process_check_time = current_time
                             
@@ -298,7 +350,14 @@ async def send_frames():
                                 if not chunk:
                                     # Empty read may mean no data available (non-blocking) or EOF
                                     if proc.poll() is not None:
-                                        print(f"[send_frames] Camera process ended (reached EOF)")
+                                        stderr_text = _read_proc_stderr_text(proc)
+                                        print(f"[send_frames] Camera process ended (reached EOF, exit code: {proc.returncode})")
+                                        if stderr_text:
+                                            print(f"[send_frames] gphoto2 stderr: {stderr_text}")
+                                            if "could not claim the usb device" in stderr_text.lower():
+                                                print("[send_frames] USB busy detected. Releasing camera lock holders...")
+                                                _cleanup_usb_camera_lockers()
+                                                await asyncio.sleep(1.5)
                                         break
                                     # No data available right now, yield to event loop
                                     await asyncio.sleep(0.01)
@@ -411,6 +470,8 @@ async def send_frames():
 def cleanup_camera():
     """Clean up camera processes"""
     print("[cleanup] Releasing camera and killing all gphoto2 processes...")
+    print("[cleanup] Setting liveview state to false...")
+    save_liveview_state(False)
     try:
         subprocess.run(["pkill", "-9", "gphoto2"])
     except Exception as e:
@@ -435,10 +496,10 @@ def setup_client_config():
     if new_client_id:
         current_config['client_id'] = new_client_id
     
-    print(f"Current server URI: {current_config.get('server_uri', 'Not set')}")
-    new_server_uri = input("Enter server URI (press Enter to keep current): ").strip()
-    if new_server_uri:
-        current_config['server_uri'] = new_server_uri
+    print(f"Current base URL: {current_config.get('base_url', 'Not set')}")
+    new_base_url = input("Enter base URL (e.g. https://telescopes.dev/, press Enter to keep current): ").strip()
+    if new_base_url:
+        current_config['base_url'] = new_base_url
     
     print(f"Current API token: {'***set***' if current_config.get('api_token') else 'Not set'}")
     new_token = input("Enter API token (press Enter to keep current): ").strip()
@@ -459,39 +520,21 @@ async def websocketClient(cfg: dict = None):
     if cfg is None:
         cfg = load_config()
 
-    # Ensure required keys are present in the config (no defaults)
-    # Accept either `server_url` (host) or `server_uri` (full ws host) in config.
-    required_keys = ["client_id", "api_token"]
-    missing = [k for k in required_keys if k not in cfg]
+    # Ensure required keys are present in the config
+    required_keys = ["client_id", "base_url", "api_token"]
+    missing = [k for k in required_keys if not isinstance(cfg.get(k), str) or not cfg.get(k).strip()]
     if missing:
-        raise KeyError(f"Missing keys in config/client_config.json: {', '.join(missing)}. Run 'python Client.py setup' to create or fix the config.")
+        raise KeyError(f"Missing required values in config/client_profile.json: {', '.join(missing)}. Run 'python Client.py setup' to create or fix the config.")
 
     # Export values to module-level globals used by other functions
     global CLIENT_ID, SERVER_URI, LIVEVIEW_URI, SERVER_HTTP_URL, API_TOKEN
 
     CLIENT_ID = cfg["client_id"]
     API_TOKEN = cfg["api_token"]
-
-    # Determine HTTP host (server_url or http_uri)
-    SERVER_HTTP_URL = cfg.get("server_url") or cfg.get("http_uri") or cfg.get("http")
-
-    # If the config already provides full websocket/liveview hosts, use them.
-    # Otherwise construct secure websocket addresses from the HTTP host.
-    if cfg.get("server_uri"):
-        SERVER_URI = _to_ws_uri(cfg["server_uri"], default_subdomain="ws")
-    elif SERVER_HTTP_URL:
-        host = re.sub(r"^https?://", "", SERVER_HTTP_URL)
-        SERVER_URI = f"wss://ws.{host}"
-    else:
-        raise KeyError("No server host configured. Provide 'server_url' or 'server_uri' in config/client_config.json")
-
-    if cfg.get("liveview_uri"):
-        LIVEVIEW_URI = _to_ws_uri(cfg["liveview_uri"], default_subdomain="liveview")
-    elif SERVER_HTTP_URL:
-        host = re.sub(r"^https?://", "", SERVER_HTTP_URL)
-        LIVEVIEW_URI = f"wss://liveview.{host}"
-    else:
-        LIVEVIEW_URI = None
+    urls = build_service_urls(cfg["base_url"])
+    SERVER_HTTP_URL = urls["http_url"]
+    SERVER_URI = urls["server_uri"]
+    LIVEVIEW_URI = urls["liveview_uri"]
     
     
     
@@ -500,12 +543,13 @@ async def websocketClient(cfg: dict = None):
     signal.signal(signal.SIGINT, handle_exit)
     
     try:
-        # Both tasks now handle their own reconnection logic
+        # Start all background tasks (each handles their own reconnection/error logic)
         task1 = asyncio.create_task(run_client())
         task2 = asyncio.create_task(send_frames())
+        task3 = asyncio.create_task(camera_scanner_task(check_interval=2.0))
         
-        # Wait for both tasks to complete (which should be never, unless interrupted)
-        await asyncio.gather(task1, task2)
+        # Wait for all tasks to complete (which should be never, unless interrupted)
+        await asyncio.gather(task1, task2, task3)
         
     except KeyboardInterrupt:
         print("[main] KeyboardInterrupt received, exiting and releasing camera...")

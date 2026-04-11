@@ -13,7 +13,7 @@ class Camera:
     def ensureConnection(retryCount=3, delaySeconds=2):
         for attempt in range(1, retryCount + 1):
             try:
-                result = run(["gphoto2", "--auto-detect"], capture_output=True, text=True)
+                result = run(["gphoto2", "--auto-detect"], capture_output=True, text=True, timeout=5)
                 output = result.stdout.strip()
                 if "usb:" in output.lower():
                     print("Camera connected.")

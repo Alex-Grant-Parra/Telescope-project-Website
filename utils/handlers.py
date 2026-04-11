@@ -2,22 +2,54 @@ import time
 import requests
 import os
 import json
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Callable
+from functools import wraps
 from core.camera.controller import Camera # type: ignore
 from core.networking.csrf import get_csrf_token, SESSION
 from utils.liveview_state import load_liveview_state, save_liveview_state
+from utils.camera_state import camera_state
+from utils.config_state import get_client_config, build_service_urls, load_static_state
 from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig
 from core.hardware.tracking import trackCoordinates, stop_tracking
+from utils.telescope_state import get_telescope_coords
 
 CONFIG_FILE = "config/client_config.json"
+
+# Decorator for camera operations
+def requires_camera(operation_name: str = "operation"):
+    """Decorator that checks camera availability and handles errors for camera operations.
+    
+    Args:
+        operation_name: Name of the operation for error messages (e.g., "capture photo", "get settings")
+    
+    Returns:
+        Decorated function that returns error dict if camera unavailable or operation fails
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Check if camera is available
+            if not camera_state.is_available():
+                error_msg = f"Camera not connected - cannot {operation_name}"
+                print(f"[{func.__name__}] {error_msg}")
+                return {"error": error_msg}
+            
+            # Execute function with error handling
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                error_msg = f"Failed to {operation_name}: {str(e)}"
+                print(f"[{func.__name__}] {error_msg}")
+                return {"error": error_msg}
+        
+        return wrapper
+    return decorator
 
 # Default server URL; will be overridden by config if present
 SERVER_URL = "https://telescopes.dev"
 try:
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'r') as cf:
-            cfg = json.load(cf)
-            SERVER_URL = cfg.get('server_http_url', SERVER_URL)
+    cfg = get_client_config()
+    SERVER_URL = build_service_urls(cfg.get("base_url", SERVER_URL))["http_url"].rstrip("/")
 except Exception:
     # If the config can't be read, continue with default
     pass
@@ -28,6 +60,7 @@ liveview_enabled = load_liveview_state()
 def echo(message):
     return f"Echo: {message}"
 
+@requires_camera("get camera settings")
 def get_camera_choices():
     # Map setting names to gphoto2 config paths
     settings = {
@@ -36,25 +69,48 @@ def get_camera_choices():
         # Add more settings as needed
     }
     choices = {}
-    start = time.time()
-    for label, path in settings.items():
-        result = Camera.getSettingChoices(label, path)
-        choices[label] = result if result else []
-    print(f"get_camera_choices took {time.time() - start:.2f} seconds")
+    
+    # Use camera lock to prevent conflicts with live view
+    with camera_state.get_command_lock():
+        # Check if live view is enabled and pause it
+        if load_liveview_state():
+            camera_state.pause_liveview_for_command()
+        
+        start = time.time()
+        for label, path in settings.items():
+            result = Camera.getSettingChoices(label, path)
+            choices[label] = result if result else []
+        print(f"get_camera_choices took {time.time() - start:.2f} seconds")
+    
     return choices
 
+@requires_camera("set camera setting")
 def setCameraSetting(label, value):
-    Camera.setSetting(label, value)
+    # Use camera lock to prevent conflicts with live view
+    with camera_state.get_command_lock():
+        # Check if live view is enabled and pause it
+        if load_liveview_state():
+            camera_state.pause_liveview_for_command()
+        
+        Camera.setSetting(label, value)
+    
     return f"Set {label} to {value}"
 
+@requires_camera("capture photo")
 def capturePhoto(currentid):
-    files = Camera.capturePhoto(currentid=currentid) # Returns a list of two file names, one raw, one jpeg
+    # Use camera lock to prevent conflicts with live view
+    with camera_state.get_command_lock():
+        # Check if live view is enabled and pause it
+        if load_liveview_state():
+            camera_state.pause_liveview_for_command()
+        
+        files = Camera.capturePhoto(currentid=currentid) # Returns a list of two file names, one raw, one jpeg
 
     print(files)
 
     if not isinstance(files, list) or len(files) < 2:
         print("[ERROR] Camera.capturePhoto() did not return two valid files")
-        return
+        return {"error": "Camera did not return valid files"}
 
     current_dir = os.getcwd()
     photos_dir = os.path.join(current_dir, "photos/default")
@@ -128,9 +184,10 @@ def capturePhoto(currentid):
         print(f"[ERROR] Failed to upload files: {e}")
     finally:
         # Ensure files are closed
-        for f in file_data.values():
-            f.close()
+        for file_tuple in file_data.values():
+            file_tuple[1].close()
 
+@requires_camera("start live view")
 def startLiveView():
     global liveview_enabled
     liveview_enabled = True
@@ -143,11 +200,31 @@ def stopLiveView():
     liveview_enabled = False
     save_liveview_state(False)
     
-    # Release camera viewfinder using the Camera class
-    Camera.releaseViewfinder()
+    # Release camera viewfinder using the Camera class (if camera available)
+    if camera_state.is_available():
+        try:
+            Camera.releaseViewfinder()
+        except Exception as e:
+            print(f"[stopLiveView] Warning: Failed to release viewfinder: {e}")
     
     print("[liveview] Live view stopped.")
     return "Live view stopped"
+
+def get_current_coordinates():
+    """Returns the current telescope coordinates (right ascension and declination).
+    
+    Returns:
+        dict: Dictionary containing 'current_right_ascension' and 'current_declination'
+              or error dict if coordinates are unavailable
+    """
+    coords = get_telescope_coords()
+    if coords is None:
+        return {"error": "Telescope coordinates not available"}
+    
+    return {
+        "current_right_ascension": coords["right_ascension"],
+        "current_declination": coords["declination"]
+    }
 
 # ESP32 motor control handlers
 
@@ -157,13 +234,11 @@ _ESP32_CONN: Optional[ESP32Connection] = None
 def _load_motor_config() -> dict:
     """Load motor configuration from config/client_config.json"""
     try:
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r') as f:
-                config = json.load(f)
-                esp32_config = config.get('esp32', {})
-                if esp32_config:
-                    print(f"[MOTORS] Loaded ESP32 configuration from {CONFIG_FILE}")
-                    return esp32_config
+        config = load_static_state()
+        esp32_config = config.get('esp32', {})
+        if esp32_config:
+            print(f"[MOTORS] Loaded ESP32 configuration from {CONFIG_FILE}")
+            return esp32_config
     except Exception as e:
         print(f"[MOTORS] Warning: Could not load ESP32 config: {e}")
     
@@ -538,6 +613,7 @@ function_map = {
     # Main track requests
     "trackCoordinates": trackCoordinates,
     "stopTracking": stop_tracking,
+    "getCurrentCoordinates": get_current_coordinates,
     "getCameraChoices": get_camera_choices,
     "setCameraSetting": setCameraSetting,
     "capturePhoto": capturePhoto,

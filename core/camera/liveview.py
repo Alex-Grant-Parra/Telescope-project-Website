@@ -1,4 +1,4 @@
-from flask import Flask, Response # type: ignore
+from flask import Flask, Response
 
 app = Flask(__name__)
 

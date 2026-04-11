@@ -1,7 +1,35 @@
-The client script(s) for a telescope.
-Master repo: https://github.com/Alex-Grant-Parra/Telescope-project-Website
+# Rpi5 Telescope Client
 
-## Upload security
+This project is telescope client for ASTRA.
 
-Photo uploads use a persistent HTTP session and automatically fetch a CSRF token from `<server_http_url>/security/csrf-token` when needed. The token is cached briefly and included with uploads via the `X-CSRF-Token` header. If the endpoint is unavailable, uploads still proceed without the header.
+It connects your telescope hardware to the remote server, receives commands over WebSocket, sends live camera frames, tracks telescope state, and uploads captured photos.
 
+Master website/server repo: https://github.com/Alex-Grant-Parra/ASTRA
+
+## Required setup
+
+Before running, fill these required values in `config/client_profile.json`:
+
+- `client_config.client_id`
+- `client_config.base_url` (example: `https://telescopes.dev/`)
+- `client_config.api_token`
+
+Set up a venv:
+
+- `python -m venv venv`
+
+And finally install packages
+
+- `pip install -r requirements.txt`
+
+## Run
+
+```bash
+python Client.py
+```
+
+Optional interactive setup:
+
+```bash
+python Client.py setup
+```
