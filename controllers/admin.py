@@ -496,8 +496,8 @@ def admin_generate_telescope_token():
     session['new_telescope_token_name'] = name
     
     flash_msg = f'Generated token for {name}: {token} (store securely)'
-    if client_type == 'telescope':
-        flash_msg += ' - Telescope added to database.'
+    if client_type in {'telescope', 'developer'}:
+        flash_msg += ' - Client added to telescope tracking database.'
     flash(flash_msg, 'success')
     return redirect(url_for('admin.admin_manage_telescopes'))
 

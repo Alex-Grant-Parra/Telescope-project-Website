@@ -41,6 +41,12 @@ _handshake_last_summary = 0.0
 _HANDSHAKE_LOG_WINDOW_SECONDS = 30
 
 
+def _is_telescope_capable_client(client_type):
+    # Developer clients should inherit telescope connectivity behavior.
+    normalized = (client_type or '').strip().lower()
+    return normalized in {'telescope', 'developer'}
+
+
 def _log_handshake_reject_summary():
      # Log throttled summary for invalid websocket handshake attempts.
     global _handshake_reject_count, _handshake_last_summary
@@ -343,7 +349,7 @@ async def handle_client(ws):
     _security_log('ws_command_connected', ip=client_ip, client_id=client_id, client_name=client_name, client_type=client_type, token_source=auth_result.get('source'))
     
     # Handle telescope database operations
-    if client_type == 'telescope':
+    if _is_telescope_capable_client(client_type):
         try:
             from models.tables import Telescope
             from Server import app
@@ -389,7 +395,7 @@ async def handle_client(ws):
     
     # Start heartbeat task for telescopes
     heartbeat_task = None
-    if client_type == 'telescope':
+    if _is_telescope_capable_client(client_type):
         heartbeat_task = asyncio.create_task(
             telescope_heartbeat(client_id, client_name, client_name, ws)
         )
@@ -478,7 +484,7 @@ async def handle_liveview_client(ws):
     _security_log('ws_liveview_connected', ip=client_ip, client_id=client_id, client_name=client_name, client_type=client_type, token_source=auth_result.get('source'))
     
     # Handle telescope database operations
-    if client_type == 'telescope':
+    if _is_telescope_capable_client(client_type):
         try:
             from models.tables import Telescope
             from Server import app
@@ -521,7 +527,7 @@ async def handle_liveview_client(ws):
     
     # Start heartbeat task for telescopes
     liveview_heartbeat_task = None
-    if client_type == 'telescope':
+    if _is_telescope_capable_client(client_type):
         liveview_client_id = f"{client_id}_liveview"
         liveview_heartbeat_task = asyncio.create_task(
             telescope_heartbeat(liveview_client_id, f"{client_name} (LiveView)", client_name, ws)
@@ -560,7 +566,7 @@ async def handle_liveview_client(ws):
         print(f"[LiveView] Error in connection: {e}")
     finally:
         # Cancel heartbeat task if it exists
-        if client_type == 'telescope':
+        if _is_telescope_capable_client(client_type):
             liveview_client_id = f"{client_id}_liveview"
             if liveview_client_id in heartbeat_tasks:
                 heartbeat_tasks[liveview_client_id].cancel()
