@@ -87,6 +87,10 @@
         overflow: hidden;
         background: rgba(255, 255, 255, 0.02);
         box-shadow: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
     }
 
     .photo-card:hover {
@@ -104,6 +108,8 @@
         aspect-ratio: 1 / 1;
         object-fit: cover;
         border-radius: 12px;
+        user-select: none;
+        -webkit-user-drag: none;
     }
 
     .preview-empty {
@@ -403,7 +409,7 @@
                 div.className = 'photo-card card p-2 h-100' + (selectedNames.includes(photo.name) ? ' selected' : '');
                 div.dataset.photoName = photo.name;
                 div.style.cursor = 'pointer';
-                div.onclick = (event) => handlePhotoClick(photo, event.currentTarget);
+                div.onclick = (event) => handlePhotoClick(photo, event.currentTarget, event);
                 div.ondblclick = () => showPhotoModal(photo.url);
                 div.innerHTML = `
                     <img src="${photo.url}" alt="${photo.name}" class="mb-2">
@@ -423,15 +429,20 @@
         updateToolbar();
     }
 
-    function handlePhotoClick(photo, photoDiv) {
+    function handlePhotoClick(photo, photoDiv, event) {
         if (!photo) return;
 
-        if (selectedNames.includes(photo.name)) {
-            selectedNames = selectedNames.filter(name => name !== photo.name);
-            if (photoDiv) photoDiv.classList.remove('selected');
+        if (event && event.shiftKey) {
+            if (selectedNames.includes(photo.name)) {
+                selectedNames = selectedNames.filter(name => name !== photo.name);
+                if (photoDiv) photoDiv.classList.remove('selected');
+            } else {
+                selectedNames.push(photo.name);
+                if (photoDiv) photoDiv.classList.add('selected');
+            }
         } else {
-            selectedNames.push(photo.name);
-            if (photoDiv) photoDiv.classList.add('selected');
+            selectedNames = [];
+            document.querySelectorAll('.photo-card.selected').forEach(card => card.classList.remove('selected'));
         }
 
         updateToolbar();
