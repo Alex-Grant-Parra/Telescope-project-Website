@@ -1,62 +1,351 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Photo Album</title>
-    <style>
-        .gallery { display: flex; flex-wrap: wrap; gap: 10px; }
-        .photo { border: 2px solid transparent; cursor: pointer; }
-        .photo.selected { border: 2px solid #2196F3; }
-        .photo img { width: 150px; height: 150px; object-fit: cover; }
-        .toolbar { margin-bottom: 10px; }
-    </style>
-</head>
-<body>
 {% extends "base.html" %}
 
 {% block title %}Album - Telescope Control{% endblock %}
 
+{% block extra_css %}
+<style>
+    .album-page {
+        max-width: 1600px;
+        --album-bg: transparent;
+        --album-text: #0f172a;
+        --album-muted: #475569;
+        --album-border: rgba(148, 163, 184, 0.22);
+        --album-section-bg: rgba(255, 255, 255, 0.28);
+    }
+
+    body.night-mode .album-page {
+        --album-bg: transparent;
+        --album-text: #ffffff;
+        --album-muted: rgba(255, 255, 255, 0.8);
+        --album-border: rgba(255, 255, 255, 0.2);
+        --album-section-bg: rgba(255, 255, 255, 0.06);
+    }
+
+    .album-page,
+    .album-page h1,
+    .album-page h2,
+    .album-page h3,
+    .album-page h4,
+    .album-page label,
+    .album-page .photo-name,
+    .album-page .metadata-value {
+        color: var(--album-text);
+    }
+
+    .album-page .text-muted,
+    .album-page .metadata-label,
+    .album-page .preview-empty,
+    .album-page .album-toolbar .text-muted {
+        color: var(--album-muted) !important;
+    }
+
+    .album-shell {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .album-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+        gap: 1rem;
+        align-items: start;
+    }
+
+    .album-gallery-panel {
+        padding: 0;
+        min-height: 72vh;
+        background: var(--album-bg);
+    }
+
+    .album-preview-panel {
+        position: sticky;
+        top: 1rem;
+        padding: 0;
+        min-height: 72vh;
+        background: var(--album-bg);
+    }
+
+    .album-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .album-toolbar .button-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .photo-card {
+        border: 1px solid var(--album-border);
+        cursor: pointer;
+        transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.02);
+        box-shadow: none;
+    }
+
+    .photo-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+    }
+
+    .photo-card.selected {
+        border-color: #2563eb !important;
+        box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18);
+    }
+
+    .photo-card img {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        object-fit: cover;
+        border-radius: 12px;
+    }
+
+    .preview-empty {
+        min-height: 64vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px dashed var(--album-border);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.02);
+        text-align: center;
+        padding: 2rem;
+    }
+
+    .preview-grid {
+        display: grid;
+        grid-template-columns: 180px minmax(0, 1fr);
+        gap: 1rem;
+        align-items: start;
+    }
+
+    .preview-image-frame {
+        border-radius: 18px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--album-border);
+        min-height: 220px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.75rem;
+    }
+
+    .preview-image-frame img {
+        max-width: 100%;
+        max-height: 180px;
+        object-fit: contain;
+        border-radius: 12px;
+        box-shadow: none;
+    }
+
+    .metadata-card {
+        border-radius: 18px;
+        background: transparent;
+        border: 0;
+        padding: 0;
+        height: 100%;
+    }
+
+    .metadata-section + .metadata-section {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--album-border);
+    }
+
+    .metadata-section h3 {
+        font-size: 0.82rem;
+        font-weight: 700;
+        margin-bottom: 0.75rem;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+    }
+
+    .metadata-sections {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.85rem;
+        margin-top: 1rem;
+    }
+
+    .metadata-section {
+        background: var(--album-section-bg);
+        border: 1px solid var(--album-border);
+        border-radius: 14px;
+        padding: 0.8rem 0.9rem;
+    }
+
+    .metadata-section + .metadata-section {
+        margin-top: 0;
+        padding-top: 0.8rem;
+    }
+
+    .metadata-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem 1rem;
+    }
+
+    .metadata-item {
+        display: grid;
+        gap: 0.15rem;
+    }
+
+    .metadata-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-weight: 700;
+    }
+
+    .metadata-value {
+        font-size: 0.92rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .custom-field {
+        margin-top: 0.75rem;
+    }
+
+    .custom-field label {
+        font-weight: 700;
+        margin-bottom: 0.35rem;
+    }
+
+    .custom-field textarea {
+        min-height: 140px;
+        resize: vertical;
+    }
+
+    .photo-card .card-body {
+        padding: 0;
+    }
+
+    .photo-name {
+        font-size: 0.78rem;
+        line-height: 1.1;
+        display: -webkit-box;
+        line-clamp: 2;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        max-height: 2.3em;
+    }
+
+    @media (max-width: 1200px) {
+        .album-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .album-preview-panel {
+            position: static;
+            min-height: auto;
+        }
+
+        .preview-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .metadata-sections,
+        .metadata-list {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-5">
-    <h1 class="mb-4">Photo Album</h1>
-    <div class="toolbar mb-3">
-        <button id="sort-date" class="btn btn-secondary btn-sm me-2">Sort by Date</button>
-        <button id="download-btn" class="btn btn-primary btn-sm me-2" disabled>Download</button>
-        <button id="delete-selected-btn" class="btn btn-danger btn-sm" disabled>Delete</button>
-    </div>
-    <div id="gallery">
-        <!-- Grouped thumbnails will be loaded here -->
+<div class="container-fluid album-page py-4">
+    <div class="album-shell mx-auto">
+        <div class="album-toolbar">
+            <div>
+                <h1 class="mb-1">Photo Album</h1>
+                <div class="text-muted">Click a thumbnail to inspect and edit the embedded metadata.</div>
+            </div>
+            <div class="button-group">
+                <button id="download-btn" class="btn btn-primary btn-sm" disabled>Download</button>
+                <button id="delete-selected-btn" class="btn btn-danger btn-sm" disabled>Delete</button>
+            </div>
+        </div>
+
+        <div class="album-layout">
+            <section class="album-gallery-panel">
+                <div id="gallery"></div>
+            </section>
+
+            <aside class="album-preview-panel">
+                <div id="preview-empty" class="preview-empty">
+                    <div>
+                        <h2 class="h4 mb-2">Select a photo</h2>
+                        <p class="mb-0">The image preview and its metadata will appear here. Target and notes can be edited and saved back into the JPEG.</p>
+                    </div>
+                </div>
+
+                <div id="preview-content" class="preview-grid d-none">
+                    <div class="preview-image-frame">
+                        <img id="preview-image" alt="Selected photo preview">
+                    </div>
+
+                    <div class="metadata-card">
+                        <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+                            <div>
+                                <h2 id="preview-title" class="h5 mb-1">Photo metadata</h2>
+                                <div id="preview-subtitle" class="text-muted small"></div>
+                            </div>
+                            <button id="save-metadata-btn" class="btn btn-success btn-sm" disabled>Save</button>
+                        </div>
+
+                        <div class="custom-field">
+                            <label for="target-input">Target</label>
+                            <input id="target-input" class="form-control" type="text" placeholder="Enter target name">
+                        </div>
+
+                        <div class="custom-field">
+                            <label for="notes-input">Notes</label>
+                            <textarea id="notes-input" class="form-control" placeholder="Add notes about the image"></textarea>
+                        </div>
+
+                        <div id="metadata-sections" class="metadata-sections"></div>
+                        <div id="metadata-status" class="small text-muted mt-3"></div>
+                    </div>
+                </div>
+            </aside>
+        </div>
     </div>
 </div>
-<!-- Modal for zoomed photo (no close button or gray circle) -->
+
 <div id="photoModal" class="photo-modal" style="display:none;">
     <img id="photoModalImg" src="" alt="Zoomed Photo" class="photo-modal-img">
 </div>
+{% endblock %}
+
+{% block extra_js %}
 <script>
     let photos = [];
-    let selected = [];
-    let lastSelected = null;
-
-    function fetchPhotos() {
-        fetch('/album/photos')
-            .then(r => r.json())
-            .then(data => {
-                photos = data;
-                renderGallery();
-            });
-    }
+    let selectedNames = [];
+    let activePhoto = null;
+    let metadataCache = new Map();
 
     function ordinalSuffix(day) {
         if (day > 3 && day < 21) return day + "th";
         switch (day % 10) {
-            case 1:  return day + "st";
-            case 2:  return day + "nd";
-            case 3:  return day + "rd";
+            case 1: return day + "st";
+            case 2: return day + "nd";
+            case 3: return day + "rd";
             default: return day + "th";
         }
     }
 
     function formatDate(dateStr) {
-        // Expects YYYYMMDD
         if (!dateStr || dateStr.length !== 8) return dateStr || "Unknown";
         const year = dateStr.slice(0, 4);
         const month = parseInt(dateStr.slice(4, 6), 10) - 1;
@@ -66,105 +355,257 @@
         return `${monthName} ${ordinalSuffix(day)} ${year}`;
     }
 
-    function groupPhotosByDate(photos) {
+    function groupPhotosByDate(items) {
         const groups = {};
-        photos.forEach((photo, idx) => {
+        items.forEach((photo, idx) => {
             const date = photo.date || "Unknown";
             if (!groups[date]) groups[date] = [];
             groups[date].push({...photo, idx});
         });
-        // Sort groups by date descending
         const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
         return sortedDates.map(date => ({date, items: groups[date]}));
     }
 
-    function handleSelect(event, idx) {
-        const photoDiv = event.currentTarget;
-        if (selected.includes(idx)) {
-            selected = selected.filter(i => i !== idx);
-            photoDiv.classList.remove("selected");
-        } else {
-            selected.push(idx);
-            photoDiv.classList.add("selected");
-        }
-        document.getElementById('download-btn').disabled = selected.length === 0;
+    function setStatus(message, isError = false) {
+        const status = document.getElementById('metadata-status');
+        status.textContent = message || '';
+        status.classList.toggle('text-danger', !!isError);
+        status.classList.toggle('text-muted', !isError);
+    }
+
+    function updateToolbar() {
+        const downloadBtn = document.getElementById('download-btn');
+        const deleteBtn = document.getElementById('delete-selected-btn');
+        const hasSel = selectedNames.length > 0;
+        downloadBtn.disabled = !hasSel;
+        deleteBtn.disabled = !hasSel;
     }
 
     function renderGallery() {
         const gallery = document.getElementById('gallery');
         gallery.innerHTML = '';
         const groups = groupPhotosByDate(photos);
+
         groups.forEach(group => {
             const heading = document.createElement('h4');
             heading.textContent = formatDate(group.date);
-            heading.className = "mt-4 mb-3";
+            heading.className = 'mt-3 mb-3';
             gallery.appendChild(heading);
 
             const row = document.createElement('div');
-            row.className = 'row';
+            row.className = 'row g-3';
+
             group.items.forEach(photo => {
                 const col = document.createElement('div');
-                col.className = 'col-6 col-sm-4 col-md-3 col-lg-2 mb-3';
+                col.className = 'col-6 col-sm-4 col-md-3 col-xl-2';
+
                 const div = document.createElement('div');
-                div.className = 'photo card p-2' + (selected.includes(photo.idx) ? ' selected border-primary' : '');
-                div.dataset.idx = photo.idx;
+                div.className = 'photo-card card p-2 h-100' + (selectedNames.includes(photo.name) ? ' selected' : '');
+                div.dataset.photoName = photo.name;
                 div.style.cursor = 'pointer';
-                div.onclick = (e) => handleSelect(e, photo.idx);
-                div.ondblclick = (e) => showPhotoModal(photo.url);
-                div.innerHTML = `<img src="${photo.url}" alt="${photo.name}" class="card-img-top mb-2" style="height:120px;object-fit:cover;">
-                    <div class="card-body p-1">
-                        <div class="small">${photo.name}</div>
+                div.onclick = (event) => handlePhotoClick(photo, event.currentTarget);
+                div.ondblclick = () => showPhotoModal(photo.url);
+                div.innerHTML = `
+                    <img src="${photo.url}" alt="${photo.name}" class="mb-2">
+                    <div class="card-body p-0">
+                        <div class="photo-name">${photo.name}</div>
                         <div class="text-muted small">${photo.date}</div>
-                    </div>`;
+                    </div>
+                `;
+
                 col.appendChild(div);
                 row.appendChild(col);
             });
+
             gallery.appendChild(row);
         });
-        document.getElementById('download-btn').disabled = selected.length === 0;
+
+        updateToolbar();
     }
 
-    // Modal logic (no close button, click anywhere to close)
+    function handlePhotoClick(photo, photoDiv) {
+        if (!photo) return;
+
+        if (selectedNames.includes(photo.name)) {
+            selectedNames = selectedNames.filter(name => name !== photo.name);
+            if (photoDiv) photoDiv.classList.remove('selected');
+        } else {
+            selectedNames.push(photo.name);
+            if (photoDiv) photoDiv.classList.add('selected');
+        }
+
+        updateToolbar();
+        loadPhotoMetadata(photo);
+    }
+
     function showPhotoModal(url) {
         const modal = document.getElementById('photoModal');
         const img = document.getElementById('photoModalImg');
         modal.style.display = 'flex';
         img.src = url;
         img.classList.remove('zoomed');
-        // Trigger reflow for animation
         void img.offsetWidth;
         img.classList.add('zoomed');
     }
 
     function closePhotoModal() {
-        const modal = document.getElementById('photoModal');
-        modal.style.display = 'none';
+        document.getElementById('photoModal').style.display = 'none';
         document.getElementById('photoModalImg').src = '';
     }
 
     document.getElementById('photoModal').onclick = closePhotoModal;
 
-    document.getElementById('sort-date').onclick = () => {
-        photos.sort((a, b) => b.datetime - a.datetime);
-        renderGallery();
-    };
+    function renderMetadataSections(photoMeta) {
+        const container = document.getElementById('metadata-sections');
+        container.innerHTML = '';
+
+        (photoMeta.sections || []).forEach(section => {
+            const sectionEl = document.createElement('div');
+            sectionEl.className = 'metadata-section';
+
+            const title = document.createElement('h3');
+            title.textContent = section.title;
+            sectionEl.appendChild(title);
+
+            const list = document.createElement('div');
+            list.className = 'metadata-list';
+
+            (section.items || []).forEach(item => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'metadata-item';
+
+                const label = document.createElement('div');
+                label.className = 'metadata-label';
+                label.textContent = item.label;
+
+                const value = document.createElement('div');
+                value.className = 'metadata-value';
+                value.textContent = item.value && String(item.value).trim() ? item.value : '—';
+
+                itemEl.appendChild(label);
+                itemEl.appendChild(value);
+                list.appendChild(itemEl);
+            });
+
+            sectionEl.appendChild(list);
+            container.appendChild(sectionEl);
+        });
+    }
+
+    function showEmptyPreview(message) {
+        document.getElementById('preview-empty').classList.remove('d-none');
+        document.getElementById('preview-content').classList.add('d-none');
+        setStatus(message || '');
+        document.getElementById('save-metadata-btn').disabled = true;
+    }
+
+    function showPreview(photoMeta) {
+        document.getElementById('preview-empty').classList.add('d-none');
+        document.getElementById('preview-content').classList.remove('d-none');
+        document.getElementById('preview-image').src = photoMeta.url;
+        document.getElementById('preview-title').textContent = photoMeta.name;
+        document.getElementById('preview-subtitle').textContent = `${photoMeta.width} x ${photoMeta.height} | ${photoMeta.modified}`;
+        document.getElementById('target-input').value = photoMeta.target || '';
+        document.getElementById('notes-input').value = photoMeta.notes || '';
+        document.getElementById('save-metadata-btn').disabled = false;
+        renderMetadataSections(photoMeta);
+        setStatus('Metadata loaded.');
+    }
+
+    function showStatusLoading() {
+        document.getElementById('preview-empty').classList.add('d-none');
+        document.getElementById('preview-content').classList.remove('d-none');
+        document.getElementById('preview-image').removeAttribute('src');
+        document.getElementById('preview-title').textContent = 'Loading metadata...';
+        document.getElementById('preview-subtitle').textContent = '';
+        document.getElementById('metadata-sections').innerHTML = '';
+        document.getElementById('save-metadata-btn').disabled = true;
+        setStatus('Loading photo metadata...');
+    }
+
+    function loadPhotoMetadata(photo) {
+        if (!photo) {
+            showEmptyPreview('No photo selected.');
+            return;
+        }
+
+        activePhoto = photo;
+        const cached = metadataCache.get(photo.name);
+        if (cached) {
+            showPreview(cached);
+            return;
+        }
+
+        showStatusLoading();
+        fetch(`/album/photo/${encodeURIComponent(photo.name)}/metadata`)
+            .then(resp => resp.json().then(body => ({status: resp.status, body})))
+            .then(({status, body}) => {
+                if (status !== 200 || body.status !== 'success') {
+                    throw new Error(body.message || 'Failed to load metadata');
+                }
+                metadataCache.set(photo.name, body.photo);
+                showPreview(body.photo);
+            })
+            .catch(err => {
+                console.error('Metadata load error', err);
+                setStatus('Failed to load metadata.', true);
+            });
+    }
+
+    function saveMetadata() {
+        if (!activePhoto) return;
+
+        const btn = document.getElementById('save-metadata-btn');
+        btn.disabled = true;
+        setStatus('Saving metadata...');
+
+        const payload = {
+            target: document.getElementById('target-input').value,
+            notes: document.getElementById('notes-input').value
+        };
+
+        fetch(`/album/photo/${encodeURIComponent(activePhoto.name)}/metadata`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(resp => resp.json().then(body => ({status: resp.status, body})))
+        .then(({status, body}) => {
+            if (status !== 200 || body.status !== 'success') {
+                throw new Error(body.message || 'Failed to save metadata');
+            }
+            metadataCache.set(activePhoto.name, body.photo);
+            showPreview(body.photo);
+            renderGallery();
+            setStatus('Metadata saved to the image file.');
+        })
+        .catch(err => {
+            console.error('Metadata save error', err);
+            setStatus('Failed to save metadata.', true);
+        })
+        .finally(() => {
+            btn.disabled = false;
+        });
+    }
+
+    document.getElementById('save-metadata-btn').addEventListener('click', saveMetadata);
 
     document.getElementById('download-btn').onclick = () => {
-        if (selected.length === 0) return;
-        const files = selected.map(i => photos[i].name);
+        if (selectedNames.length === 0) return;
+        const files = selectedNames.slice();
         fetch('/album/download', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({files})
         })
         .then(resp => {
-            if (!resp.ok) throw new Error("Download failed");
+            if (!resp.ok) throw new Error('Download failed');
             return resp.blob();
         })
         .then(blob => {
-            let filename = "photos.zip";
+            let filename = 'photos.zip';
             if (files.length === 1) {
-                filename = files[0].replace(/\.[^.]+$/, '') + ".zip";
+                filename = files[0].replace(/\.[^.]+$/, '') + '.zip';
             }
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -178,27 +619,10 @@
             }, 100);
         });
     };
-    fetchPhotos();
-
-    // Update toolbar buttons when selection changes
-    function updateToolbar() {
-        const downloadBtn = document.getElementById('download-btn');
-        const deleteBtn = document.getElementById('delete-selected-btn');
-        const hasSel = selected.length > 0;
-        downloadBtn.disabled = !hasSel;
-        deleteBtn.disabled = !hasSel;
-    }
-
-    // hook into existing selection flow by wrapping handleSelect calls
-    const originalHandleSelect = handleSelect;
-    handleSelect = function(event, idx) {
-        originalHandleSelect(event, idx);
-        updateToolbar();
-    };
 
     document.getElementById('delete-selected-btn').addEventListener('click', function() {
-        if (selected.length === 0) return;
-        const files = selected.map(i => photos[i].name);
+        if (selectedNames.length === 0) return;
+        const files = selectedNames.slice();
         if (!confirm(`Delete ${files.length} photo(s)? This cannot be undone.`)) return;
         const btn = this;
         btn.disabled = true;
@@ -210,10 +634,13 @@
         .then(r => r.json().then(body => ({status: r.status, body})))
         .then(({status, body}) => {
             if (status === 200 || status === 207) {
-                // Remove any successfully deleted jpeg names from photos
                 const deletedJpegs = (body.deleted || []).filter(n => n.toLowerCase().endsWith('.jpg') || n.toLowerCase().endsWith('.jpeg'));
                 photos = photos.filter(p => !deletedJpegs.includes(p.name));
-                selected = [];
+                selectedNames = [];
+                if (activePhoto && deletedJpegs.includes(activePhoto.name)) {
+                    activePhoto = null;
+                    showEmptyPreview('Select a photo to view metadata.');
+                }
                 renderGallery();
                 updateToolbar();
                 let msg = 'Deleted: ' + (body.deleted || []).join(', ');
@@ -232,23 +659,36 @@
             btn.disabled = false;
         });
     });
-</script>
-<style>
-    .photo.selected {
-        border: 2px solid #2196F3 !important;
+
+    function fetchPhotos() {
+        fetch('/album/photos')
+            .then(r => r.json())
+            .then(data => {
+                photos = data;
+                renderGallery();
+                showEmptyPreview('Select a photo to view metadata.');
+            });
     }
-    /* Modal styles (no close button or gray circle) */
+
+    fetchPhotos();
+</script>
+
+<style>
     .photo-modal {
         position: fixed;
         z-index: 2000;
-        left: 0; top: 0; width: 100vw; height: 100vh;
-        background: rgba(0,0,0,0.7);
+        left: 0;
+        top: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.72);
         display: flex;
         align-items: center;
         justify-content: center;
         transition: background 0.2s;
         cursor: pointer;
     }
+
     .photo-modal-img {
         position: relative;
         z-index: 2;
@@ -261,11 +701,10 @@
         transition: opacity 0.25s, transform 0.25s;
         cursor: default;
     }
+
     .photo-modal-img.zoomed {
         opacity: 1;
         transform: scale(1);
     }
 </style>
 {% endblock %}
-</body>
-</html>
