@@ -29,6 +29,13 @@
 
         <aside class="map-panel" aria-label="Map layer controls">
             <div class="map-panel-section">
+                <h2>Pin by coords</h2>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <input id="coord-search" type="text" placeholder="e.g. 51.4769, 0.0005" aria-label="Coordinates (lat, lon)" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit;">
+                    <button id="coord-go" style="padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:inherit;">Pin</button>
+                </div>
+            </div>
+            <div class="map-panel-section">
                 <h2>Layers</h2>
                 <label class="layer-toggle">
                     <input type="checkbox" data-layer="bortle" checked>

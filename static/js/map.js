@@ -56,6 +56,83 @@
 
     const overlayLayers = {};
 
+    // Marker used for search / info pin
+    let infoMarker = null;
+
+    function placePin(lat, lon, popupHtml) {
+        if (infoMarker) {
+            map.removeLayer(infoMarker);
+            infoMarker = null;
+        }
+        infoMarker = L.marker([lat, lon]).addTo(map);
+        if (popupHtml) {
+            infoMarker.bindPopup(popupHtml).openPopup();
+        }
+    }
+
+    async function fetchPointWeather(lat, lon) {
+        try {
+            const apiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&current_weather=true&hourly=precipitation,temperature_2m,wind_speed_10m&timezone=UTC`;
+            const resp = await fetch(apiUrl);
+            if (!resp.ok) {
+                throw new Error(`Open-Meteo API error ${resp.status}`);
+            }
+            const data = await resp.json();
+
+            const result = {
+                latitude: lat,
+                longitude: lon,
+                temperature: null,
+                wind: null,
+                precipitation: null
+            };
+
+            if (data.current_weather) {
+                result.temperature = data.current_weather.temperature;
+                // current_weather reports windspeed (m/s or km/h depending on API), key is 'windspeed'
+                result.wind = data.current_weather.windspeed || data.current_weather.wind_speed || null;
+            }
+
+            if (data.hourly && Array.isArray(data.hourly.time)) {
+                const times = data.hourly.time;
+                const now = new Date().toISOString().slice(0, 13) + ':00:00Z';
+                // Find the index for the current hour (rough match)
+                let idx = times.indexOf(now);
+                if (idx === -1) {
+                    // fallback: find closest by timestamp
+                    const target = new Date();
+                    let best = 0;
+                    let bestDiff = Infinity;
+                    for (let i = 0; i < times.length; i++) {
+                        const t = new Date(times[i]);
+                        const diff = Math.abs(t - target);
+                        if (diff < bestDiff) {
+                            bestDiff = diff;
+                            best = i;
+                        }
+                    }
+                    idx = best;
+                }
+
+                if (typeof idx === 'number' && idx >= 0) {
+                    if (data.hourly.precipitation && data.hourly.precipitation.length > idx) {
+                        result.precipitation = data.hourly.precipitation[idx];
+                    }
+                    if (data.hourly.temperature_2m && data.hourly.temperature_2m.length > idx) {
+                        result.temperature = result.temperature ?? data.hourly.temperature_2m[idx];
+                    }
+                    if (data.hourly.wind_speed_10m && data.hourly.wind_speed_10m.length > idx) {
+                        result.wind = result.wind ?? data.hourly.wind_speed_10m[idx];
+                    }
+                }
+            }
+
+            return result;
+        } catch (err) {
+            console.error('Point weather fetch failed', err);
+            return null;
+        }
+    }
     function setStatus(messages) {
         if (!statusEl) {
             return;
@@ -104,8 +181,11 @@
             buildOpenMeteoUrl("rain"),
             weatherLayerOptions
         );
+        // NOTE: some models (like dwd_icon) don't expose a `wind_speed_10m` variable.
+        // Use `wind_gusts_10m` which is available for the default model, or
+        // replace with a model that exposes wind speed if you prefer magnitude.
         overlayLayers.wind = leafletAdapter.createTileLayer(
-            buildOpenMeteoUrl("wind_speed_10m"),
+            buildOpenMeteoUrl("wind_gusts_10m"),
             weatherLayerOptions
         );
         overlayLayers.temperature = leafletAdapter.createTileLayer(
@@ -157,6 +237,156 @@
             setLayerActive(name, event.target.checked);
         });
     });
+
+    // --- Right-click / context menu: show info at a point ---
+    map.on('contextmenu', async (e) => {
+        const lat = e.latlng.lat;
+        const lon = e.latlng.lng;
+        const loadingHtml = `<div style="min-width:160px">Loading data for<br><strong>${lat.toFixed(5)}, ${lon.toFixed(5)}</strong>…</div>`;
+        placePin(lat, lon, loadingHtml);
+
+        const weather = await fetchPointWeather(lat, lon);
+        let popupHtml = `<div style="min-width:200px"><strong>Coords:</strong> ${lat.toFixed(5)}, ${lon.toFixed(5)}<br>`;
+        if (!weather) {
+            popupHtml += `<em>Weather data unavailable</em>`;
+        } else {
+            popupHtml += `<strong>Temperature:</strong> ${weather.temperature !== null ? weather.temperature + ' °C' : 'N/A'}<br>`;
+            popupHtml += `<strong>Wind:</strong> ${weather.wind !== null ? weather.wind + ' m/s' : 'N/A'}<br>`;
+            popupHtml += `<strong>Precipitation (hour):</strong> ${weather.precipitation !== null ? weather.precipitation + ' mm' : 'N/A'}<br>`;
+            // Sky brightness: best-effort – not available from Open-Meteo REST; indicate availability
+            if (overlayLayers.bortle) {
+                popupHtml += `<strong>Sky brightness:</strong> Bortle overlay enabled (visual only)<br>`;
+            } else {
+                popupHtml += `<strong>Sky brightness:</strong> Unavailable<br>`;
+            }
+        }
+        popupHtml += `</div>`;
+        if (infoMarker) {
+            infoMarker.setLatLng([lat, lon]);
+            infoMarker.bindPopup(popupHtml).openPopup();
+        } else {
+            placePin(lat, lon, popupHtml);
+        }
+    });
+
+    // --- Coordinate search / pin placement ---
+    const coordInput = document.getElementById('coord-search');
+    const coordGo = document.getElementById('coord-go');
+    function parseCoords(input) {
+        if (!input) return null;
+        const s = input.trim();
+        // Accept comma separated or space separated
+        const parts = s.split(/[,\s]+/).filter(Boolean);
+        if (parts.length < 2) return null;
+        const lat = parseFloat(parts[0]);
+        const lon = parseFloat(parts[1]);
+        if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+            return { lat, lon };
+        }
+        return null;
+    }
+
+    if (coordGo && coordInput) {
+        coordGo.addEventListener('click', (ev) => {
+            const v = coordInput.value;
+            const parsed = parseCoords(v);
+            if (!parsed) {
+                setStatus(['Invalid coordinates. Use "lat, lon".']);
+                return;
+            }
+            setStatus([]);
+            map.setView([parsed.lat, parsed.lon], Math.max(map.getZoom(), 6));
+            placePin(parsed.lat, parsed.lon, `<div><strong>Coords:</strong> ${parsed.lat.toFixed(5)}, ${parsed.lon.toFixed(5)}</div>`);
+        });
+        coordInput.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') {
+                coordGo.click();
+            }
+        });
+    }
+
+    // Try to populate the coord input with the user's current location (if permission granted).
+    // Initialize a location worker and perform a unified locate request.
+    let locationWorker = null;
+    function startLocationWorker() {
+        if (locationWorker) return;
+        try {
+            locationWorker = new Worker('/static/js/locationWorker.js');
+            locationWorker.addEventListener('message', async (ev) => {
+                const msg = ev.data || {};
+                if (msg.type === 'ready') return;
+
+                // Worker requests that the main thread attempt browser geolocation.
+                if (msg.type === 'needBrowserGeo') {
+                    if (navigator && navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                            (pos) => {
+                                try {
+                                    locationWorker.postMessage({ cmd: 'browserGeoResult', success: true, latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy });
+                                } catch (err) {
+                                    console.warn('Failed to post browser geo result to worker', err);
+                                }
+                            },
+                            (err) => {
+                                try {
+                                    locationWorker.postMessage({ cmd: 'browserGeoResult', success: false, error: err && err.message ? err.message : String(err) });
+                                } catch (e) {
+                                    console.warn('Failed to post browser geo error to worker', e);
+                                }
+                            },
+                            { enableHighAccuracy: true, timeout: 10000 }
+                        );
+                    } else {
+                        // No browser support — inform worker so it will fallback
+                        try {
+                            locationWorker.postMessage({ cmd: 'browserGeoResult', success: false, error: 'no_geolocation' });
+                        } catch (e) {
+                            console.warn('Failed to notify worker of missing geolocation', e);
+                        }
+                    }
+                    return;
+                }
+
+                if (msg.type === 'location') {
+                    const lat = msg.latitude;
+                    const lon = msg.longitude;
+                    if (coordInput) coordInput.value = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+                    const sourceText = msg.source === 'browser' ? 'Using your current location' : 'Using approximate location (IP)';
+                    setStatus([sourceText]);
+                    try {
+                        map.setView([lat, lon], Math.max(map.getZoom(), 6));
+                        const title = msg.source === 'browser' ? 'Your location' : 'Approximate location';
+                        placePin(lat, lon, `<div><strong>${title}</strong><br>${lat.toFixed(5)}, ${lon.toFixed(5)}</div>`);
+                    } catch (err) {
+                        console.warn('Failed to center map on location', err);
+                    }
+                    return;
+                }
+
+                if (msg.type === 'error') {
+                    console.warn('Location worker error:', msg.message);
+                    return;
+                }
+            });
+        } catch (err) {
+            console.warn('Failed to create location worker', err);
+            locationWorker = null;
+        }
+    }
+
+    function requestLocate() {
+        startLocationWorker();
+        if (locationWorker) {
+            try {
+                locationWorker.postMessage({ cmd: 'locate' });
+            } catch (err) {
+                console.warn('Failed to request locate from worker', err);
+            }
+        }
+    }
+
+    // Kick off unified locate flow
+    requestLocate();
 
     if (weatherOpacityInput) {
         weatherOpacityInput.addEventListener("input", (event) => {
