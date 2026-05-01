@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block title %}World Map - Telescope Control{% endblock %}
+
+{% block extra_css %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<link rel="stylesheet" href="{{ url_for('static', filename='map.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="map-page">
+    <header class="map-header">
+        <div class="map-headline">
+            <p class="map-eyebrow">World conditions</p>
+            <h1>Sky brightness and weather layers</h1>
+            <p class="map-subtitle">Toggle rain, wind, temperature, and Bortle scale overlays on top of satellite imagery.</p>
+        </div>
+        <div class="map-meta">
+            <span class="map-pill">Satellite base</span>
+            <span class="map-pill">Zoomable globe</span>
+        </div>
+    </header>
+
+    <div class="map-wrap">
+        <div id="world-map" class="map-canvas" role="img" aria-label="World map showing weather and sky brightness layers"></div>
+
+        <aside class="map-panel" aria-label="Map layer controls">
+            <div class="map-panel-section">
+                <h2>Layers</h2>
+                <label class="layer-toggle">
+                    <input type="checkbox" data-layer="bortle" checked>
+                    <span>Bortle scale</span>
+                </label>
+                <label class="layer-toggle">
+                    <input type="checkbox" data-layer="rain">
+                    <span>Rain</span>
+                </label>
+                <label class="layer-toggle">
+                    <input type="checkbox" data-layer="wind">
+                    <span>Wind</span>
+                </label>
+                <label class="layer-toggle">
+                    <input type="checkbox" data-layer="temperature">
+                    <span>Temperature</span>
+                </label>
+            </div>
+            <div class="map-panel-section">
+                <h2>Opacity</h2>
+                <label class="range-control">
+                    <span>Weather</span>
+                    <input id="weather-opacity" type="range" min="0.2" max="1" step="0.05" value="0.7">
+                </label>
+                <label class="range-control">
+                    <span>Bortle</span>
+                    <input id="bortle-opacity" type="range" min="0.2" max="1" step="0.05" value="0.6">
+                </label>
+            </div>
+            <div class="map-panel-section map-status" id="map-status" role="status" aria-live="polite"></div>
+        </aside>
+
+        <div class="map-legend" aria-label="Bortle scale legend">
+            <div class="legend-title">Bortle scale</div>
+            <div class="legend-grid">
+                <div class="legend-item">
+                    <span class="legend-swatch bortle-1"></span>
+                    <span>1</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-swatch bortle-2"></span>
+                    <span>2</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-swatch bortle-3"></span>
+                    <span>3</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-swatch bortle-4"></span>
+                    <span>4</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-swatch bortle-5"></span>
+                    <span>5</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-swatch bortle-6"></span>
+                    <span>6</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-swatch bortle-7"></span>
+                    <span>7</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-swatch bortle-8"></span>
+                    <span>8</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-swatch bortle-9"></span>
+                    <span>9</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.MAP_CONFIG = {
+        openMeteoTileUrl: "{{ open_meteo_tile_url }}",
+        openMeteoAttribution: "{{ open_meteo_attribution }}",
+        bortleTileUrl: "{{ bortle_tile_url }}",
+        bortleAttribution: "{{ bortle_attribution }}",
+        satelliteTileUrl: "{{ satellite_tile_url }}",
+        satelliteAttribution: "{{ satellite_attribution }}"
+    };
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/@openmeteo/weather-map-layer@0.0.19/dist/index.js" defer></script>
+<script src="{{ url_for('static', filename='js/map.js') }}" defer></script>
+{% endblock %}
