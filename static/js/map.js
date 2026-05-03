@@ -201,6 +201,20 @@
             attribution: bortleAttribution,
             className: "bortle-layer"
         });
+    } else if ((config.bortleFixedUrl || "").trim()) {
+        // Fallback: use a single fixed world image as an overlay. Place a suitable
+        // global PNG/SVG at `static/images/bortle_fixed.png` or set BORTLE_FIXED_URL.
+        const fixedUrl = config.bortleFixedUrl.trim();
+        try {
+            overlayLayers.bortle = L.imageOverlay(fixedUrl, [[-85, -180], [85, 180]], {
+                opacity: bortleOpacity,
+                pane: "bortlePane",
+                attribution: bortleAttribution,
+                className: "bortle-layer"
+            });
+        } catch (err) {
+            console.warn('Failed to create fixed Bortle image overlay', err);
+        }
     }
 
     const weatherLayerNames = ["rain", "wind", "temperature"];
