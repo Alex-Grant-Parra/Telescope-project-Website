@@ -316,7 +316,7 @@ bool registerMotor(const String& id, Motor* motor, bool owned) {
 }
  
 void sendError(const char* message) {
-  StaticJsonDocument<192> resp;
+  JsonDocument resp;
   resp["status"] = "error";
   resp["message"] = message;
   serializeJson(resp, Serial);
@@ -324,16 +324,16 @@ void sendError(const char* message) {
 }
  
 void sendOkEmpty() {
-  StaticJsonDocument<64> resp;
+  JsonDocument resp;
   resp["status"] = "ok";
   serializeJson(resp, Serial);
   Serial.println();
 }
 
 void sendOkLedStatus(const LedChannel& led) {
-  StaticJsonDocument<192> resp;
+  JsonDocument resp;
   resp["status"] = "ok";
-  JsonObject data = resp.createNestedObject("data");
+  JsonObject data = resp["data"].to<JsonObject>();
   data["led"] = led.name;
   data["pin"] = led.pin;
   data["state"] = led.state;
@@ -344,9 +344,9 @@ void sendOkLedStatus(const LedChannel& led) {
 }
  
 void sendOkStatus(const String& motorId, Motor* motor) {
-  StaticJsonDocument<192> resp;
+  JsonDocument resp;
   resp["status"] = "ok";
-  JsonObject data = resp.createNestedObject("data");
+  JsonObject data = resp["data"].to<JsonObject>();
   data["motor"] = motorId;
   data["enabled"] = motor->isEnabled();
   data["moving"] = motor->isMoving();
@@ -358,10 +358,10 @@ void sendOkStatus(const String& motorId, Motor* motor) {
 }
  
 void sendOkMotorList() {
-  StaticJsonDocument<256> resp;
+  JsonDocument resp;
   resp["status"] = "ok";
-  JsonObject data = resp.createNestedObject("data");
-  JsonArray motors = data.createNestedArray("motors");
+  JsonObject data = resp["data"].to<JsonObject>();
+  JsonArray motors = data["motors"].to<JsonArray>();
   for (size_t i = 0; i < kMaxMotors; i++) {
     if (g_motors[i].motor != nullptr) {
       motors.add(g_motors[i].id);
@@ -376,7 +376,7 @@ void handleCommand(const String& line) {
     return;
   }
  
-  StaticJsonDocument<384> req;
+  JsonDocument req;
   DeserializationError err = deserializeJson(req, line);
   if (err) {
     sendError("Invalid JSON");
@@ -397,7 +397,7 @@ void handleCommand(const String& line) {
       return;
     }
 
-    if (req.containsKey("mode")) {
+    if (!req["mode"].isNull()) {
       const char* mode = req["mode"] | "";
       if (strcmp(mode, "on") == 0) {
         applyLedState(led, true);
@@ -417,7 +417,7 @@ void handleCommand(const String& line) {
       return;
     }
  
-    if (req.containsKey("on")) {
+    if (!req["on"].isNull()) {
       bool on = req["on"] | false;
       applyLedState(led, on);
       sendOkLedStatus(*led);
@@ -438,7 +438,7 @@ void handleCommand(const String& line) {
       sendError("Motor already exists");
       return;
     }
-    if (!req.containsKey("step") || !req.containsKey("dir") || !req.containsKey("en")) {
+    if (req["step"].isNull() || req["dir"].isNull() || req["en"].isNull()) {
       sendError("Missing motor pins");
       return;
     }
@@ -527,9 +527,9 @@ void handleCommand(const String& line) {
   }
   if (strcmp(cmd, "set_speed") == 0) {
     uint32_t speedUs = motor->getStepDelayUs();
-    if (req.containsKey("speed_us")) {
+    if (!req["speed_us"].isNull()) {
       speedUs = req["speed_us"].as<uint32_t>();
-    } else if (req.containsKey("sps")) {
+    } else if (!req["sps"].isNull()) {
       float sps = req["sps"].as<float>();
       if (sps <= 0.0f) {
         sendError("Invalid sps");
@@ -552,7 +552,7 @@ void handleCommand(const String& line) {
     return;
   }
   if (strcmp(cmd, "turn_degrees") == 0) {
-    if (!req.containsKey("degrees")) {
+    if (req["degrees"].isNull()) {
       sendError("Missing degrees");
       return;
     }
@@ -578,9 +578,9 @@ void handleCommand(const String& line) {
     return;
   }
   if (strcmp(cmd, "get_position") == 0) {
-    StaticJsonDocument<128> resp;
+    JsonDocument resp;
     resp["status"] = "ok";
-    JsonObject data = resp.createNestedObject("data");
+    JsonObject data = resp["data"].to<JsonObject>();
     data["motor"] = motorId;
     data["position"] = motor->getPosition();
     serializeJson(resp, Serial);
