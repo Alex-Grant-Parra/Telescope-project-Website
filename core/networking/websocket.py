@@ -10,6 +10,7 @@ from utils.handlers import function_map
 from utils.liveview_state import is_liveview_enabled, save_liveview_state
 from utils.camera_state import camera_state, camera_scanner_task
 from utils.config_state import get_client_config, save_client_config, build_service_urls
+from utils.LEDmanager import get_led_manager
 
 
 # Configuration values are provided via `config/client_profile.json` at runtime.
@@ -535,6 +536,8 @@ async def websocketClient(cfg: dict = None):
     SERVER_HTTP_URL = urls["http_url"]
     SERVER_URI = urls["server_uri"]
     LIVEVIEW_URI = urls["liveview_uri"]
+    leds = get_led_manager()
+    leds.set_ui_connected(True)
     
     
     
@@ -557,3 +560,4 @@ async def websocketClient(cfg: dict = None):
         print(f"[main] Unexpected exception: {e}")
     finally:
         cleanup_camera()
+        leds.set_ui_connected(False)

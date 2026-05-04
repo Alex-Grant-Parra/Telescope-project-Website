@@ -3,6 +3,7 @@ import time
 from utils.location import get_current_location
 from utils.Tools import hour_angle
 from utils.telescope_state import set_telescope_coords, get_telescope_coords, get_slew_config, set_target_coords, get_target_coords, update_hour_angle
+from utils.LEDmanager import get_led_manager
 
 # Motor control
 from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig, ESP32Motor
@@ -481,6 +482,7 @@ def _continuous_tracking_loop() -> None:
     3. Starts continuous tracking at the configured speed
     """
     global _tracking_active, _target_object
+    leds = get_led_manager()
     
     print("[tracking] Continuous tracking thread started")
     
@@ -584,6 +586,9 @@ def _continuous_tracking_loop() -> None:
                                 # If we're centered on target, start sidereal tracking
                                 if abs_delta_ha < centered_threshold and abs_delta_dec < centered_threshold:
                                     print(f"[tracking] ✓ Within centered threshold - starting sidereal tracking")
+                                    leds.flash_tracking_locked()
+                                    leds.set_tracking(True, pulse=False)
+                                    leds.set_command_busy(False)
                                     _start_ra_tracking()
                                     sidereal_tracking_active = True
                                 # If we're off target but motors stopped, issue correction slew
@@ -613,6 +618,7 @@ def _continuous_tracking_loop() -> None:
 def stop_tracking() -> None:
     """Stop continuous tracking and motors."""
     global _tracking_active, _tracking_thread, _target_object
+    leds = get_led_manager()
     
     if _tracking_active:
         print("[tracking] Stopping continuous tracking")
@@ -650,6 +656,8 @@ def stop_tracking() -> None:
     else:
         print("[tracking] Warning: ESP32 connection not available to stop motors")
 
+    leds.set_idle()
+
 
 def _set_polaris_alignment(location: dict) -> None:
     """Set telescope to Polaris coordinates for polar alignment."""
@@ -678,6 +686,7 @@ def trackCoordinates(name, ra, dec, mag):
         mag: Magnitude
     """
     global _tracking_active, _tracking_thread, _target_object
+    leds = get_led_manager()
     
     # If already tracking, stop the previous tracking session first
     if _tracking_active:
@@ -691,6 +700,7 @@ def trackCoordinates(name, ra, dec, mag):
         dec = float(dec)
     except (ValueError, TypeError) as e:
         print(f"[tracking] Error: Invalid RA or Dec format: {e}")
+        leds.set_error(True, critical=False)
         return
     
     print(f"[tracking] Acquiring target: {name}, RA: {ra}, Dec: {dec}, Mag: {mag}")
@@ -699,18 +709,21 @@ def trackCoordinates(name, ra, dec, mag):
     location = get_current_location()
     if location is None:
         print("[tracking] Warning: Location data not available. Cannot calculate hour angle.")
+        leds.set_error(True, critical=False)
         return
     
     # Extract longitude and latitude from location JSON
     longitude = location.get('longitude')
     latitude = location.get('latitude')
     print(f"[tracking] Observer location: Longitude={longitude}, Latitude={latitude}")
+    leds.clear_error()
 
     # Convert target RA to hour angle using current location and time
     TargetHA = hour_angle(ra, longitude)
     TargetDec = dec
     print(f"[tracking] Target: {name} - RA={ra:.4f}°, Dec={dec:.4f}°")
     print(f"[tracking] Target Hour Angle (current): HA={TargetHA:.4f}°")
+    leds.set_command_busy(True)
 
     # Read current telescope coordinates from state (stored as RA, not HA)
     coords = get_telescope_coords() or {}
@@ -753,6 +766,7 @@ def trackCoordinates(name, ra, dec, mag):
     # Slew, refine, and center on target
     if abs(DeltaHA) > 0.001 or abs(DeltaDec) > 0.001:
         print(f"[tracking] Movement required, calling _move_motors...")
+        leds.set_movement("slewing")
         
         # Reset motor positions AND set current coordinates to establish clean baseline
         try:
@@ -791,7 +805,7 @@ def trackCoordinates(name, ra, dec, mag):
         _tracking_thread.start()
         _start_hour_angle_updater()  # Also start the background hour angle updater
         print(f"[tracking] Continuous tracking started for {name}")
-    
+
     # Note: ifAligned() check removed here - it was overwriting target coordinates with Polaris
     # Polaris alignment should be done separately via a dedicated alignment command
 

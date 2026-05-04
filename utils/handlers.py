@@ -9,6 +9,7 @@ from core.networking.csrf import get_csrf_token, SESSION
 from utils.liveview_state import load_liveview_state, save_liveview_state
 from utils.camera_state import camera_state
 from utils.config_state import get_client_config, build_service_urls, load_static_state
+from utils.LEDmanager import get_led_manager
 from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig
 from core.hardware.tracking import trackCoordinates, stop_tracking
 from utils.telescope_state import get_telescope_coords
@@ -99,99 +100,113 @@ def setCameraSetting(label, value):
 @requires_camera("capture photo")
 def capturePhoto(currentid):
     # Use camera lock to prevent conflicts with live view
-    with camera_state.get_command_lock():
-        # Check if live view is enabled and pause it
-        if load_liveview_state():
-            camera_state.pause_liveview_for_command()
-        
-        files = Camera.capturePhoto(currentid=currentid) # Returns a list of two file names, one raw, one jpeg
-
-    print(files)
-
-    if not isinstance(files, list) or len(files) < 2:
-        print("[ERROR] Camera.capturePhoto() did not return two valid files")
-        return {"error": "Camera did not return valid files"}
-
-    current_dir = os.getcwd()
-    photos_dir = os.path.join(current_dir, "photos/default")
-
-    # Ensure directory exists
-    if not os.path.exists(photos_dir):
-        print(f"[ERROR] Directory '{photos_dir}' does not exist.")
-        return
-
-    # Prepare file paths
-    files = [os.path.join(photos_dir, file) for file in files]
-
-    # Verify files exist
-    missing_files = [file for file in files if not os.path.exists(file)]
-    if missing_files:
-        print(f"[ERROR] The following files are missing: {missing_files}")
-        return
-    
-    server_url = f"{SERVER_URL}/upload"
-
-    # Prepare file tuples with filenames and basic content-types
-    def _guess_mime(path: str) -> str:
-        ext = os.path.splitext(path)[1].lower().lstrip(".")
-        if ext in {"jpg", "jpeg"}:
-            return "image/jpeg"
-        if ext in {"png"}:
-            return "image/png"
-        if ext in {"gif"}:
-            return "image/gif"
-        if ext in {"bmp"}:
-            return "image/bmp"
-        if ext in {"tiff", "tif"}:
-            return "image/tiff"
-        if ext in {"webp"}:
-            return "image/webp"
-        # RAW/other
-        return "application/octet-stream"
-
-    file_data = {
-        f"file{index}": (os.path.basename(file), open(file, "rb"), _guess_mime(file))
-        for index, file in enumerate(files)
-    }
-
-    # Prepare headers, attach CSRF if available
-    headers = {}
-    data = None
-    token = get_csrf_token(SERVER_URL)
-    if token:
-        # Send both common header variations to be safe
-        headers["X-CSRF-Token"] = token
-        headers["X-CSRFToken"] = token
-        # Also include token as form field to support Flask-WTF style
-        data = {"csrf_token": token}
+    leds = get_led_manager()
+    leds.set_command_busy(True)
+    leds.flash_capture_started()
 
     try:
-        print("[DEBUG] Sending files to server...")
-        response = SESSION.post(
-            server_url,
-            files=file_data,
-            headers=headers,
-            data=data,
-            timeout=60,
-        )
-        # Try to print JSON if available, else status/text
+        with camera_state.get_command_lock():
+            # Check if live view is enabled and pause it
+            if load_liveview_state():
+                camera_state.pause_liveview_for_command()
+            
+            files = Camera.capturePhoto(currentid=currentid) # Returns a list of two file names, one raw, one jpeg
+
+        print(files)
+
+        if not isinstance(files, list) or len(files) < 2:
+            print("[ERROR] Camera.capturePhoto() did not return two valid files")
+            leds.set_error(True, critical=False)
+            return {"error": "Camera did not return valid files"}
+
+        current_dir = os.getcwd()
+        photos_dir = os.path.join(current_dir, "photos/default")
+
+        # Ensure directory exists
+        if not os.path.exists(photos_dir):
+            print(f"[ERROR] Directory '{photos_dir}' does not exist.")
+            leds.set_error(True, critical=False)
+            return
+
+        # Prepare file paths
+        files = [os.path.join(photos_dir, file) for file in files]
+
+        # Verify files exist
+        missing_files = [file for file in files if not os.path.exists(file)]
+        if missing_files:
+            print(f"[ERROR] The following files are missing: {missing_files}")
+            leds.set_error(True, critical=False)
+            return
+        
+        server_url = f"{SERVER_URL}/upload"
+
+        # Prepare file tuples with filenames and basic content-types
+        def _guess_mime(path: str) -> str:
+            ext = os.path.splitext(path)[1].lower().lstrip(".")
+            if ext in {"jpg", "jpeg"}:
+                return "image/jpeg"
+            if ext in {"png"}:
+                return "image/png"
+            if ext in {"gif"}:
+                return "image/gif"
+            if ext in {"bmp"}:
+                return "image/bmp"
+            if ext in {"tiff", "tif"}:
+                return "image/tiff"
+            if ext in {"webp"}:
+                return "image/webp"
+            # RAW/other
+            return "application/octet-stream"
+
+        file_data = {
+            f"file{index}": (os.path.basename(file), open(file, "rb"), _guess_mime(file))
+            for index, file in enumerate(files)
+        }
+
+        # Prepare headers, attach CSRF if available
+        headers = {}
+        data = None
+        token = get_csrf_token(SERVER_URL)
+        if token:
+            # Send both common header variations to be safe
+            headers["X-CSRF-Token"] = token
+            headers["X-CSRFToken"] = token
+            # Also include token as form field to support Flask-WTF style
+            data = {"csrf_token": token}
+
         try:
-            print("[DEBUG] Server response:", response.json())
-        except ValueError:
-            print(f"[DEBUG] Server response status={response.status_code}, body={response.text[:300]}")
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR] Failed to upload files: {e}")
+            print("[DEBUG] Sending files to server...")
+            response = SESSION.post(
+                server_url,
+                files=file_data,
+                headers=headers,
+                data=data,
+                timeout=60,
+            )
+            # Try to print JSON if available, else status/text
+            try:
+                print("[DEBUG] Server response:", response.json())
+            except ValueError:
+                print(f"[DEBUG] Server response status={response.status_code}, body={response.text[:300]}")
+            response.raise_for_status()
+            leds.flash_command_complete(True)
+        except requests.exceptions.RequestException as e:
+            print(f"[ERROR] Failed to upload files: {e}")
+            leds.set_error(True, critical=False)
+            leds.flash_command_complete(False)
+        finally:
+            # Ensure files are closed
+            for file_tuple in file_data.values():
+                file_tuple[1].close()
     finally:
-        # Ensure files are closed
-        for file_tuple in file_data.values():
-            file_tuple[1].close()
+        leds.set_command_busy(False)
 
 @requires_camera("start live view")
 def startLiveView():
     global liveview_enabled
     liveview_enabled = True
     save_liveview_state(True)
+    get_led_manager().apply()
     print("[liveview] Live view started.")
     return "Live view started"
 
@@ -199,6 +214,7 @@ def stopLiveView():
     global liveview_enabled
     liveview_enabled = False
     save_liveview_state(False)
+    get_led_manager().apply()
     
     # Release camera viewfinder using the Camera class (if camera available)
     if camera_state.is_available():
