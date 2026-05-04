@@ -224,8 +224,26 @@ public:
   }
 };
  
-constexpr int kLedPin = 2;
+struct LedChannel {
+  const char* name;
+  int pin;
+  bool state;
+  bool blinkEnabled;
+  uint32_t blinkIntervalMs;
+  uint32_t lastToggleMs;
+  uint32_t autoOffAtMs;
+};
+
 constexpr uint32_t kDefaultLedBlinkMs = 500;
+constexpr size_t kLedCount = 6;
+LedChannel g_leds[kLedCount] = {
+  {"board", 2, false, false, kDefaultLedBlinkMs, 0, 0},
+  {"yellow", 18, false, false, kDefaultLedBlinkMs, 0, 0},
+  {"blue", 5, false, false, kDefaultLedBlinkMs, 0, 0},
+  {"white", 17, false, false, kDefaultLedBlinkMs, 0, 0},
+  {"green", 16, false, false, kDefaultLedBlinkMs, 0, 0},
+  {"red", 4, false, false, kDefaultLedBlinkMs, 0, 0},
+};
  
 struct MotorEntry {
   String id;
@@ -241,6 +259,34 @@ bool g_ledState = false;
 uint32_t g_ledBlinkIntervalMs = kDefaultLedBlinkMs;
 uint32_t g_lastLedToggleMs = 0;
 uint32_t g_ledAutoOffAtMs = 0;
+
+LedChannel* findLed(const String& id) {
+  for (size_t i = 0; i < kLedCount; i++) {
+    if (g_leds[i].name != nullptr && id == g_leds[i].name) {
+      return &g_leds[i];
+    }
+  }
+  return nullptr;
+}
+
+void applyLedState(LedChannel* led, bool on) {
+  if (led == nullptr) {
+    return;
+  }
+  led->blinkEnabled = false;
+  led->state = on;
+  led->autoOffAtMs = 0;
+}
+
+void startLedBlink(LedChannel* led, uint32_t intervalMs, uint32_t autoOffMs) {
+  if (led == nullptr) {
+    return;
+  }
+  led->blinkEnabled = true;
+  led->blinkIntervalMs = intervalMs == 0 ? kDefaultLedBlinkMs : intervalMs;
+  led->lastToggleMs = millis();
+  led->autoOffAtMs = autoOffMs > 0 ? (led->lastToggleMs + autoOffMs) : 0;
+}
  
 Motor* findMotor(const String& id) {
   for (size_t i = 0; i < kMaxMotors; i++) {
@@ -280,6 +326,19 @@ void sendError(const char* message) {
 void sendOkEmpty() {
   StaticJsonDocument<64> resp;
   resp["status"] = "ok";
+  serializeJson(resp, Serial);
+  Serial.println();
+}
+
+void sendOkLedStatus(const LedChannel& led) {
+  StaticJsonDocument<192> resp;
+  resp["status"] = "ok";
+  JsonObject data = resp.createNestedObject("data");
+  data["led"] = led.name;
+  data["pin"] = led.pin;
+  data["state"] = led.state;
+  data["blink_enabled"] = led.blinkEnabled;
+  data["blink_interval_ms"] = led.blinkIntervalMs;
   serializeJson(resp, Serial);
   Serial.println();
 }
@@ -331,38 +390,37 @@ void handleCommand(const String& line) {
   }
  
   if (strcmp(cmd, "led") == 0) {
+    const char* ledName = req["led"] | "board";
+    LedChannel* led = findLed(String(ledName));
+    if (led == nullptr) {
+      sendError("Unknown LED");
+      return;
+    }
+
     if (req.containsKey("mode")) {
       const char* mode = req["mode"] | "";
       if (strcmp(mode, "on") == 0) {
-        g_ledBlinkEnabled = false;
-        g_ledState = true;
+        applyLedState(led, true);
       } else if (strcmp(mode, "off") == 0) {
-        g_ledBlinkEnabled = false;
-        g_ledState = false;
+        applyLedState(led, false);
       } else if (strcmp(mode, "blink") == 0) {
-        g_ledBlinkEnabled = true;
         uint32_t intervalMs = req["interval_ms"] | kDefaultLedBlinkMs;
-        g_ledBlinkIntervalMs = intervalMs == 0 ? kDefaultLedBlinkMs : intervalMs;
-        g_lastLedToggleMs = millis();
-        if (req.containsKey("auto_off_ms")) {
-          uint32_t autoOffMs = req["auto_off_ms"] | 0;
-          g_ledAutoOffAtMs = autoOffMs > 0 ? (g_lastLedToggleMs + autoOffMs) : 0;
-        } else {
-          g_ledAutoOffAtMs = 0;
-        }
+        uint32_t autoOffMs = req["auto_off_ms"] | 0;
+        startLedBlink(led, intervalMs, autoOffMs);
+      } else if (strcmp(mode, "toggle") == 0) {
+        applyLedState(led, !led->state);
       } else {
         sendError("Invalid LED mode");
         return;
       }
-      sendOkEmpty();
+      sendOkLedStatus(*led);
       return;
     }
  
     if (req.containsKey("on")) {
       bool on = req["on"] | false;
-      g_ledBlinkEnabled = false;
-      g_ledState = on;
-      sendOkEmpty();
+      applyLedState(led, on);
+      sendOkLedStatus(*led);
       return;
     }
  
@@ -556,24 +614,29 @@ void setup() {
   // Initialize serial communication
   Serial.begin(115200);
  
-  pinMode(kLedPin, OUTPUT);
-  digitalWrite(kLedPin, LOW);
+  for (size_t i = 0; i < kLedCount; i++) {
+    pinMode(g_leds[i].pin, OUTPUT);
+    digitalWrite(g_leds[i].pin, LOW);
+  }
 }
  
 void loop() {
   handleSerial();
  
-  if (g_ledBlinkEnabled) {
-    uint32_t now = millis();
-    if (g_ledAutoOffAtMs != 0 && (int32_t)(now - g_ledAutoOffAtMs) >= 0) {
-      g_ledBlinkEnabled = false;
-      g_ledState = false;
-      g_ledAutoOffAtMs = 0;
-    } else if (now - g_lastLedToggleMs >= g_ledBlinkIntervalMs) {
-      g_ledState = !g_ledState;
-      g_lastLedToggleMs = now;
+  uint32_t now = millis();
+  for (size_t i = 0; i < kLedCount; i++) {
+    LedChannel& led = g_leds[i];
+    if (led.blinkEnabled) {
+      if (led.autoOffAtMs != 0 && (int32_t)(now - led.autoOffAtMs) >= 0) {
+        led.blinkEnabled = false;
+        led.state = false;
+        led.autoOffAtMs = 0;
+      } else if (now - led.lastToggleMs >= led.blinkIntervalMs) {
+        led.state = !led.state;
+        led.lastToggleMs = now;
+      }
     }
+
+    digitalWrite(led.pin, led.state ? HIGH : LOW);
   }
- 
-  digitalWrite(kLedPin, g_ledState ? HIGH : LOW);
 }

@@ -64,6 +64,10 @@ class ESP32Connection:
 		self._lock = threading.Lock()
 		time.sleep(0.2)
 		self._drain()
+		try:
+			ESP32LED.attach(self)
+		except NameError:
+			pass
 
 	def close(self) -> None:
 		try:
@@ -108,20 +112,80 @@ class ESP32Connection:
 		return self.send({"cmd": "delete_motor", "motor": motor_id})
 
 	def led_on(self) -> Dict[str, Any]:
-		return self.send({"cmd": "led", "mode": "on"})
+		return self.send({"cmd": "led", "led": "board", "mode": "on"})
 
 	def led_off(self) -> Dict[str, Any]:
-		return self.send({"cmd": "led", "mode": "off"})
+		return self.send({"cmd": "led", "led": "board", "mode": "off"})
 
 	def led_blink(self, interval_ms: int = 500, auto_off_ms: Optional[int] = None) -> Dict[str, Any]:
 		payload: Dict[str, Any] = {
 			"cmd": "led",
+			"led": "board",
 			"mode": "blink",
 			"interval_ms": int(interval_ms),
 		}
 		if auto_off_ms is not None:
 			payload["auto_off_ms"] = int(auto_off_ms)
 		return self.send(payload)
+
+
+class ESP32LED:
+	class Channel:
+		def __init__(self, conn: ESP32Connection, name: str, pin: int) -> None:
+			self.conn = conn
+			self.name = name
+			self.pin = pin
+
+		def action(
+			self,
+			mode: Optional[str] = None,
+			on: Optional[bool] = None,
+			interval_ms: int = 500,
+			auto_off_ms: Optional[int] = None,
+		) -> Dict[str, Any]:
+			payload: Dict[str, Any] = {"cmd": "led", "led": self.name}
+			if mode is not None:
+				payload["mode"] = mode
+			elif on is not None:
+				payload["on"] = bool(on)
+			else:
+				payload["mode"] = "on"
+			if payload.get("mode") == "blink":
+				payload["interval_ms"] = int(interval_ms)
+				if auto_off_ms is not None:
+					payload["auto_off_ms"] = int(auto_off_ms)
+			return self.conn.send(payload)
+
+		def on(self) -> Dict[str, Any]:
+			return self.action(mode="on")
+
+		def off(self) -> Dict[str, Any]:
+			return self.action(mode="off")
+
+		def blink(self, interval_ms: int = 500, auto_off_ms: Optional[int] = None) -> Dict[str, Any]:
+			return self.action(mode="blink", interval_ms=interval_ms, auto_off_ms=auto_off_ms)
+
+	def __init__(self, conn: ESP32Connection) -> None:
+		self.conn = conn
+		self.board = self.Channel(conn, "board", 2)
+		self.boardLED = self.board
+		self.yellow = self.Channel(conn, "yellow", 18)
+		self.blue = self.Channel(conn, "blue", 5)
+		self.white = self.Channel(conn, "white", 17)
+		self.green = self.Channel(conn, "green", 16)
+		self.red = self.Channel(conn, "red", 4)
+
+	@classmethod
+	def attach(cls, conn: ESP32Connection) -> "ESP32LED":
+		instance = cls(conn)
+		cls.board = instance.board
+		cls.boardLED = instance.board
+		cls.yellow = instance.yellow
+		cls.blue = instance.blue
+		cls.white = instance.white
+		cls.green = instance.green
+		cls.red = instance.red
+		return instance
 
 
 class ESP32Motor:
