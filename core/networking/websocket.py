@@ -9,6 +9,7 @@ from datetime import datetime
 from utils.handlers import function_map
 from utils.liveview_state import is_liveview_enabled, save_liveview_state
 from utils.camera_state import camera_state, camera_scanner_task
+from utils.esp32_state import esp32_scanner_task
 from utils.config_state import get_client_config, save_client_config, build_service_urls
 from utils.LEDmanager import get_led_manager
 
@@ -550,9 +551,10 @@ async def websocketClient(cfg: dict = None):
         task1 = asyncio.create_task(run_client())
         task2 = asyncio.create_task(send_frames())
         task3 = asyncio.create_task(camera_scanner_task(check_interval=2.0))
+        task4 = asyncio.create_task(esp32_scanner_task(check_interval=2.0))
         
         # Wait for all tasks to complete (which should be never, unless interrupted)
-        await asyncio.gather(task1, task2, task3)
+        await asyncio.gather(task1, task2, task3, task4)
         
     except KeyboardInterrupt:
         print("[main] KeyboardInterrupt received, exiting and releasing camera...")

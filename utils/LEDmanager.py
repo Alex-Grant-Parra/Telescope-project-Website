@@ -6,8 +6,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional
 
-from esp32.interfaceESP32 import ESP32Connection, ESP32LED, ESP32SerialConfig
-from utils.config_state import load_static_state
+from esp32.interfaceESP32 import ESP32Connection, ESP32LED
+from utils.esp32_state import esp32_state
 
 
 @dataclass
@@ -28,30 +28,19 @@ class LEDManager:
 		self._flash_lock = threading.Lock()
 		self._conn: Optional[ESP32Connection] = None
 		self._leds: Optional[ESP32LED] = None
-		self._connection_failed = False
-
-	def _load_connection_config(self) -> ESP32SerialConfig:
-		config = load_static_state().get("esp32", {})
-		return ESP32SerialConfig(
-			port=config.get("port", "/dev/ttyUSB0"),
-			baudrate=int(config.get("baudrate", 115200)),
-			timeout=float(config.get("timeout", 0.5)),
-		)
 
 	def _ensure_connection(self) -> bool:
-		if self._leds is not None:
-			return True
-		if self._connection_failed:
+		conn = esp32_state.ensure_connection()
+		if conn is None:
+			self._conn = None
+			self._leds = None
 			return False
-		try:
-			self._conn = ESP32Connection(self._load_connection_config())
-			self._leds = ESP32LED(self._conn)
-			print("[LEDManager] ESP32 LED connection established")
+		if self._conn is conn and self._leds is not None:
 			return True
-		except Exception as exc:
-			self._connection_failed = True
-			print(f"[LEDManager] Error connecting to ESP32 LEDs: {exc}")
-			return False
+		self._conn = conn
+		self._leds = ESP32LED(conn)
+		print("[LEDManager] ESP32 LED connection established")
+		return True
 
 	def _set_channel(self, channel_name: str, mode: str, interval_ms: int = 500) -> None:
 		if not self._ensure_connection() or self._leds is None:

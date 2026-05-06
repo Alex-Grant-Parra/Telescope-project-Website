@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import glob
 import json
 import threading
 import time
@@ -17,49 +18,31 @@ class ESP32SerialConfig:
 
 
 class ESP32Connection:
-	def __init__(self, cfg: ESP32SerialConfig | None = None) -> None:
+	def __init__(self, cfg: ESP32SerialConfig | None = None, *, scan_all_ports: bool = True) -> None:
 		self.cfg = cfg or ESP32SerialConfig()
 		self.ser = None
 		
-		# Try to connect to the configured port first
-		try:
-			self.ser = serial.Serial(self.cfg.port, self.cfg.baudrate, timeout=self.cfg.timeout)
-			print(f"[ESP32] Connected to {self.cfg.port}")
-		except serial.SerialException as e:
-			print(f"[ESP32] Cannot open {self.cfg.port}: {e}")
-			
-			# Auto-detect available USB ports
-			import glob
-			available = glob.glob('/dev/tty*') + glob.glob('/dev/cu*')
-			usb_ports = sorted([p for p in available if 'USB' in p or 'ACM' in p])
-			
-			if not usb_ports:
-				raise RuntimeError(
-					f"Cannot open {self.cfg.port}: {e}\n"
-					f"No USB ports found.\n"
-					f"Try: ls /dev/tty* | grep -E '(USB|ACM)'"
-				) from e
-			
-			print(f"[ESP32] Available USB ports: {usb_ports}")
-			print(f"[ESP32] Attempting auto-detection...")
-			
-			# Try each available port
-			for port in usb_ports:
-				try:
-					print(f"[ESP32] Trying {port}...")
-					self.ser = serial.Serial(port, self.cfg.baudrate, timeout=self.cfg.timeout)
-					print(f"[ESP32] Successfully connected to {port}")
-					self.cfg.port = port  # Update the config with the working port
-					break
-				except serial.SerialException:
+		candidate_ports = self._candidate_ports(self.cfg.port if scan_all_ports else None)
+		last_error: Exception | None = None
+		for port in candidate_ports:
+			try:
+				self.ser = serial.Serial(port, self.cfg.baudrate, timeout=self.cfg.timeout)
+				self.cfg.port = port
+				if not self._probe_identity():
+					self.close()
 					continue
-			
-			if self.ser is None:
-				raise RuntimeError(
-					f"Cannot open {self.cfg.port}: {e}\n"
-					f"Tried all available USB ports: {usb_ports}\n"
-					f"None responded. Check connections and permissions."
-				) from e
+				print(f"[ESP32] Connected to {port}")
+				break
+			except (serial.SerialException, OSError, RuntimeError) as e:
+				last_error = e
+				self.close()
+				continue
+
+		if self.ser is None:
+			ports_text = ", ".join(candidate_ports) if candidate_ports else self.cfg.port
+			raise RuntimeError(
+				f"Unable to connect to ESP32 on available USB serial ports: {ports_text}"
+			) from last_error
 		
 		self._lock = threading.Lock()
 		time.sleep(0.2)
@@ -69,11 +52,44 @@ class ESP32Connection:
 		except NameError:
 			pass
 
+	@staticmethod
+	def _candidate_ports(preferred_port: Optional[str] = None) -> list[str]:
+		ports: list[str] = []
+		seen: set[str] = set()
+
+		def add_port(port: str) -> None:
+			if port and port not in seen:
+				seen.add(port)
+				ports.append(port)
+
+		add_port(preferred_port or "")
+		for pattern in ("/dev/serial/by-id/*", "/dev/ttyUSB*", "/dev/ttyACM*"):
+			for port in sorted(glob.glob(pattern)):
+				add_port(port)
+		return ports
+
+	def _probe_identity(self) -> bool:
+		try:
+			self._drain()
+			line = json.dumps({"cmd": "list_motors"}, separators=(",", ":")) + "\n"
+			self.ser.write(line.encode("utf-8"))
+			self.ser.flush()
+			resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
+			if not resp:
+				return False
+			data = json.loads(resp)
+			return data.get("status") == "ok"
+		except Exception:
+			return False
+
 	def close(self) -> None:
 		try:
-			self.ser.close()
+			if self.ser is not None:
+				self.ser.close()
 		except Exception:
 			pass
+		finally:
+			self.ser = None
 
 	def _drain(self) -> None:
 		try:
