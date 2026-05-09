@@ -37,13 +37,16 @@ def plotEarthOrbit(results):
 
 
 def plotEnergy(results):
-    E = results["energy"]
+    E = np.asarray(results["energy"])
+    initial_energy = float(results.get("initialEnergy", 1.0))
+    baseline = abs(initial_energy) if initial_energy != 0 else 1.0
 
     plt.figure()
-    plt.plot(E)
-    plt.title("Total Energy vs Time")
+    plt.plot(100.0 * E / baseline, color="tab:blue")
+    plt.axhline(0, color="black", linewidth=0.8, alpha=0.5)
+    plt.title("Energy Drift vs Time")
     plt.xlabel("sample")
-    plt.ylabel("Energy (J)")
+    plt.ylabel("ΔE / E₀ (%)")
 
     plt.savefig(OUTPUT_DIR / "energy.png", dpi=200)
     plt.close()
@@ -64,12 +67,17 @@ def plotEarthDistance(results):
 
 def plotMomentum(results):
     P = np.array(results["momentum"])
+    total_mass = float(results.get("totalMass", 1.0))
+
+    # Convert momentum drift to equivalent center-of-mass velocity drift.
+    V = P / total_mass
 
     plt.figure()
-    plt.plot(P[:, 0], label="Px")
-    plt.plot(P[:, 1], label="Py")
-    plt.plot(P[:, 2], label="Pz")
-    plt.title("Total Momentum vs Time")
+    plt.plot(V[:, 0], label="ΔVx")
+    plt.plot(V[:, 1], label="ΔVy")
+    plt.plot(V[:, 2], label="ΔVz")
+    plt.axhline(0, color="black", linewidth=0.8, alpha=0.5)
+    plt.title("Center-of-Mass Velocity Drift vs Time")
     plt.legend()
 
     plt.savefig(OUTPUT_DIR / "momentum.png", dpi=200)
