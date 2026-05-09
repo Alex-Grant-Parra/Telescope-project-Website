@@ -83,7 +83,7 @@ def getMasses(names):
     return np.array([massMap[n] for n in names], dtype=np.float64)
 
 
-def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet"):
+def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet", progress_callback=None):
     # 35040 steps * 900 seconds = 31,536,000 seconds = ~365 days (one Earth orbit)
     # dt=900s keeps the run practical while preserving acceptable accuracy
     # Velocity Verlet is used for its stability and simplicity
@@ -101,8 +101,6 @@ def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet"):
     initial_momentum = totalMomentum(v, masses)
     initial_energy = totalEnergy(r, v, masses)
     initial_angular_momentum = totalAngularMomentum(r, v, masses)
-    print(f"Initial momentum magnitude: {np.linalg.norm(initial_momentum):.3e} kg*m/s")
-    print(f"Initial energy: {initial_energy:.3e} J")
 
     a = computeAccelerations(r, masses)
 
@@ -117,7 +115,7 @@ def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet"):
     vHistory = []
 
     # Use Velocity Verlet - proven symplectic integrator with excellent stability
-    step_func = velocityVerletStep
+    step_func = yoshida4Step
 
     for step in range(steps):
 
@@ -147,7 +145,15 @@ def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet"):
             e_val = energyLog[-1] if energyLog else 0
             baseline = np.linalg.norm(initial_momentum)
             p_drift_pct = (p_mag / baseline) * 100 if baseline > 0 else 0
-            print(f"Step {step:6d}/{steps} ({100*step//steps:2d}%)  E={e_val:.3e} J  p={p_mag:.3e} kg*m/s  p_drift={p_drift_pct:.2f}%")
+            percent = 100 * step // steps
+            if progress_callback is not None:
+                try:
+                    progress_callback(step, steps, percent, e_val, p_mag, p_drift_pct)
+                except Exception:
+                    # ignore callback errors to avoid breaking the simulation
+                    pass
+            else:
+                print(f"Step {step:6d}/{steps} ({percent:2d}%)  E={e_val:.3e} J  p={p_mag:.3e} kg*m/s  p_drift={p_drift_pct:.2f}%")
 
     rHistory = np.array(rHistory)
     vHistory = np.array(vHistory)
