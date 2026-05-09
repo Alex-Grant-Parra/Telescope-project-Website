@@ -2,8 +2,15 @@ import json
 import numpy as np
 from integrator import computeAccelerations, velocityVerletStep
 
+from diagnostics import (
+    totalEnergy,
+    totalMomentum,
+    totalAngularMomentum,
+    earthSunDistance
+)
 
-def loadInitialConditions(path="initial_conditions.json"):
+
+def loadInitialConditions(path="Astrophysics/V3_Helios/initial_conditions.json"):
     with open(path, "r") as f:
         data = json.load(f)
 
@@ -31,31 +38,62 @@ def getMasses(names):
     return np.array([massMap[n] for n in names], dtype=np.float64)
 
 
-def runSimulation(steps=1000, dt=3600):
+def runSimulation(steps=35040, dt=900):
+    # 35040 steps * 900 seconds = 31,536,000 seconds = ~365 days (one Earth orbit)
+    # dt=900s provides 2x better accuracy than dt=1800s for energy conservation
     names, r, v = loadInitialConditions()
     masses = getMasses(names)
 
     a = computeAccelerations(r, masses)
 
-    history = []
+    # diagnostic storage
+    energyLog = []
+    momentumLog = []
+    angularMomentumLog = []
+    earthDistanceLog = []
+
+    # trajectory storage 
+    rHistory = []
 
     for step in range(steps):
+
         r, v, a = velocityVerletStep(r, v, a, masses, dt)
 
+        # store trajectory
         if step % 10 == 0:
-            history.append(r.copy())
+            rHistory.append(r.copy())
+
+        # diagnostics
+        if step % 5 == 0:
+            energyLog.append(totalEnergy(r, v, masses))
+            momentumLog.append(totalMomentum(v, masses))
+            angularMomentumLog.append(totalAngularMomentum(r, v, masses))
+            earthDistanceLog.append(earthSunDistance(r))
 
         if step % 50 == 0:
             print(f"Step {step}")
 
-    history = np.array(history)
+    rHistory = np.array(rHistory)
 
-    return names, history
+    return {
+        "names": names,
+        "rHistory": rHistory,
+        "energy": np.array(energyLog),
+        "momentum": np.array(momentumLog),
+        "angularMomentum": np.array(angularMomentumLog),
+        "earthDistance": np.array(earthDistanceLog)
+    }
 
 
 if __name__ == "__main__":
-    names, history = runSimulation()
+    results = runSimulation()
 
-    print("Simulation complete")
-    print("Bodies:", names)
-    print("Trajectory shape:", history.shape)
+    print("\nSimulation complete")
+
+    print("Bodies:", results["names"])
+    print("Trajectory shape:", results["rHistory"].shape)
+
+    print("\nDiagnostics:")
+    print("Energy samples:", len(results["energy"]))
+    print("Momentum samples:", len(results["momentum"]))
+    print("Earth distance samples:", len(results["earthDistance"]))
