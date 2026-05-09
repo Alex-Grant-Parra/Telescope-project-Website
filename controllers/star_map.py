@@ -5,8 +5,8 @@ from models.tables import HDSTARtable, IndexTable, NGCtable
 from app.db import db
 from sqlalchemy import func
 
-from algorithms.convert import convert
-from algorithms.astroTools import getAllCelestialData
+from Astrophysics.V1_Keplarian.convert import convert
+from Astrophysics.V1_Keplarian.astroTools import getAllCelestialData
 from app.telescopeLink import Telescope
 
 star_map_bp = Blueprint("star_map", __name__)

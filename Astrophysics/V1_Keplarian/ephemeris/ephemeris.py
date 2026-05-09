@@ -1,6 +1,6 @@
-from algorithms.ephemeris.loader import load_all
-from algorithms.timeUtils import SpaceTime
-from algorithms.ephemeris import utils as ephem_utils
+from .loader import load_all
+from ..timeUtils import SpaceTime
+from . import utils as ephem_utils
 
 MAJOR = ["Mercury","Venus","Earth","Mars","Jupiter","Saturn","Uranus","Neptune"]
 

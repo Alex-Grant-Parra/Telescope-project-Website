@@ -1,7 +1,7 @@
 
 import math
-from algorithms.convert import convert
-from algorithms.timeUtils import SpaceTime
+from .convert import convert
+from .timeUtils import SpaceTime
 
 AU_KM = 149597870.7
 

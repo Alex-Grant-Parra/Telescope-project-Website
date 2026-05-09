@@ -1,8 +1,8 @@
 import os
 import pickle
 try:
-    # Prefer absolute package import
-    from algorithms.ephemeris.celestial import Planet, Moon
+    # Prefer relative import
+    from .celestial import Planet, Moon
 except ImportError:
     # Fallback to local import if package context not set
     from celestial import Planet, Moon  # type: ignore

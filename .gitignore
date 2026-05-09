@@ -11,8 +11,7 @@ config.yml
 .vscode
 static/videos
 
-algorithms/__pycache__
-
+Astrophysics/__pycache__
 controllers/__pycache__
 models/__pycache__
 plateSolver/__pycache__
