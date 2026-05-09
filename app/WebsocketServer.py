@@ -160,20 +160,62 @@ def get_ws_client_ip(ws):
     return ws.remote_address[0] if ws.remote_address else "unknown"
 
 def check_rate_limit(client_ip):
+    # Rate limiting check for WebSocket connections
+    # Uses sliding window to count requests per minute
+    from security.config import RATE_LIMITS, RATE_LIMIT_CONFIG
+    
+    now = time.time()
+    tracking_window = RATE_LIMIT_CONFIG.get('tracking_window', 60)
+    limit = RATE_LIMITS.get('default', 120)
+    
+    # Initialize tracking for this IP if not present
+    if client_ip not in client_request_counts:
+        client_request_counts[client_ip] = []
+    
+    # Remove old entries outside the tracking window
+    client_request_counts[client_ip] = [
+        ts for ts in client_request_counts[client_ip]
+        if now - ts < tracking_window
+    ]
+    
+    # Check if limit exceeded
+    if len(client_request_counts[client_ip]) >= limit:
+        return False  # Rate limit exceeded
+    
+    # Record this request
+    client_request_counts[client_ip].append(now)
+    return True  # OK to proceed
 
-#     # Rate limiting disabled for normal users
+
+# Periodic cleanup of old rate limit tracking data to prevent memory leaks
+def cleanup_rate_limit_tracking():
+    # Periodically clean up old entries in rate limit tracking
+    from security.config import RATE_LIMIT_CONFIG
     
-#         client_request_counts[client_ip] = {}
-    
-#         client_request_counts[client_ip][minute_key] = 0
-    
-#         client_request_counts[client_ip][minute_key] += 1
-    
-#     # Clean old entries
-#         del client_request_counts[client_ip][k]
-    
-    
-    return True  # Allow all requests for normal users
+    while True:
+        try:
+            cleanup_interval = RATE_LIMIT_CONFIG.get('cleanup_interval', 300)
+            time.sleep(cleanup_interval)
+            
+            now = time.time()
+            tracking_window = RATE_LIMIT_CONFIG.get('tracking_window', 60)
+            
+            # Remove IPs with no recent requests
+            to_remove = []
+            for client_ip, timestamps in client_request_counts.items():
+                active_requests = [ts for ts in timestamps if now - ts < tracking_window]
+                if not active_requests:
+                    to_remove.append(client_ip)
+                else:
+                    client_request_counts[client_ip] = active_requests
+            
+            for client_ip in to_remove:
+                del client_request_counts[client_ip]
+            
+            if to_remove:
+                print(f"[Rate Limiting] Cleaned up {len(to_remove)} idle IPs from tracking")
+        except Exception as e:
+            print(f"[Rate Limiting] Cleanup error: {e}")
 
 # Generate a secure token for new clients
 def generate_token():
@@ -691,6 +733,11 @@ def start_liveview_ws_server():
 def start_websocket_servers():
     
     from socket import gethostname
+    
+    # Start rate limit cleanup thread
+    cleanup_thread = threading.Thread(target=cleanup_rate_limit_tracking, daemon=True)
+    cleanup_thread.start()
+    print("[Rate Limiting] Started cleanup thread for tracking data")
     
     threading.Thread(target=start_ws_server, daemon=True).start()
     print(f"Starting websocket command server on {gethostname()} at port: {commandPort}")
