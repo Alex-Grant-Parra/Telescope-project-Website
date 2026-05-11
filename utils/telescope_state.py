@@ -10,11 +10,10 @@ def _load_state_from_disk() -> Optional[Dict[str, Any]]:
 
 
 def _write_state_to_disk(state_update: Dict[str, Any]) -> None:
-    """Merge partial updates into latest runtime state and persist atomically.
-
-    This avoids clobbering unrelated keys (for example liveview state) when
-    telescope tracking updates run frequently.
-    """
+    # Merge partial updates into latest runtime state and persist atomically.
+    #
+    # This avoids clobbering unrelated keys (for example liveview state) when
+    # telescope tracking updates run frequently.
     global _STATE_CACHE
     latest = load_runtime_state() or {}
     merged = latest.copy()
@@ -24,11 +23,10 @@ def _write_state_to_disk(state_update: Dict[str, Any]) -> None:
 
 
 def get_telescope_coords() -> Optional[Dict[str, float]]:
-    """Return the current telescope coordinates (RA/Dec) if available.
-    
-    Returns RA (right ascension) which is time-invariant, unlike hour angle.
-    Use get_telescope_hour_angle() to get the current hour angle.
-    """
+    # Return the current telescope coordinates (RA/Dec) if available.
+    # 
+    # Returns RA (right ascension) which is time-invariant, unlike hour angle.
+    # Use get_telescope_hour_angle() to get the current hour angle.
     global _STATE_CACHE
     if _STATE_CACHE is None:
         _STATE_CACHE = _load_state_from_disk()
@@ -59,10 +57,9 @@ def get_telescope_coords() -> Optional[Dict[str, float]]:
 
 
 def get_target_coords() -> Optional[Dict[str, float]]:
-    """Return the target telescope coordinates (RA/Dec) if available.
-    
-    Returns the target position the telescope is aiming for.
-    """
+    # Return the target telescope coordinates (RA/Dec) if available.
+    # 
+    # Returns the target position the telescope is aiming for.
     global _STATE_CACHE
     if _STATE_CACHE is None:
         _STATE_CACHE = _load_state_from_disk()
@@ -83,16 +80,15 @@ def get_target_coords() -> Optional[Dict[str, float]]:
 
 
 def set_telescope_coords(right_ascension: float, declination: float, source: str = "manual", hour_angle: float = None) -> None:
-    """Persist the current telescope coordinates (RA/Dec) and update in-memory cache.
-    
-    This updates the CURRENT position of the telescope, not the target.
-    
-    Args:
-        right_ascension: Right Ascension in degrees (time-invariant)
-        declination: Declination in degrees
-        source: Source of the coordinate update
-        hour_angle: Optional current hour angle (for live tracking display)
-    """
+    # Persist the current telescope coordinates (RA/Dec) and update in-memory cache.
+    # 
+    # This updates the CURRENT position of the telescope, not the target.
+    # 
+    # Args:
+    #     right_ascension: Right Ascension in degrees (time-invariant)
+    #     declination: Declination in degrees
+    #     source: Source of the coordinate update
+    #     hour_angle: Optional current hour angle (for live tracking display)
     update = {
         "current_right_ascension": float(right_ascension),
         "current_declination": float(declination),
@@ -108,15 +104,14 @@ def set_telescope_coords(right_ascension: float, declination: float, source: str
 
 
 def set_target_coords(right_ascension: float, declination: float, source: str = "manual") -> None:
-    """Persist the target telescope coordinates (RA/Dec) and update in-memory cache.
-    
-    This updates the TARGET position the telescope is aiming for.
-    
-    Args:
-        right_ascension: Target Right Ascension in degrees (time-invariant)
-        declination: Target Declination in degrees
-        source: Source of the target update
-    """
+    # Persist the target telescope coordinates (RA/Dec) and update in-memory cache.
+    # 
+    # This updates the TARGET position the telescope is aiming for.
+    # 
+    # Args:
+    #     right_ascension: Target Right Ascension in degrees (time-invariant)
+    #     declination: Target Declination in degrees
+    #     source: Source of the target update
     update = {
         "target_right_ascension": float(right_ascension),
         "target_declination": float(declination),
@@ -128,11 +123,10 @@ def set_target_coords(right_ascension: float, declination: float, source: str = 
 
 
 def update_hour_angle() -> Optional[float]:
-    """Update the current hour angle to reflect Earth's rotation.
-    
-    This keeps RA constant while recalculating HA based on current time and location.
-    Returns the updated hour angle or None if it couldn't be calculated.
-    """
+    # Update the current hour angle to reflect Earth's rotation.
+    # 
+    # This keeps RA constant while recalculating HA based on current time and location.
+    # Returns the updated hour angle or None if it couldn't be calculated.
     from utils.Tools import hour_angle as calculate_hour_angle
     from utils.location import get_current_location
     
@@ -168,6 +162,6 @@ def update_hour_angle() -> Optional[float]:
 
 
 def get_slew_config() -> Dict[str, float]:
-    """Return slewing configuration (speeds and thresholds) from static state."""
+    # Return slewing configuration (speeds and thresholds) from static state.
     return get_static_slew_config()
 

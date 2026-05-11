@@ -29,7 +29,7 @@ _motors_initialized = False
 
 
 def _get_esp32_connection():
-    """Get or initialize the ESP32 connection (lazy loading)."""
+    # Get or initialize the ESP32 connection (lazy loading).
     global _esp32_conn
     if _esp32_conn is None:
         try:
@@ -43,7 +43,7 @@ def _get_esp32_connection():
 
 
 def _initialize_motors():
-    """Initialize motors on the ESP32 if not already done."""
+    # Initialize motors on the ESP32 if not already done.
     global _motors_initialized
     
     if _motors_initialized:
@@ -121,12 +121,11 @@ def _initialize_motors():
 
 
 def _hour_angle_updater_loop() -> None:
-    """Background thread that continuously updates hour angle to reflect Earth's rotation.
-    
-    This runs independently and keeps the current_hour_angle in sync with Earth's rotation,
-    even when the telescope is not actively tracking a target.
-    Runs every second to ensure accurate hour angle at all times.
-    """
+    # Background thread that continuously updates hour angle to reflect Earth's rotation.
+    # 
+    # This runs independently and keeps the current_hour_angle in sync with Earth's rotation,
+    # even when the telescope is not actively tracking a target.
+    # Runs every second to ensure accurate hour angle at all times.
     global _hour_angle_updater_active
     
     print("[tracking] Hour angle updater thread started")
@@ -148,7 +147,7 @@ def _hour_angle_updater_loop() -> None:
 
 
 def _start_hour_angle_updater() -> None:
-    """Start the background hour angle updater thread."""
+    # Start the background hour angle updater thread.
     global _hour_angle_thread, _hour_angle_updater_active
     
     if _hour_angle_updater_active:
@@ -164,7 +163,7 @@ def _start_hour_angle_updater() -> None:
 
 
 def _stop_hour_angle_updater() -> None:
-    """Stop the background hour angle updater thread."""
+    # Stop the background hour angle updater thread.
     global _hour_angle_thread, _hour_angle_updater_active
     
     if not _hour_angle_updater_active:
@@ -180,17 +179,16 @@ def _stop_hour_angle_updater() -> None:
 
 
 def _update_current_coords_from_motors() -> None:
-    """Update the current telescope coordinates based on actual motor positions.
-    
-    Reads motor position deltas since the last reset and applies them to the current
-    coordinates. ALWAYS resets motor positions after reading to prevent accumulation.
-    
-    Note: Resetting position counter doesn't stop motors, they continue moving.
-    This ensures we only add incremental changes, not total accumulated position.
-    
-    This ensures that the current RA/DEC always reflects the actual position based on
-    how much the motors have turned, accounting for real-world movement inaccuracies.
-    """
+    # Update the current telescope coordinates based on actual motor positions.
+    # 
+    # Reads motor position deltas since the last reset and applies them to the current
+    # coordinates. ALWAYS resets motor positions after reading to prevent accumulation.
+    # 
+    # Note: Resetting position counter doesn't stop motors, they continue moving.
+    # This ensures we only add incremental changes, not total accumulated position.
+    # 
+    # This ensures that the current RA/DEC always reflects the actual position based on
+    # how much the motors have turned, accounting for real-world movement inaccuracies.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -304,16 +302,15 @@ def _update_current_coords_from_motors() -> None:
 
 
 def _move_motors(delta_ha: float, delta_dec: float) -> None:
-    """Move motors to compensate for HA and Dec deltas using multi-phase slewing.
-    
-    Applies gear ratios to scale motor movements correctly.
-    DOES NOT BLOCK - returns immediately after sending commands.
-    Motor movements happen asynchronously; use _update_current_coords_from_motors() to track progress.
-    
-    Args:
-        delta_ha: Hour angle difference in degrees (positive = east/forward)
-        delta_dec: Declination difference in degrees (positive = north)
-    """
+    # Move motors to compensate for HA and Dec deltas using multi-phase slewing.
+    # 
+    # Applies gear ratios to scale motor movements correctly.
+    # DOES NOT BLOCK - returns immediately after sending commands.
+    # Motor movements happen asynchronously; use _update_current_coords_from_motors() to track progress.
+    # 
+    # Args:
+    #     delta_ha: Hour angle difference in degrees (positive = east/forward)
+    #     delta_dec: Declination difference in degrees (positive = north)
     conn = _get_esp32_connection()
     if not conn:
         print("[tracking] Warning: ESP32 connection not available; cannot move motors")
@@ -431,12 +428,11 @@ def _move_motors(delta_ha: float, delta_dec: float) -> None:
 
 
 def _start_ra_tracking() -> None:
-    """Start RA motor in continuous tracking mode at the configured sidereal rate.
-    
-    This is called once when the telescope has slewed to the target.
-    The motor will run indefinitely until stopped, automatically compensating
-    for Earth's rotation at the sidereal rate.
-    """
+    # Start RA motor in continuous tracking mode at the configured sidereal rate.
+    # 
+    # This is called once when the telescope has slewed to the target.
+    # The motor will run indefinitely until stopped, automatically compensating
+    # for Earth's rotation at the sidereal rate.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -474,13 +470,12 @@ def _start_ra_tracking() -> None:
 
 
 def _continuous_tracking_loop() -> None:
-    """Background thread that monitors tracking and updates coordinates.
-    
-    Once slew is complete, this thread:
-    1. Monitors motor status to detect when slew is complete
-    2. Verifies we're at the target position
-    3. Starts continuous tracking at the configured speed
-    """
+    # Background thread that monitors tracking and updates coordinates.
+    # 
+    # Once slew is complete, this thread:
+    # 1. Monitors motor status to detect when slew is complete
+    # 2. Verifies we're at the target position
+    # 3. Starts continuous tracking at the configured speed
     global _tracking_active, _target_object
     leds = get_led_manager()
     
@@ -616,7 +611,7 @@ def _continuous_tracking_loop() -> None:
 
 
 def stop_tracking() -> None:
-    """Stop continuous tracking and motors."""
+    # Stop continuous tracking and motors.
     global _tracking_active, _tracking_thread, _target_object
     leds = get_led_manager()
     
@@ -660,7 +655,7 @@ def stop_tracking() -> None:
 
 
 def _set_polaris_alignment(location: dict) -> None:
-    """Set telescope to Polaris coordinates for polar alignment."""
+    # Set telescope to Polaris coordinates for polar alignment.
     longitude = location.get('longitude')
     if longitude is None:
         print("[tracking] Warning: Longitude missing; cannot set Polaris alignment.")
@@ -670,21 +665,20 @@ def _set_polaris_alignment(location: dict) -> None:
 
 
 def trackCoordinates(name, ra, dec, mag):
-    """Start tracking a celestial object with continuous sky rotation compensation.
-    
-    The telescope will:
-    1. Stop any existing tracking
-    2. Slew to the target at high speed
-    3. Refine approach at medium speed
-    4. Center on target at slow speed
-    5. Continuously track the object as the sky rotates
-    
-    Args:
-        name: Object name
-        ra: Right ascension in degrees (can be string or float)
-        dec: Declination in degrees (can be string or float)
-        mag: Magnitude
-    """
+    # Start tracking a celestial object with continuous sky rotation compensation.
+    # 
+    # The telescope will:
+    # 1. Stop any existing tracking
+    # 2. Slew to the target at high speed
+    # 3. Refine approach at medium speed
+    # 4. Center on target at slow speed
+    # 5. Continuously track the object as the sky rotates
+    # 
+    # Args:
+    #     name: Object name
+    #     ra: Right ascension in degrees (can be string or float)
+    #     dec: Declination in degrees (can be string or float)
+    #     mag: Magnitude
     global _tracking_active, _tracking_thread, _target_object
     leds = get_led_manager()
     

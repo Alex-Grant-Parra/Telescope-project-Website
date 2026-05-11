@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-"""
-Example usage of the ST7735S TFT display control from Raspberry Pi.
-This demonstrates the ESP32Display class capabilities.
-"""
+# Example usage of the ST7735S TFT display control from Raspberry Pi.
+# This demonstrates the ESP32Display class capabilities.
 
 import sys
 import os
@@ -15,7 +13,7 @@ from esp32.interfaceESP32 import ESP32Connection, ESP32Display
 
 
 def main():
-	"""Run display examples."""
+	# Run display examples.
 	
 	print("Connecting to ESP32...")
 	try:

@@ -224,11 +224,10 @@ class ESP32Motor:
 		engage: bool = False,
 		replace: bool = False,
 	) -> "ESP32Motor":
-		"""Create a new motor instance on the ESP32.
-		
-		Args:
-			replace: If True, delete existing motor with same ID before creating
-		"""
+		# Create a new motor instance on the ESP32.
+		# 
+		# Args:
+		#	replace: If True, delete existing motor with same ID before creating
 		if replace:
 			try:
 				conn.delete_motor(motor_id)
@@ -334,39 +333,38 @@ class ESP32Motor:
 		return self.conn.send({"cmd": "status", "motor": self.motor_id})
 
 	def get_position(self) -> int:
-		"""Get the current position of the motor in steps (signed integer)."""
+		# Get the current position of the motor in steps (signed integer).
 		result = self.conn.send({"cmd": "get_position", "motor": self.motor_id})
 		return result.get("position", 0)
 
 	def get_position_degrees(self, gear_ratio: float = 360.0) -> float:
-		"""Get the current position in degrees (polar alignment deviation).
-		
-		Args:
-			gear_ratio: Sky degrees per motor revolution (default: 360 for RA, 144 for DEC)
-		
-		Returns:
-			Angular deviation in degrees
-		"""
+		# Get the current position in degrees (polar alignment deviation).
+		# 
+		# Args:
+		#	gear_ratio: Sky degrees per motor revolution (default: 360 for RA, 144 for DEC)
+		# 
+		# Returns:
+		#	Angular deviation in degrees
 		steps = self.get_position()
 		return (steps * gear_ratio) / self._steps_per_rev
 
 	def get_position_arcmin(self, gear_ratio: float = 360.0) -> float:
-		"""Get the current position in arcminutes (fine alignment precision)."""
+		# Get the current position in arcminutes (fine alignment precision).
 		degrees = self.get_position_degrees(gear_ratio)
 		return degrees * 60
 
 	def get_position_arcsec(self, gear_ratio: float = 360.0) -> float:
-		"""Get the current position in arcseconds (highest precision)."""
+		# Get the current position in arcseconds (highest precision).
 		arcmin = self.get_position_arcmin(gear_ratio)
 		return arcmin * 60
 
 	def reset_position(self) -> Dict[str, Any]:
-		"""Reset the motor position counter to zero."""
+		# Reset the motor position counter to zero.
 		return self.conn.send({"cmd": "reset_position", "motor": self.motor_id})
 
 
 class ESP32Display:
-	"""Control the ST7735S TFT LCD display connected to ESP32."""
+	# Control the ST7735S TFT LCD display connected to ESP32.
 
 	# Display constants
 	WIDTH = 128
@@ -394,41 +392,39 @@ class ESP32Display:
 		self._cursor_y = 0
 
 	def initialize(self) -> Dict[str, Any]:
-		"""Initialize the display hardware."""
+		# Initialize the display hardware.
 		result = self.conn.send({"cmd": "display", "action": "init"}, timeout=5.0)
 		self._initialized = True
 		return result
 
 	def cleanup(self) -> None:
-		"""Clean up display resources."""
+		# Clean up display resources.
 		if self._initialized:
 			self.power(False)
 			self._initialized = False
 
 	def power(self, on: bool) -> Dict[str, Any]:
-		"""Turn display power on/off."""
+		# Turn display power on/off.
 		return self.conn.send({"cmd": "display", "action": "power", "on": bool(on)})
 
 	def set_backlight(self, brightness: int) -> Dict[str, Any]:
-		"""Set backlight brightness (0-255).
-		
-		Args:
-			brightness: PWM value 0-255 where 0 is off and 255 is full brightness
-		"""
+		# Set backlight brightness (0-255).
+		# 
+		# Args:
+		#	brightness: PWM value 0-255 where 0 is off and 255 is full brightness
 		brightness = max(0, min(255, int(brightness)))
 		self._brightness = brightness
 		return self.conn.send({"cmd": "display", "action": "backlight", "brightness": brightness})
 
 	def get_status(self) -> Dict[str, Any]:
-		"""Get current display status."""
+		# Get current display status.
 		return self.conn.send({"cmd": "display", "action": "status"})
 
 	def clear(self, color: Optional[str] = None) -> Dict[str, Any]:
-		"""Clear the display with a background color.
-		
-		Args:
-			color: Hex color string (e.g., "000000" for black) or color name
-		"""
+		# Clear the display with a background color.
+		# 
+		# Args:
+		#	color: Hex color string (e.g., "000000" for black) or color name
 		if color is None:
 			color = self._bg_color
 		else:
@@ -438,12 +434,12 @@ class ESP32Display:
 		return self.conn.send({"cmd": "display", "action": "clear", "color": color}, timeout=3.0)
 
 	def fill_screen(self, color: Optional[str] = None) -> Dict[str, Any]:
-		"""Fill entire screen with color (alias for clear)."""
+		# Fill entire screen with color (alias for clear).
 		return self.clear(color)
 
 	# Drawing functions
 	def draw_pixel(self, x: int, y: int, color: Optional[str] = None) -> Dict[str, Any]:
-		"""Draw a single pixel."""
+		# Draw a single pixel.
 		if color is None:
 			color = self._text_color
 		else:
@@ -465,14 +461,13 @@ class ESP32Display:
 		color: Optional[str] = None,
 		fill: bool = False,
 	) -> Dict[str, Any]:
-		"""Draw a rectangle.
-		
-		Args:
-			x, y: Top-left corner coordinates
-			width, height: Rectangle dimensions
-			color: Border/fill color
-			fill: If True, fill the rectangle; if False, draw outline only
-		"""
+		# Draw a rectangle.
+		# 
+		# Args:
+		#	x, y: Top-left corner coordinates
+		#	width, height: Rectangle dimensions
+		#	color: Border/fill color
+		#	fill: If True, fill the rectangle; if False, draw outline only
 		if color is None:
 			color = self._text_color
 		else:
@@ -497,13 +492,13 @@ class ESP32Display:
 	def fill_rectangle(
 		self, x: int, y: int, width: int, height: int, color: Optional[str] = None
 	) -> Dict[str, Any]:
-		"""Fill a rectangle with color."""
+		# Fill a rectangle with color.
 		return self.draw_rectangle(x, y, width, height, color, fill=True)
 
 	def draw_line(
 		self, x0: int, y0: int, x1: int, y1: int, color: Optional[str] = None
 	) -> Dict[str, Any]:
-		"""Draw a line from (x0, y0) to (x1, y1)."""
+		# Draw a line from (x0, y0) to (x1, y1).
 		if color is None:
 			color = self._text_color
 		else:
@@ -529,14 +524,13 @@ class ESP32Display:
 		color: Optional[str] = None,
 		fill: bool = False,
 	) -> Dict[str, Any]:
-		"""Draw a circle.
-		
-		Args:
-			x, y: Center coordinates
-			radius: Circle radius in pixels
-			color: Circle color
-			fill: If True, fill the circle; if False, draw outline only
-		"""
+		# Draw a circle.
+		# 
+		# Args:
+		#	x, y: Center coordinates
+		#	radius: Circle radius in pixels
+		#	color: Circle color
+		#	fill: If True, fill the circle; if False, draw outline only
 		if color is None:
 			color = self._text_color
 		else:
@@ -560,12 +554,12 @@ class ESP32Display:
 	def fill_circle(
 		self, x: int, y: int, radius: int, color: Optional[str] = None
 	) -> Dict[str, Any]:
-		"""Fill a circle with color."""
+		# Fill a circle with color.
 		return self.draw_circle(x, y, radius, color, fill=True)
 
 	# Text functions
 	def set_cursor(self, x: int, y: int) -> Dict[str, Any]:
-		"""Set cursor position for text rendering."""
+		# Set cursor position for text rendering.
 		self._cursor_x = int(x)
 		self._cursor_y = int(y)
 		return self.conn.send(
@@ -573,13 +567,13 @@ class ESP32Display:
 		)
 
 	def set_text_color(self, color: str) -> Dict[str, Any]:
-		"""Set text color."""
+		# Set text color.
 		color = self._normalize_color(color)
 		self._text_color = color
 		return self.conn.send({"cmd": "display", "action": "set_text_color", "color": color})
 
 	def set_background_color(self, color: str) -> Dict[str, Any]:
-		"""Set background color."""
+		# Set background color.
 		color = self._normalize_color(color)
 		self._bg_color = color
 		return self.conn.send({"cmd": "display", "action": "set_bg_color", "color": color})
@@ -587,14 +581,13 @@ class ESP32Display:
 	# Utility methods
 	@staticmethod
 	def _normalize_color(color: str) -> str:
-		"""Normalize color to hex format.
-		
-		Args:
-			color: Can be a color name from COLORS dict or hex string
-		
-		Returns:
-			Hex color string (6 characters)
-		"""
+		# Normalize color to hex format.
+		# 
+		# Args:
+		#	color: Can be a color name from COLORS dict or hex string
+		# 
+		# Returns:
+		#	Hex color string (6 characters)
 		if color.lower() in ESP32Display.COLORS:
 			return ESP32Display.COLORS[color.lower()]
 		
@@ -607,11 +600,11 @@ class ESP32Display:
 
 	@staticmethod
 	def _validate_coords(x: int, y: int) -> bool:
-		"""Check if coordinates are within display bounds."""
+		# Check if coordinates are within display bounds.
 		return 0 <= x < ESP32Display.WIDTH and 0 <= y < ESP32Display.HEIGHT
 
 	def draw_test_pattern(self) -> Dict[str, Any]:
-		"""Draw a test pattern (colors, rectangles, text areas) for debugging."""
+		# Draw a test pattern (colors, rectangles, text areas) for debugging.
 		# Clear with black
 		self.clear("black")
 		

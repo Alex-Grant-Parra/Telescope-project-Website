@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-"""
-Simple test to verify the ESP32Display class loads and basic methods work.
-Run this WITHOUT an ESP32 connection to test the Python side.
-"""
+# Simple test to verify the ESP32Display class loads and basic methods work.
+# Run this WITHOUT an ESP32 connection to test the Python side.
 
 import sys
 import os
@@ -14,7 +12,7 @@ from esp32.interfaceESP32 import ESP32Display, ESP32Connection
 
 
 def test_display_class():
-    """Test that ESP32Display class exists and has expected methods."""
+    # Test that ESP32Display class exists and has expected methods.
     print("✓ ESP32Display class imported successfully")
     
     # Check all expected methods exist

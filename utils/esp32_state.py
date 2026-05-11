@@ -10,7 +10,7 @@ from utils.config_state import load_static_state, save_static_state
 
 
 class ESP32State:
-	"""Thread-safe ESP32 availability and connection state."""
+	# Thread-safe ESP32 availability and connection state.
 
 	_instance = None
 	_lock = Lock()
@@ -120,7 +120,7 @@ esp32_state = ESP32State()
 
 
 async def esp32_scanner_task(check_interval: float = 2.0):
-	"""Background task that continuously scans for ESP32 availability."""
+	# Background task that continuously scans for ESP32 availability.
 
 	print(f"[esp32_scanner] Started ESP32 scanner (checking every {check_interval}s)")
 	while True:

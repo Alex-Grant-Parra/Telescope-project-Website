@@ -1,8 +1,6 @@
-"""
-GPS Location Module
-Retrieves GPS coordinates (latitude and longitude) and stores them in static client config state
-Supports both hardware GPS (via gpsd) and IP-based geolocation as fallback
-"""
+# GPS Location Module
+# Retrieves GPS coordinates (latitude and longitude) and stores them in static client config state
+# Supports both hardware GPS (via gpsd) and IP-based geolocation as fallback
 
 import json
 from datetime import datetime
@@ -10,10 +8,8 @@ from utils.config_state import save_location, get_location
 
 
 def get_gps_from_hardware():
-    """
-    Attempt to get GPS coordinates from hardware GPS module using gpsd
-    Returns: dict with lat, lon, timestamp if successful, None otherwise
-    """
+    # Attempt to get GPS coordinates from hardware GPS module using gpsd
+    # Returns: dict with lat, lon, timestamp if successful, None otherwise
     try:
         from gps import gps, WATCH_ENABLE # type: ignore
         
@@ -42,10 +38,8 @@ def get_gps_from_hardware():
 
 
 def get_gps_from_ip():
-    """
-    Get approximate location from IP address using ip-api.com (free service)
-    Returns: dict with lat, lon, timestamp if successful, None otherwise
-    """
+    # Get approximate location from IP address using ip-api.com (free service)
+    # Returns: dict with lat, lon, timestamp if successful, None otherwise
     try:
         import urllib.request
         import urllib.error
@@ -74,10 +68,8 @@ def get_gps_from_ip():
 
 
 def update_location_config():
-    """
-    Update the location configuration file with current GPS coordinates
-    Tries hardware GPS first, falls back to IP geolocation
-    """
+    # Update the location configuration file with current GPS coordinates
+    # Tries hardware GPS first, falls back to IP geolocation
     print("[location] Attempting to retrieve GPS coordinates...")
     
     # Try hardware GPS first
@@ -110,10 +102,8 @@ def update_location_config():
 
 
 def get_current_location():
-    """
-    Read the current location from the config file
-    Returns: dict with location data if file exists, None otherwise
-    """
+    # Read the current location from the config file
+    # Returns: dict with location data if file exists, None otherwise
     try:
         location = get_location()
         return location or None

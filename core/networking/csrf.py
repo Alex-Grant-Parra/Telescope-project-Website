@@ -12,7 +12,7 @@ _CSRF_TTL_SECONDS = 10 * 60  # Refresh every 10 minutes
 
 
 def _extract_csrf_from_json(data: Dict[str, Any]) -> Optional[str]:
-    """Try common keys to find a CSRF token in a JSON payload."""
+    # Try common keys to find a CSRF token in a JSON payload.
     for key in (
         "csrfToken",
         "csrf_token",
@@ -32,11 +32,9 @@ def _extract_csrf_from_json(data: Dict[str, Any]) -> Optional[str]:
 
 
 def get_csrf_token(server_url: str, force_refresh: bool = False) -> Optional[str]:
-    """
-    Fetch and cache a CSRF token from <server_url>/security/csrf-token.
-    Returns the token string if found, otherwise None. Uses a shared session so
-    any cookie-based associations are preserved.
-    """
+    # Fetch and cache a CSRF token from <server_url>/security/csrf-token.
+    # Returns the token string if found, otherwise None. Uses a shared session so
+    # any cookie-based associations are preserved.
     global _CSRF_TOKEN, _CSRF_FETCH_TS
 
     now = time.time()

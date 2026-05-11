@@ -13,7 +13,7 @@ from utils.esp32_state import esp32_state, esp32_scanner_task
 
 
 async def peripheral_refresh_task(led_manager, refresh_interval: float = 1.0):
-    """Periodic task to refresh ESP32 peripherals (LEDs, motors) after reconnections."""
+    # Periodic task to refresh ESP32 peripherals (LEDs, motors) after reconnections.
     print(f"[peripheral_refresh] Started peripheral refresh task (every {refresh_interval}s)")
     while True:
         try:
@@ -46,7 +46,7 @@ LIVEVIEW_URI = None
 SERVER_HTTP_URL = None
 
 def load_config(allow_missing: bool = False):
-    """Load client configuration from static state."""
+    # Load client configuration from static state.
     try:
         return get_client_config()
     except Exception:
@@ -55,7 +55,7 @@ def load_config(allow_missing: bool = False):
         raise
 
 def save_config(config):
-    """Save client configuration to static state."""
+    # Save client configuration to static state.
     try:
         save_client_config(config)
         print(f"[config] Configuration saved to config/client_profile.json")
@@ -69,7 +69,7 @@ def save_config(config):
 API_TOKEN = None
 
 async def authenticate_with_server(ws):
-    """Send authentication message to server"""
+    # Send authentication message to server
     if not API_TOKEN:
         print("[auth] ERROR: No API token configured!")
         print("[auth] Please set your API token in config/client_profile.json")
@@ -90,7 +90,7 @@ async def authenticate_with_server(ws):
     print(f"[auth] Sent authentication for client: {CLIENT_ID}")
 
 async def handle_server(ws):
-    """Handle incoming WebSocket messages and execute mapped functions"""
+    # Handle incoming WebSocket messages and execute mapped functions
     # Send authentication as first message
     await authenticate_with_server(ws)
     
@@ -147,7 +147,7 @@ async def handle_server(ws):
         raise
 
 async def run_client():
-    """Run the main WebSocket client with automatic reconnection"""
+    # Run the main WebSocket client with automatic reconnection
     
     while True:  # Outer reconnection loop
         connection_start_time = time.time()
@@ -194,7 +194,7 @@ async def run_client():
         await asyncio.sleep(5)
 
 async def authenticate_liveview(ws):
-    """Send authentication message to liveview server"""
+    # Send authentication message to liveview server
     if not API_TOKEN:
         raise Exception("No API token configured for liveview")
     
@@ -207,7 +207,7 @@ async def authenticate_liveview(ws):
     print(f"[liveview] Sent authentication for client: {CLIENT_ID}")
 
 async def send_frames():
-    """Send live camera frames via WebSocket with automatic reconnection"""
+    # Send live camera frames via WebSocket with automatic reconnection
     import fcntl
     import os as os_module
     from core.camera.controller import Camera
@@ -223,7 +223,7 @@ async def send_frames():
     process_start_time = 0  # Track when process was started
 
     def _read_proc_stderr_text(p):
-        """Best-effort stderr extraction for terminated gphoto2 processes."""
+        # Best-effort stderr extraction for terminated gphoto2 processes.
         if not p or p.stderr is None:
             return ""
         try:
@@ -237,7 +237,7 @@ async def send_frames():
             return ""
 
     def _cleanup_usb_camera_lockers() -> None:
-        """Best-effort cleanup of processes that commonly lock camera USB endpoints."""
+        # Best-effort cleanup of processes that commonly lock camera USB endpoints.
         locker_patterns = [
             "gvfs-gphoto2-volume-monitor",
             "gvfsd-gphoto2",
@@ -492,7 +492,7 @@ async def send_frames():
         await asyncio.sleep(5)
 
 def cleanup_camera():
-    """Clean up camera processes"""
+    # Clean up camera processes
     print("[cleanup] Releasing camera and killing all gphoto2 processes...")
     print("[cleanup] Setting liveview state to false...")
     save_liveview_state(False)
@@ -502,13 +502,13 @@ def cleanup_camera():
         print(f"[cleanup] Error killing gphoto2: {e}")
 
 def handle_exit(signum, frame):
-    """Handle exit signals"""
+    # Handle exit signals
     print(f"[signal] Received signal {signum}, exiting and releasing camera...")
     cleanup_camera()
     sys.exit(0)
 
 def setup_client_config():
-    """Interactive setup for client configuration"""
+    # Interactive setup for client configuration
     print("=== Telescope Client Configuration Setup ===")
     print()
     
@@ -535,7 +535,7 @@ def setup_client_config():
     return current_config
 
 async def websocketClient(cfg: dict = None):
-    """Main async function that runs both WebSocket client and frame sender"""
+    # Main async function that runs both WebSocket client and frame sender
     # Check if we need to run setup
     if len(sys.argv) > 1 and sys.argv[1] == "setup":
         setup_client_config()

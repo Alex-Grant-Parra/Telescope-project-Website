@@ -18,14 +18,13 @@ CONFIG_FILE = "config/client_config.json"
 
 # Decorator for camera operations
 def requires_camera(operation_name: str = "operation"):
-    """Decorator that checks camera availability and handles errors for camera operations.
-    
-    Args:
-        operation_name: Name of the operation for error messages (e.g., "capture photo", "get settings")
-    
-    Returns:
-        Decorated function that returns error dict if camera unavailable or operation fails
-    """
+    # Decorator that checks camera availability and handles errors for camera operations.
+    # 
+    # Args:
+    #     operation_name: Name of the operation for error messages (e.g., "capture photo", "get settings")
+    # 
+    # Returns:
+    #     Decorated function that returns error dict if camera unavailable or operation fails
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -227,12 +226,11 @@ def stopLiveView():
     return "Live view stopped"
 
 def get_current_coordinates():
-    """Returns the current telescope coordinates (right ascension and declination).
-    
-    Returns:
-        dict: Dictionary containing 'current_right_ascension' and 'current_declination'
-              or error dict if coordinates are unavailable
-    """
+    # Returns the current telescope coordinates (right ascension and declination).
+    # 
+    # Returns:
+    #     dict: Dictionary containing 'current_right_ascension' and 'current_declination'
+    #           or error dict if coordinates are unavailable
     coords = get_telescope_coords()
     if coords is None:
         return {"error": "Telescope coordinates not available"}
@@ -245,7 +243,7 @@ def get_current_coordinates():
 # ESP32 motor control handlers
 
 def _get_esp32_connection():
-    """Get the current ESP32 connection, reconnecting on demand if needed."""
+    # Get the current ESP32 connection, reconnecting on demand if needed.
     return esp32_state.ensure_connection()
 
 
@@ -254,7 +252,7 @@ def _esp32_error_response(exc: Exception) -> Dict[str, Any]:
     return {"error": str(exc)}
 
 def espEnable(on: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Enable/disable the stepper driver."""
+    # Enable/disable the stepper driver.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -264,7 +262,7 @@ def espEnable(on: Any, motor_id: str = "motor1") -> Dict[str, Any]:
         return _esp32_error_response(e)
 
 def espSetDirection(forward: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set motor direction: True=forward, False=reverse."""
+    # Set motor direction: True=forward, False=reverse.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -276,7 +274,7 @@ def espSetDirection(forward: Any, motor_id: str = "motor1") -> Dict[str, Any]:
         return _esp32_error_response(e)
 
 def espSetSpeed(sps: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set speed in steps/sec."""
+    # Set speed in steps/sec.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -286,11 +284,10 @@ def espSetSpeed(sps: Any, motor_id: str = "motor1") -> Dict[str, Any]:
         return _esp32_error_response(e)
 
 def espStart(sps: Any, forward: Optional[Any] = None, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Start continuous rotation at speed with optional direction.
-    
-    Note: The new interface doesn't support true continuous motion without a target.
-    This will start indefinite motion by moving a very large number of degrees.
-    """
+    # Start continuous rotation at speed with optional direction.
+    # 
+    # Note: The new interface doesn't support true continuous motion without a target.
+    # This will start indefinite motion by moving a very large number of degrees.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -312,11 +309,10 @@ def espStart(sps: Any, forward: Optional[Any] = None, motor_id: str = "motor1") 
         return _esp32_error_response(e)
 
 def espMoveSteps(steps: Any, sps: Optional[Any] = None, forward: Optional[Any] = None, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Move a finite number of steps with optional speed and direction override.
-    
-    Note: The new interface uses degrees instead of steps, so this converts steps to degrees
-    assuming STEPS_PER_DEGREE = 8.889 (typical for common stepper configs)
-    """
+    # Move a finite number of steps with optional speed and direction override.
+    # 
+    # Note: The new interface uses degrees instead of steps, so this converts steps to degrees
+    # assuming STEPS_PER_DEGREE = 8.889 (typical for common stepper configs)
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -340,7 +336,7 @@ def espMoveSteps(steps: Any, sps: Optional[Any] = None, forward: Optional[Any] =
         return _esp32_error_response(e)
 
 def espStop(motor_id: str = "motor1") -> Dict[str, Any]:
-    """Stop motion."""
+    # Stop motion.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -350,35 +346,31 @@ def espStop(motor_id: str = "motor1") -> Dict[str, Any]:
         return _esp32_error_response(e)
 
 def espSetMicrosteps(value: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set TMC2209 microstepping value (e.g., 16, 32).
-    
-    NOT SUPPORTED in new interface - microstepping must be configured on the ESP32 firmware.
-    """
+    # Set TMC2209 microstepping value (e.g., 16, 32).
+    # 
+    # NOT SUPPORTED in new interface - microstepping must be configured on the ESP32 firmware.
     return {"error": "Microstepping configuration is not supported in this interface. Configure on ESP32 firmware instead."}
 
 def espSetCurrent(mA: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set RMS motor current in milliamps.
-    
-    NOT SUPPORTED in new interface - motor current must be configured on the ESP32 firmware.
-    """
+    # Set RMS motor current in milliamps.
+    # 
+    # NOT SUPPORTED in new interface - motor current must be configured on the ESP32 firmware.
     return {"error": "Motor current configuration is not supported in this interface. Configure on ESP32 firmware instead."}
 
 def espSetMode(mode: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set chopper mode: 'stealth' or 'spread'.
-    
-    NOT SUPPORTED in new interface - chopper mode must be configured on the ESP32 firmware.
-    """
+    # Set chopper mode: 'stealth' or 'spread'.
+    # 
+    # NOT SUPPORTED in new interface - chopper mode must be configured on the ESP32 firmware.
     return {"error": "Chopper mode configuration is not supported in this interface. Configure on ESP32 firmware instead."}
 
 def espSetAccel(sps2: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set acceleration in steps/sec^2 for ramping.
-    
-    NOT SUPPORTED in new interface - acceleration must be configured on the ESP32 firmware.
-    """
+    # Set acceleration in steps/sec^2 for ramping.
+    # 
+    # NOT SUPPORTED in new interface - acceleration must be configured on the ESP32 firmware.
     return {"error": "Acceleration configuration is not supported in this interface. Configure on ESP32 firmware instead."}
 
 def espStatus(motor_id: str = "motor1") -> Dict[str, Any]:
-    """Query motor status."""
+    # Query motor status.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -388,7 +380,7 @@ def espStatus(motor_id: str = "motor1") -> Dict[str, Any]:
         return _esp32_error_response(e)
 
 def espStatusAll() -> Dict[str, Any]:
-    """Query status of all motors."""
+    # Query status of all motors.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -398,7 +390,7 @@ def espStatusAll() -> Dict[str, Any]:
         return _esp32_error_response(e)
 
 def espTurnDegrees(degrees: Any, forward: Any = True, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Move motor a specified number of degrees."""
+    # Move motor a specified number of degrees.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -414,7 +406,7 @@ def espTurnDegrees(degrees: Any, forward: Any = True, motor_id: str = "motor1") 
 
 # Enhanced functions that can unpack motor_id from JSON-style arguments
 def espEnableWithMotorId(*args, **kwargs) -> Dict[str, Any]:
-    """Enable/disable motor - can extract motor_id from JSON arguments"""
+    # Enable/disable motor - can extract motor_id from JSON arguments
     motor_id = "motor1"  # default
     on = False
     
@@ -443,7 +435,7 @@ def espEnableWithMotorId(*args, **kwargs) -> Dict[str, Any]:
     return espEnable(on, motor_id)
 
 def espStartWithMotorId(*args, **kwargs) -> Dict[str, Any]:
-    """Start motor - can extract motor_id from JSON arguments"""
+    # Start motor - can extract motor_id from JSON arguments
     motor_id = "motor1"
     sps = 0
     forward = None
@@ -478,7 +470,7 @@ def espStartWithMotorId(*args, **kwargs) -> Dict[str, Any]:
     return espStart(sps, forward, motor_id)
 
 def espMoveStepsWithMotorId(*args, **kwargs) -> Dict[str, Any]:
-    """Move steps - can extract motor_id from JSON arguments"""
+    # Move steps - can extract motor_id from JSON arguments
     motor_id = "motor1"
     steps = 0
     sps = None
@@ -524,7 +516,7 @@ def espMoveStepsWithMotorId(*args, **kwargs) -> Dict[str, Any]:
     return espMoveSteps(steps, sps, forward, motor_id)
 
 def espStopWithMotorId(*args, **kwargs) -> Dict[str, Any]:
-    """Stop motor - can extract motor_id from JSON arguments"""
+    # Stop motor - can extract motor_id from JSON arguments
     motor_id = "motor1"
     
     if args:
@@ -541,7 +533,7 @@ def espStopWithMotorId(*args, **kwargs) -> Dict[str, Any]:
 
 # Comprehensive wrappers for common ESP32 commands with flexible JSON parameter handling
 def espCommand(command_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Universal ESP32 command handler that can parse JSON command structures"""
+    # Universal ESP32 command handler that can parse JSON command structures
     try:
         cmd_type = command_data.get('command', command_data.get('cmd', ''))
         motor_id = command_data.get('motor_id', command_data.get('motor', 'motor1'))
