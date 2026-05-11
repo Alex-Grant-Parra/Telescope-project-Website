@@ -7,7 +7,8 @@
 void setup() {
   initializeSerial();
   initializeLeds();
-  initializeDisplay();
+  // Display initialization is deferred - called via serial command
+  // This prevents boot issues if display hardware has problems
 }
 
 void loop() {

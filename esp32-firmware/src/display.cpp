@@ -74,43 +74,82 @@ void initializeDisplay() {
   pinMode(DISPLAY_RES, OUTPUT);
   pinMode(DISPLAY_BL, OUTPUT);
 
-  // Initialize SPI
-  SPI.begin(DISPLAY_SCK, -1, DISPLAY_SDA, -1);  // CLK, MISO, MOSI, CS
-  SPI.setFrequency(40000000);  // 40 MHz
+  // Initialize SPI with explicit parameters
+  // SPI.begin(SCK, MISO, MOSI, CS)
+  // We don't use MISO (read-only) or CS (tied to ground)
+  SPI.begin(DISPLAY_SCK, -1, DISPLAY_SDA, -1);
+  SPI.setFrequency(1000000);  // 1 MHz for stability
   SPI.setDataMode(SPI_MODE0);
 
   // Reset display
   displayReset();
 
-  // Initialize ST7735S
+  // Initialize ST7735S - using smaller delays to avoid blocking serial
   // Sleep out
   displayCommandMode();
   displayWrite8(0x11);  // SLPOUT
-  delay(120);
+  delay(10);
+  
+  // Yield to allow serial handler to run
+  yield();
 
   // Interface Pixel Format - 16-bit/pixel (RGB565)
   displayCommandMode();
   displayWrite8(0x3A);  // COLMOD
   displayDataMode();
   displayWrite8(0x05);  // 16-bit/pixel
+  
+  delay(5);
+  yield();
 
-  // Memory Data Access Control - standard orientation
+  // Memory Data Access Control - BGR mode
   displayCommandMode();
   displayWrite8(0x36);  // MADCTL
   displayDataMode();
-  displayWrite8(0x08);  // BGR, Row addr order, Column addr order
-
+  displayWrite8(0x08);  // BGR
+  
+  delay(5);
+  yield();
   // Display on
   displayCommandMode();
   displayWrite8(0x29);  // DISPON
+  
+  delay(10);
+  yield();
 
-  // Set backlight
-  analogWrite(DISPLAY_BL, g_display_state.brightness);
+  // Set column address range (CASET)
+  displayCommandMode();
+  displayWrite8(0x2A);
+  displayDataMode();
+  displayWrite8(0x00);
+  displayWrite8(0x00);
+  displayWrite8(0x00);
+  displayWrite8(0x7F);  // 128-1
+  
+  delay(2);
+  yield();
+  
+  // Set row address range (RASET)
+  displayCommandMode();
+  displayWrite8(0x2B);
+  displayDataMode();
+  displayWrite8(0x00);
+  displayWrite8(0x00);
+  displayWrite8(0x00);
+  displayWrite8(0x9F);  // 160-1
+  
+  delay(2);
+  yield();
+
+  delay(2);
+  yield();
+
+  // Set backlight to full brightness initially
+  analogWrite(DISPLAY_BL, 255);
 
   g_display_state.initialized = true;
 }
 
-void cleanupDisplay() {
   if (!g_display_state.initialized) {
     return;
   }
@@ -156,6 +195,10 @@ void displayFillScreen(uint16_t color) {
   displayDataMode();
   for (uint16_t i = 0; i < DISPLAY_WIDTH * DISPLAY_HEIGHT; i++) {
     displayWrite16(color);
+    // Yield every 256 pixels to prevent blocking serial handler
+    if ((i & 0xFF) == 0) {
+      yield();
+    }
   }
   
   g_display_state.background_color = color;
@@ -206,8 +249,13 @@ void displayFillRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16
   displayWrite8(0x2C);  // RAMWR
   
   displayDataMode();
-  for (uint16_t i = 0; i < w * h; i++) {
+  uint32_t pixel_count = (uint32_t)w * h;
+  for (uint32_t i = 0; i < pixel_count; i++) {
     displayWrite16(color);
+    // Yield every 256 pixels to prevent blocking serial handler
+    if ((i & 0xFF) == 0) {
+      yield();
+    }
   }
 }
 
@@ -370,6 +418,7 @@ void displayPrintText(const String& text) {
     }
     
     g_display_state.cursor_x = next_x;
+    yield();  // Yield after each character
   }
 }
 

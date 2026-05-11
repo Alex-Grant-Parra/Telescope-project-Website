@@ -395,7 +395,7 @@ class ESP32Display:
 
 	def initialize(self) -> Dict[str, Any]:
 		"""Initialize the display hardware."""
-		result = self.conn.send({"cmd": "display", "action": "init"})
+		result = self.conn.send({"cmd": "display", "action": "init"}, timeout=5.0)
 		self._initialized = True
 		return result
 
@@ -435,7 +435,7 @@ class ESP32Display:
 			color = self._normalize_color(color)
 			self._bg_color = color
 
-		return self.conn.send({"cmd": "display", "action": "clear", "color": color})
+		return self.conn.send({"cmd": "display", "action": "clear", "color": color}, timeout=3.0)
 
 	def fill_screen(self, color: Optional[str] = None) -> Dict[str, Any]:
 		"""Fill entire screen with color (alias for clear)."""
@@ -479,6 +479,8 @@ class ESP32Display:
 			color = self._normalize_color(color)
 
 		action = "fill_rect" if fill else "draw_rect"
+		# Use longer timeout for filled rectangles (more SPI data)
+		timeout = 3.0 if fill else 1.0
 		return self.conn.send(
 			{
 				"cmd": "display",
@@ -488,7 +490,8 @@ class ESP32Display:
 				"w": int(width),
 				"h": int(height),
 				"color": color,
-			}
+			},
+			timeout=timeout,
 		)
 
 	def fill_rectangle(
@@ -540,6 +543,8 @@ class ESP32Display:
 			color = self._normalize_color(color)
 
 		action = "fill_circle" if fill else "draw_circle"
+		# Use longer timeout for filled circles (more SPI data)
+		timeout = 3.0 if fill else 1.0
 		return self.conn.send(
 			{
 				"cmd": "display",
@@ -548,7 +553,8 @@ class ESP32Display:
 				"y": int(y),
 				"r": int(radius),
 				"color": color,
-			}
+			},
+			timeout=timeout,
 		)
 
 	def fill_circle(
