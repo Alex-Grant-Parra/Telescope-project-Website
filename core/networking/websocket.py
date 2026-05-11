@@ -9,7 +9,29 @@ from datetime import datetime
 from utils.handlers import function_map
 from utils.liveview_state import is_liveview_enabled, save_liveview_state
 from utils.camera_state import camera_state, camera_scanner_task
-from utils.esp32_state import esp32_scanner_task
+from utils.esp32_state import esp32_state, esp32_scanner_task
+
+
+async def peripheral_refresh_task(led_manager, refresh_interval: float = 1.0):
+    """Periodic task to refresh ESP32 peripherals (LEDs, motors) after reconnections."""
+    print(f"[peripheral_refresh] Started peripheral refresh task (every {refresh_interval}s)")
+    while True:
+        try:
+            # Ensure ESP32 connection is active
+            conn = esp32_state.ensure_connection()
+            if conn is not None:
+                # Verify motors are accessible
+                try:
+                    conn.list_motors()
+                except Exception as exc:
+                    print(f"[peripheral_refresh] Motor registry check failed: {exc}")
+                    esp32_state.mark_disconnected()
+            
+            # Reapply LED state (handles reconnection via _ensure_connection)
+            led_manager.apply()
+        except Exception as exc:
+            print(f"[peripheral_refresh] Error refreshing peripherals: {exc}")
+        await asyncio.sleep(refresh_interval)
 from utils.config_state import get_client_config, save_client_config, build_service_urls
 from utils.LEDmanager import get_led_manager
 
@@ -552,9 +574,10 @@ async def websocketClient(cfg: dict = None):
         task2 = asyncio.create_task(send_frames())
         task3 = asyncio.create_task(camera_scanner_task(check_interval=2.0))
         task4 = asyncio.create_task(esp32_scanner_task(check_interval=2.0))
+        task5 = asyncio.create_task(peripheral_refresh_task(leds, refresh_interval=1.0))
         
         # Wait for all tasks to complete (which should be never, unless interrupted)
-        await asyncio.gather(task1, task2, task3, task4)
+        await asyncio.gather(task1, task2, task3, task4, task5)
         
     except KeyboardInterrupt:
         print("[main] KeyboardInterrupt received, exiting and releasing camera...")
