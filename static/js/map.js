@@ -16,16 +16,21 @@
     const openMeteoBaseUrl = openMeteoTileUrl ||
         "https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json?time_step=current_time_1H";
     const bortleUrl = (config.bortleTileUrl || "").trim();
+    const bortleWmsUrl = (config.bortleWmsUrl || "").trim();
+    const bortleWmsLayer = (config.bortleWmsLayer || "VIIRS_Night_Lights").trim() || "VIIRS_Night_Lights";
+    const bortleWmsTime = (config.bortleWmsTime || "2016-01-01").trim() || "2016-01-01";
+    const bortleFixedUrl = (config.bortleFixedUrl || "").trim();
     const satelliteUrl = (config.satelliteTileUrl || "").trim() ||
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
     const satelliteAttribution = (config.satelliteAttribution || "").trim() ||
         "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics";
-    const bortleAttribution = (config.bortleAttribution || "").trim() || "Sky brightness overlay";
+    const bortleAttribution = (config.bortleAttribution || "").trim() || "NASA GIBS VIIRS Night Lights";
+    const bortleSourceUrl = bortleUrl || bortleWmsUrl || bortleFixedUrl;
 
     const map = L.map(mapElement, {
         zoomControl: false,
         minZoom: 2,
-        maxZoom: 8,
+        maxZoom: 19,
         worldCopyJump: true,
         maxBounds: L.latLngBounds(L.latLng(-85, -180), L.latLng(85, 180)),
         maxBoundsViscosity: 0.8
@@ -36,7 +41,7 @@
 
     L.tileLayer(satelliteUrl, {
         attribution: satelliteAttribution,
-        maxZoom: 8
+        maxZoom: 19
     }).addTo(map);
 
     map.createPane("weatherPane");
@@ -201,12 +206,22 @@
             attribution: bortleAttribution,
             className: "bortle-layer"
         });
-    } else if ((config.bortleFixedUrl || "").trim()) {
+    } else if (bortleWmsUrl) {
+        overlayLayers.bortle = L.tileLayer.wms(bortleWmsUrl, {
+            layers: bortleWmsLayer,
+            format: "image/png",
+            transparent: true,
+            opacity: bortleOpacity,
+            pane: "bortlePane",
+            attribution: bortleAttribution,
+            time: bortleWmsTime,
+            version: "1.3.0"
+        });
+    } else if (bortleFixedUrl) {
         // Fallback: use a single fixed world image as an overlay. Place a suitable
         // global PNG/SVG at `static/images/bortle_fixed.png` or set BORTLE_FIXED_URL.
-        const fixedUrl = config.bortleFixedUrl.trim();
         try {
-            overlayLayers.bortle = L.imageOverlay(fixedUrl, [[-85, -180], [85, 180]], {
+            overlayLayers.bortle = L.imageOverlay(bortleFixedUrl, [[-85, -180], [85, 180]], {
                 opacity: bortleOpacity,
                 pane: "bortlePane",
                 attribution: bortleAttribution,
@@ -223,15 +238,15 @@
     if (!openMeteoReady) {
         messages.push("Open-Meteo map library failed to load; weather layers are unavailable.");
     }
-    if (!bortleUrl) {
-        messages.push("Add BORTLE_TILE_URL to enable the Bortle overlay.");
+    if (!bortleSourceUrl) {
+        messages.push("Add BORTLE_TILE_URL, BORTLE_WMS_URL, or BORTLE_FIXED_URL to enable the Bortle overlay.");
     }
     setStatus(messages);
 
     layerInputs.forEach((input) => {
         const name = input.getAttribute("data-layer");
         const isWeatherLayer = weatherLayerNames.includes(name);
-        const isAvailable = isWeatherLayer ? openMeteoReady : Boolean(bortleUrl);
+        const isAvailable = isWeatherLayer ? openMeteoReady : Boolean(bortleSourceUrl);
 
         if (!isAvailable) {
             input.checked = false;

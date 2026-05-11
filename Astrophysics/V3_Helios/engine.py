@@ -115,7 +115,7 @@ def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet", prog
     vHistory = []
 
     # Use Velocity Verlet - proven symplectic integrator with excellent stability
-    step_func = yoshida4Step
+    step_func = velocityVerletStep
 
     for step in range(steps):
 

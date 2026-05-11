@@ -34,7 +34,7 @@
             <div class="map-panel-section">
                 <h2>Layers</h2>
                 <label class="layer-toggle">
-                    <input type="checkbox" data-layer="bortle" checked>
+                    <input type="checkbox" data-layer="bortle">
                     <span>Bortle scale</span>
                 </label>
                 <label class="layer-toggle">
@@ -112,13 +112,16 @@
 {% block extra_js %}
 <script>
     window.MAP_CONFIG = {
-        openMeteoTileUrl: "{{ open_meteo_tile_url }}",
-        openMeteoAttribution: "{{ open_meteo_attribution }}",
-        bortleTileUrl: "{{ bortle_tile_url }}",
-        bortleAttribution: "{{ bortle_attribution }}",
-        bortleFixedUrl: "{{ bortle_fixed_url }}",
-        satelliteTileUrl: "{{ satellite_tile_url }}",
-        satelliteAttribution: "{{ satellite_attribution }}"
+        openMeteoTileUrl: {{ open_meteo_tile_url | tojson }},
+        openMeteoAttribution: {{ open_meteo_attribution | tojson }},
+        bortleTileUrl: {{ bortle_tile_url | tojson }},
+        bortleWmsUrl: {{ bortle_wms_url | tojson }},
+        bortleWmsLayer: {{ bortle_wms_layer | tojson }},
+        bortleWmsTime: {{ bortle_wms_time | tojson }},
+        bortleAttribution: {{ bortle_attribution | tojson }},
+        bortleFixedUrl: {{ bortle_fixed_url | tojson }},
+        satelliteTileUrl: {{ satellite_tile_url | tojson }},
+        satelliteAttribution: {{ satellite_attribution | tojson }}
     };
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
