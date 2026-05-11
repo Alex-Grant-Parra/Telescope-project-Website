@@ -486,7 +486,7 @@ class ESP32Display:
 			"format": "RGB565",
 			"length": int(len(memoryview(data))),
 		}
-		return self.conn.send_binary(payload, data)
+		return self.conn.send_binary(payload, data, timeout=10.0)
 
 	def clear(self, color: Optional[str] = None) -> Dict[str, Any]:
 		# Clear the display with a background color.

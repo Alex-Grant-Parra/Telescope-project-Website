@@ -34,11 +34,13 @@ static void displayWrite16(uint16_t word) {
 }
 
 static void displayWriteBytes(const uint8_t* data, size_t len) {
-  for (size_t i = 0; i < len; i++) {
-    SPI.write(data[i]);
-    if ((i & 0x3FF) == 0) {
-      yield();
-    }
+  if (data == nullptr || len == 0) {
+    return;
+  }
+
+  SPI.writeBytes(data, len);
+  if ((len & 0x3FF) == 0) {
+    yield();
   }
 }
 
