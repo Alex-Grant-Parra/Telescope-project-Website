@@ -12,5 +12,6 @@ void sendOkEmpty();
 void sendOkLedStatus(const class LedChannel& led);
 void sendOkStatus(const String& motorId, class Motor* motor);
 void sendOkMotorList();
+void sendOkDisplayStatus();
 
 #endif // COMMANDS_H

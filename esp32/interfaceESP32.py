@@ -364,3 +364,265 @@ class ESP32Motor:
 		"""Reset the motor position counter to zero."""
 		return self.conn.send({"cmd": "reset_position", "motor": self.motor_id})
 
+
+class ESP32Display:
+	"""Control the ST7735S TFT LCD display connected to ESP32."""
+
+	# Display constants
+	WIDTH = 128
+	HEIGHT = 160
+
+	# Standard colors (RGB565)
+	COLORS = {
+		"black": "000000",
+		"red": "FF0000",
+		"green": "00FF00",
+		"blue": "0000FF",
+		"white": "FFFFFF",
+		"yellow": "FFFF00",
+		"cyan": "00FFFF",
+		"magenta": "FF00FF",
+	}
+
+	def __init__(self, conn: ESP32Connection) -> None:
+		self.conn = conn
+		self._initialized = False
+		self._brightness = 255
+		self._text_color = "FFFFFF"
+		self._bg_color = "000000"
+		self._cursor_x = 0
+		self._cursor_y = 0
+
+	def initialize(self) -> Dict[str, Any]:
+		"""Initialize the display hardware."""
+		result = self.conn.send({"cmd": "display", "action": "init"})
+		self._initialized = True
+		return result
+
+	def cleanup(self) -> None:
+		"""Clean up display resources."""
+		if self._initialized:
+			self.power(False)
+			self._initialized = False
+
+	def power(self, on: bool) -> Dict[str, Any]:
+		"""Turn display power on/off."""
+		return self.conn.send({"cmd": "display", "action": "power", "on": bool(on)})
+
+	def set_backlight(self, brightness: int) -> Dict[str, Any]:
+		"""Set backlight brightness (0-255).
+		
+		Args:
+			brightness: PWM value 0-255 where 0 is off and 255 is full brightness
+		"""
+		brightness = max(0, min(255, int(brightness)))
+		self._brightness = brightness
+		return self.conn.send({"cmd": "display", "action": "backlight", "brightness": brightness})
+
+	def get_status(self) -> Dict[str, Any]:
+		"""Get current display status."""
+		return self.conn.send({"cmd": "display", "action": "status"})
+
+	def clear(self, color: Optional[str] = None) -> Dict[str, Any]:
+		"""Clear the display with a background color.
+		
+		Args:
+			color: Hex color string (e.g., "000000" for black) or color name
+		"""
+		if color is None:
+			color = self._bg_color
+		else:
+			color = self._normalize_color(color)
+			self._bg_color = color
+
+		return self.conn.send({"cmd": "display", "action": "clear", "color": color})
+
+	def fill_screen(self, color: Optional[str] = None) -> Dict[str, Any]:
+		"""Fill entire screen with color (alias for clear)."""
+		return self.clear(color)
+
+	# Drawing functions
+	def draw_pixel(self, x: int, y: int, color: Optional[str] = None) -> Dict[str, Any]:
+		"""Draw a single pixel."""
+		if color is None:
+			color = self._text_color
+		else:
+			color = self._normalize_color(color)
+
+		if not self._validate_coords(x, y):
+			raise ValueError(f"Coordinates ({x}, {y}) out of display bounds")
+
+		return self.conn.send(
+			{"cmd": "display", "action": "draw_pixel", "x": x, "y": y, "color": color}
+		)
+
+	def draw_rectangle(
+		self,
+		x: int,
+		y: int,
+		width: int,
+		height: int,
+		color: Optional[str] = None,
+		fill: bool = False,
+	) -> Dict[str, Any]:
+		"""Draw a rectangle.
+		
+		Args:
+			x, y: Top-left corner coordinates
+			width, height: Rectangle dimensions
+			color: Border/fill color
+			fill: If True, fill the rectangle; if False, draw outline only
+		"""
+		if color is None:
+			color = self._text_color
+		else:
+			color = self._normalize_color(color)
+
+		action = "fill_rect" if fill else "draw_rect"
+		return self.conn.send(
+			{
+				"cmd": "display",
+				"action": action,
+				"x": int(x),
+				"y": int(y),
+				"w": int(width),
+				"h": int(height),
+				"color": color,
+			}
+		)
+
+	def fill_rectangle(
+		self, x: int, y: int, width: int, height: int, color: Optional[str] = None
+	) -> Dict[str, Any]:
+		"""Fill a rectangle with color."""
+		return self.draw_rectangle(x, y, width, height, color, fill=True)
+
+	def draw_line(
+		self, x0: int, y0: int, x1: int, y1: int, color: Optional[str] = None
+	) -> Dict[str, Any]:
+		"""Draw a line from (x0, y0) to (x1, y1)."""
+		if color is None:
+			color = self._text_color
+		else:
+			color = self._normalize_color(color)
+
+		return self.conn.send(
+			{
+				"cmd": "display",
+				"action": "draw_line",
+				"x0": int(x0),
+				"y0": int(y0),
+				"x1": int(x1),
+				"y1": int(y1),
+				"color": color,
+			}
+		)
+
+	def draw_circle(
+		self,
+		x: int,
+		y: int,
+		radius: int,
+		color: Optional[str] = None,
+		fill: bool = False,
+	) -> Dict[str, Any]:
+		"""Draw a circle.
+		
+		Args:
+			x, y: Center coordinates
+			radius: Circle radius in pixels
+			color: Circle color
+			fill: If True, fill the circle; if False, draw outline only
+		"""
+		if color is None:
+			color = self._text_color
+		else:
+			color = self._normalize_color(color)
+
+		action = "fill_circle" if fill else "draw_circle"
+		return self.conn.send(
+			{
+				"cmd": "display",
+				"action": action,
+				"x": int(x),
+				"y": int(y),
+				"r": int(radius),
+				"color": color,
+			}
+		)
+
+	def fill_circle(
+		self, x: int, y: int, radius: int, color: Optional[str] = None
+	) -> Dict[str, Any]:
+		"""Fill a circle with color."""
+		return self.draw_circle(x, y, radius, color, fill=True)
+
+	# Text functions
+	def set_cursor(self, x: int, y: int) -> Dict[str, Any]:
+		"""Set cursor position for text rendering."""
+		self._cursor_x = int(x)
+		self._cursor_y = int(y)
+		return self.conn.send(
+			{"cmd": "display", "action": "set_cursor", "x": self._cursor_x, "y": self._cursor_y}
+		)
+
+	def set_text_color(self, color: str) -> Dict[str, Any]:
+		"""Set text color."""
+		color = self._normalize_color(color)
+		self._text_color = color
+		return self.conn.send({"cmd": "display", "action": "set_text_color", "color": color})
+
+	def set_background_color(self, color: str) -> Dict[str, Any]:
+		"""Set background color."""
+		color = self._normalize_color(color)
+		self._bg_color = color
+		return self.conn.send({"cmd": "display", "action": "set_bg_color", "color": color})
+
+	# Utility methods
+	@staticmethod
+	def _normalize_color(color: str) -> str:
+		"""Normalize color to hex format.
+		
+		Args:
+			color: Can be a color name from COLORS dict or hex string
+		
+		Returns:
+			Hex color string (6 characters)
+		"""
+		if color.lower() in ESP32Display.COLORS:
+			return ESP32Display.COLORS[color.lower()]
+		
+		# Clean up hex format
+		color = color.lstrip("#").upper()
+		if len(color) == 6 and all(c in "0123456789ABCDEF" for c in color):
+			return color
+		
+		raise ValueError(f"Invalid color format: {color}")
+
+	@staticmethod
+	def _validate_coords(x: int, y: int) -> bool:
+		"""Check if coordinates are within display bounds."""
+		return 0 <= x < ESP32Display.WIDTH and 0 <= y < ESP32Display.HEIGHT
+
+	def draw_test_pattern(self) -> Dict[str, Any]:
+		"""Draw a test pattern (colors, rectangles, text areas) for debugging."""
+		# Clear with black
+		self.clear("black")
+		
+		# Draw colored rectangles
+		self.fill_rectangle(0, 0, 32, 40, "red")
+		self.fill_rectangle(32, 0, 32, 40, "green")
+		self.fill_rectangle(64, 0, 32, 40, "blue")
+		self.fill_rectangle(96, 0, 32, 40, "yellow")
+		
+		# Draw circles
+		self.fill_circle(32, 80, 15, "cyan")
+		self.fill_circle(96, 80, 15, "magenta")
+		
+		# Draw lines
+		self.draw_line(0, 100, 128, 100, "white")
+		self.draw_line(64, 60, 64, 160, "white")
+		
+		return self.get_status()
+
+

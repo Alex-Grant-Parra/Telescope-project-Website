@@ -1,6 +1,7 @@
 #include "commands.h"
 #include "motor.h"
 #include "led.h"
+#include "display.h"
 #include <ArduinoJson.h>
 
 void sendError(const char* message) {
@@ -59,6 +60,23 @@ void sendOkMotorList() {
   Serial.println();
 }
 
+void sendOkDisplayStatus() {
+  JsonDocument resp;
+  resp["status"] = "ok";
+  JsonObject data = resp["data"].to<JsonObject>();
+  data["initialized"] = g_display_state.initialized;
+  data["powered"] = g_display_state.powered;
+  data["brightness"] = g_display_state.brightness;
+  data["width"] = DISPLAY_WIDTH;
+  data["height"] = DISPLAY_HEIGHT;
+  data["cursor_x"] = g_display_state.cursor_x;
+  data["cursor_y"] = g_display_state.cursor_y;
+  data["text_color"] = colorToHex(g_display_state.text_color);
+  data["background_color"] = colorToHex(g_display_state.background_color);
+  serializeJson(resp, Serial);
+  Serial.println();
+}
+
 static void handleLedCommand(const JsonDocument& req) {
   const char* ledName = req["led"] | "board";
   LedChannel* led = findLed(String(ledName));
@@ -95,6 +113,134 @@ static void handleLedCommand(const JsonDocument& req) {
   }
 
   sendError("Missing LED mode");
+}
+
+static void handleDisplayCommand(const JsonDocument& req) {
+  const char* action = req["action"] | "";
+  if (strlen(action) == 0) {
+    sendError("Missing display action");
+    return;
+  }
+
+  if (strcmp(action, "init") == 0) {
+    initializeDisplay();
+    sendOkDisplayStatus();
+    return;
+  }
+
+  if (strcmp(action, "power") == 0) {
+    bool on = req["on"] | true;
+    displayPower(on);
+    sendOkDisplayStatus();
+    return;
+  }
+
+  if (strcmp(action, "backlight") == 0) {
+    uint8_t brightness = req["brightness"] | 255;
+    displayBacklight(brightness);
+    sendOkDisplayStatus();
+    return;
+  }
+
+  if (strcmp(action, "clear") == 0) {
+    uint16_t color = 0x0000;  // Black
+    if (!req["color"].isNull()) {
+      const char* colorHex = req["color"] | "000000";
+      color = hexToColor(String(colorHex));
+    }
+    displayFillScreen(color);
+    sendOkEmpty();
+    return;
+  }
+
+  if (strcmp(action, "fill_rect") == 0) {
+    uint16_t x = req["x"] | 0;
+    uint16_t y = req["y"] | 0;
+    uint16_t w = req["w"] | 10;
+    uint16_t h = req["h"] | 10;
+    const char* colorHex = req["color"] | "FFFFFF";
+    uint16_t color = hexToColor(String(colorHex));
+    displayFillRectangle(x, y, w, h, color);
+    sendOkEmpty();
+    return;
+  }
+
+  if (strcmp(action, "draw_rect") == 0) {
+    uint16_t x = req["x"] | 0;
+    uint16_t y = req["y"] | 0;
+    uint16_t w = req["w"] | 10;
+    uint16_t h = req["h"] | 10;
+    const char* colorHex = req["color"] | "FFFFFF";
+    uint16_t color = hexToColor(String(colorHex));
+    displayDrawRectangle(x, y, w, h, color);
+    sendOkEmpty();
+    return;
+  }
+
+  if (strcmp(action, "draw_line") == 0) {
+    uint16_t x0 = req["x0"] | 0;
+    uint16_t y0 = req["y0"] | 0;
+    uint16_t x1 = req["x1"] | 127;
+    uint16_t y1 = req["y1"] | 159;
+    const char* colorHex = req["color"] | "FFFFFF";
+    uint16_t color = hexToColor(String(colorHex));
+    displayDrawLine(x0, y0, x1, y1, color);
+    sendOkEmpty();
+    return;
+  }
+
+  if (strcmp(action, "draw_circle") == 0) {
+    uint16_t x = req["x"] | 64;
+    uint16_t y = req["y"] | 80;
+    uint16_t r = req["r"] | 10;
+    const char* colorHex = req["color"] | "FFFFFF";
+    uint16_t color = hexToColor(String(colorHex));
+    displayDrawCircle(x, y, r, color);
+    sendOkEmpty();
+    return;
+  }
+
+  if (strcmp(action, "fill_circle") == 0) {
+    uint16_t x = req["x"] | 64;
+    uint16_t y = req["y"] | 80;
+    uint16_t r = req["r"] | 10;
+    const char* colorHex = req["color"] | "FFFFFF";
+    uint16_t color = hexToColor(String(colorHex));
+    displayFillCircle(x, y, r, color);
+    sendOkEmpty();
+    return;
+  }
+
+  if (strcmp(action, "set_cursor") == 0) {
+    uint16_t x = req["x"] | 0;
+    uint16_t y = req["y"] | 0;
+    displaySetCursor(x, y);
+    sendOkEmpty();
+    return;
+  }
+
+  if (strcmp(action, "set_text_color") == 0) {
+    const char* colorHex = req["color"] | "FFFFFF";
+    uint16_t color = hexToColor(String(colorHex));
+    displaySetTextColor(color);
+    sendOkEmpty();
+    return;
+  }
+
+  if (strcmp(action, "set_bg_color") == 0) {
+    const char* colorHex = req["color"] | "000000";
+    uint16_t color = hexToColor(String(colorHex));
+    displaySetBackgroundColor(color);
+    sendOkEmpty();
+    return;
+  }
+
+  if (strcmp(action, "status") == 0) {
+    sendOkDisplayStatus();
+    return;
+  }
+
+  sendError("Unknown display action");
 }
 
 static void handleMotorCreateCommand(const JsonDocument& req) {
@@ -256,6 +402,12 @@ void handleCommand(const String& line) {
   // LED commands
   if (strcmp(cmd, "led") == 0) {
     handleLedCommand(req);
+    return;
+  }
+
+  // Display commands
+  if (strcmp(cmd, "display") == 0) {
+    handleDisplayCommand(req);
     return;
   }
 
