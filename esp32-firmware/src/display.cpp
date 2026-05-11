@@ -141,15 +141,13 @@ void initializeDisplay() {
   delay(2);
   yield();
 
-  delay(2);
-  yield();
-
   // Set backlight to full brightness initially
   analogWrite(DISPLAY_BL, 255);
 
   g_display_state.initialized = true;
 }
 
+void cleanupDisplay() {
   if (!g_display_state.initialized) {
     return;
   }
