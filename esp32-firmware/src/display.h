@@ -54,6 +54,9 @@ void displayFillRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16
 void displayDrawCircle(uint16_t x, uint16_t y, uint16_t r, uint16_t color);
 void displayFillCircle(uint16_t x, uint16_t y, uint16_t r, uint16_t color);
 void displayDrawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color);
+void displayBeginBlit(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+void displayWriteBlitData(const uint8_t* data, size_t len);
+void displayEndBlit();
 
 // Text functions
 void displaySetTextColor(uint16_t color);

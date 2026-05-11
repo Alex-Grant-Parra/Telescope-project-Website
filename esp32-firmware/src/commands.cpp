@@ -2,6 +2,7 @@
 #include "motor.h"
 #include "led.h"
 #include "display.h"
+#include "serial_handler.h"
 #include <ArduinoJson.h>
 
 void sendError(const char* message) {
@@ -237,6 +238,38 @@ static void handleDisplayCommand(const JsonDocument& req) {
 
   if (strcmp(action, "status") == 0) {
     sendOkDisplayStatus();
+    return;
+  }
+
+  if (strcmp(action, "blit") == 0) {
+    uint16_t x = req["x"] | 0;
+    uint16_t y = req["y"] | 0;
+    uint16_t w = req["w"] | 0;
+    uint16_t h = req["h"] | 0;
+    const char* format = req["format"] | "RGB565";
+    uint32_t length = req["length"] | 0;
+
+    if (w == 0 || h == 0) {
+      sendError("Invalid blit size");
+      return;
+    }
+
+    if (strcmp(format, "RGB565") != 0) {
+      sendError("Unsupported blit format");
+      return;
+    }
+
+    if (length != static_cast<uint32_t>(w) * static_cast<uint32_t>(h) * 2U) {
+      sendError("Invalid blit length");
+      return;
+    }
+
+    if (!beginDisplayBlit(x, y, w, h, length)) {
+      sendError("Unable to start display blit");
+      return;
+    }
+
+    // Response is sent after the binary payload is fully received.
     return;
   }
 

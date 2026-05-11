@@ -16,6 +16,7 @@ DisplayState g_display_state = {
 // Forward declarations for low-level SPI operations
 static void displayWrite8(uint8_t byte);
 static void displayWrite16(uint16_t word);
+static void displayWriteBytes(const uint8_t* data, size_t len);
 static void displayCommandMode();
 static void displayDataMode();
 static void displayReset();
@@ -30,6 +31,15 @@ static void displayWrite8(uint8_t byte) {
 static void displayWrite16(uint16_t word) {
   displayWrite8(word >> 8);
   displayWrite8(word & 0xFF);
+}
+
+static void displayWriteBytes(const uint8_t* data, size_t len) {
+  for (size_t i = 0; i < len; i++) {
+    SPI.write(data[i]);
+    if ((i & 0x3FF) == 0) {
+      yield();
+    }
+  }
 }
 
 static void displayCommandMode() {
@@ -78,7 +88,7 @@ void initializeDisplay() {
   // SPI.begin(SCK, MISO, MOSI, CS)
   // We don't use MISO (read-only) or CS (tied to ground)
   SPI.begin(DISPLAY_SCK, -1, DISPLAY_SDA, -1);
-  SPI.setFrequency(1000000);  // 1 MHz for stability
+  SPI.setFrequency(40000000);  // 40 MHz for display throughput
   SPI.setDataMode(SPI_MODE0);
 
   // Reset display
@@ -360,6 +370,33 @@ void displayDrawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_
       y0 += sy;
     }
   }
+}
+
+void displayBeginBlit(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+  if (!g_display_state.initialized) {
+    return;
+  }
+
+  if (w == 0 || h == 0) {
+    return;
+  }
+
+  displaySetWindow(x, y, x + w - 1, y + h - 1);
+  displayCommandMode();
+  displayWrite8(0x2C);  // RAMWR
+  displayDataMode();
+}
+
+void displayWriteBlitData(const uint8_t* data, size_t len) {
+  if (!g_display_state.initialized || data == nullptr || len == 0) {
+    return;
+  }
+
+  displayWriteBytes(data, len);
+}
+
+void displayEndBlit() {
+  // No-op; kept for symmetry and future hooks.
 }
 
 // Text color functions

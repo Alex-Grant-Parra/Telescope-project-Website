@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import glob
 import json
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -13,7 +14,7 @@ import serial  # pyserial
 @dataclass
 class ESP32SerialConfig:
 	port: str = "/dev/ttyUSB0"
-	baudrate: int = 115200
+	baudrate: int = 2000000
 	timeout: float = 0.5
 
 
@@ -97,29 +98,82 @@ class ESP32Connection:
 		except Exception:
 			pass
 
-	def send(self, payload: Dict[str, Any], timeout: Optional[float] = None) -> Dict[str, Any]:
-		line = json.dumps(payload, separators=(",", ":")) + "\n"
-		with self._lock:
-			if timeout is not None:
-				prev_timeout = self.ser.timeout
-				self.ser.timeout = timeout
-			try:
-				self.ser.write(line.encode("utf-8"))
-				self.ser.flush()
-				resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
-			finally:
-				if timeout is not None:
-					self.ser.timeout = prev_timeout
-		if not resp:
-			raise TimeoutError("No response from ESP32")
+	@staticmethod
+	def _repair_json_response(resp: str) -> str:
+		# Recover from a small set of known serial glitches so the display can still initialize.
+		resp = resp.strip()
+		resp = resp.replace('"bright255', '"brightness":255')
+		resp = re.sub(r'"bright(?:ness)?(\d+)', r'"brightness":\1', resp)
+		resp = re.sub(r'("brightness")([0-9]+)', r'\1:\2', resp)
+		return resp
+
+	def _parse_response(self, resp: str) -> Dict[str, Any]:
 		try:
 			data = json.loads(resp)
-		except json.JSONDecodeError as exc:
-			raise RuntimeError(f"Invalid JSON from ESP32: {resp}") from exc
+		except json.JSONDecodeError:
+			repaired = self._repair_json_response(resp)
+			if repaired != resp:
+				data = json.loads(repaired)
+			else:
+				raise
 		if data.get("status") != "ok":
 			error_msg = data.get("message", "ESP32 error")
 			raise RuntimeError(f"ESP32 error: {error_msg} | Full response: {data}")
 		return data.get("data", {})
+
+	def send(self, payload: Dict[str, Any], timeout: Optional[float] = None) -> Dict[str, Any]:
+		line = json.dumps(payload, separators=(",", ":")) + "\n"
+		last_resp = ""
+		with self._lock:
+			for attempt in range(2):
+				if timeout is not None:
+					prev_timeout = self.ser.timeout
+					self.ser.timeout = timeout
+				try:
+					self.ser.write(line.encode("utf-8"))
+					self.ser.flush()
+					last_resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
+				finally:
+					if timeout is not None:
+						self.ser.timeout = prev_timeout
+				if last_resp:
+					try:
+						return self._parse_response(last_resp)
+					except (json.JSONDecodeError, RuntimeError):
+						if attempt == 0:
+							self._drain()
+							continue
+						raise
+			self._drain()
+		raise TimeoutError(f"No valid response from ESP32: {last_resp!r}")
+
+	def send_binary(
+		self,
+		payload: Dict[str, Any],
+		binary_data: bytes | bytearray | memoryview,
+		timeout: Optional[float] = None,
+	) -> Dict[str, Any]:
+		data_bytes = memoryview(binary_data).tobytes()
+		line = json.dumps(payload, separators=(",", ":")) + "\n"
+		transfer_timeout = timeout
+		if transfer_timeout is None:
+			baudrate = max(1, int(self.ser.baudrate))
+			transfer_timeout = max(self.ser.timeout, (len(data_bytes) * 10.0 / baudrate) + 2.0)
+
+		with self._lock:
+			prev_timeout = self.ser.timeout
+			self.ser.timeout = transfer_timeout
+			try:
+				self.ser.write(line.encode("utf-8"))
+				self.ser.flush()
+				self.ser.write(data_bytes)
+				self.ser.flush()
+				resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
+			finally:
+				self.ser.timeout = prev_timeout
+		if not resp:
+			raise TimeoutError("No response from ESP32")
+		return self._parse_response(resp)
 
 	def list_motors(self) -> Dict[str, Any]:
 		return self.send({"cmd": "list_motors"})
@@ -419,6 +473,20 @@ class ESP32Display:
 	def get_status(self) -> Dict[str, Any]:
 		# Get current display status.
 		return self.conn.send({"cmd": "display", "action": "status"})
+
+	def blit_rgb565(self, x: int, y: int, width: int, height: int, data: bytes | bytearray | memoryview) -> Dict[str, Any]:
+		# Upload a full RGB565 frame or sub-frame in one binary transfer.
+		payload = {
+			"cmd": "display",
+			"action": "blit",
+			"x": int(x),
+			"y": int(y),
+			"w": int(width),
+			"h": int(height),
+			"format": "RGB565",
+			"length": int(len(memoryview(data))),
+		}
+		return self.conn.send_binary(payload, data)
 
 	def clear(self, color: Optional[str] = None) -> Dict[str, Any]:
 		# Clear the display with a background color.
