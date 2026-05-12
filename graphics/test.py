@@ -24,46 +24,47 @@ import time
 from PIL import Image
 
 
-# def image_to_rgb565_bytes(img: Image.Image, w: int, h: int) -> bytes:
-# 	"""Convert PIL Image to RGB565 bytes."""
-# 	img = img.convert("RGB").resize((w, h))
-# 	pixels = img.load()
-# 	out = bytearray()
-# 	for y in range(h):
-# 		for x in range(w):
-# 			r, g, b = pixels[x, y]
-# 			r5 = (r >> 3) & 0x1F
-# 			g6 = (g >> 2) & 0x3F
-# 			b5 = (b >> 3) & 0x1F
-# 			val = (r5 << 11) | (g6 << 5) | b5
-# 			out.append((val >> 8) & 0xFF)
-# 			out.append(val & 0xFF)
-# 	return bytes(out)
+def image_to_rgb565_bytes(img: Image.Image, w: int, h: int) -> bytes:
+	"""Convert PIL Image to RGB565 bytes."""
+	img = img.convert("RGB").resize((w, h))
+	pixels = img.load()
+	out = bytearray()
+	for y in range(h):
+		for x in range(w):
+			r, g, b = pixels[x, y]
+			r5 = (r >> 3) & 0x1F
+			g6 = (g >> 2) & 0x3F
+			b5 = (b >> 3) & 0x1F
+			val = (r5 << 11) | (g6 << 5) | b5
+			out.append((val >> 8) & 0xFF)
+			out.append(val & 0xFF)
+	return bytes(out)
 
 
-# def main() -> None:
-# 	"""Upload and play test GIF."""
-# 	gif_path = ROOT / "graphics" / "assets" / "test.gif"
-# 	print(f"Processing {gif_path.name}...")
-# 	gif_uuid = upload_and_play_gif(gif_path)
+def main() -> None:
+	"""Upload and play test GIF."""
+	gif_path = ROOT / "graphics" / "assets" / "test.gif"
+	print(f"Processing {gif_path.name}...")
+	for i in range(0, 5):
+		gif_uuid = upload_and_play_gif(gif_path)
 
-# if __name__ == "__main__":
-# 	main()
+if __name__ == "__main__":
+	main()
 
 # Display a PNG
 # from graphics.image_display import display_image
 # from pathlib import Path
 
-conn = ESP32Connection()
-display = ESP32Display(conn)
-display.initialize()
+# conn = ESP32Connection()
+# display = ESP32Display(conn)
+# display.initialize()
 
-# Set custom brightness
-# 50% brightness
-display_image(Path("graphics/assets/test.png"))
-display.set_backlight(128)  
-time.sleep(5)
-clear_display()
+# # Set custom brightness
+# # 50% brightness
+# display_image(Path("graphics/assets/test.png"))
+# display.set_backlight(128)  
+# time.sleep(5)
+# clear_display()
 
 # # Display at specific location
 # display_image(Path("icon.jpg"), x=50, y=50, width=32, height=32)

@@ -147,12 +147,6 @@ def upload_and_play_gif(
 		print(f"Error: {exc}")
 		raise
 	finally:
-		if display is not None:
-			try:
-				display.clear("000000")
-				# display.set_backlight(0)
-			except Exception:
-				pass
 		if conn is not None:
 			try:
 				conn.close()
@@ -197,12 +191,6 @@ def play_stored_gif_by_uuid(uuid_str: str) -> None:
 		print(f"Error: {exc}")
 		raise
 	finally:
-		if display is not None:
-			try:
-				display.clear("000000")
-				# display.set_backlight(0)
-			except Exception:
-				pass
 		if conn is not None:
 			try:
 				conn.close()
