@@ -15,7 +15,7 @@ import serial  # pyserial
 @dataclass
 class ESP32SerialConfig:
 	port: str = "/dev/ttyUSB0"
-	baudrate: int = 2000000
+	baudrate: int = 921600
 	timeout: float = 0.5
 
 
@@ -140,15 +140,18 @@ class ESP32Connection:
 			if not candidate:
 				continue
 
-			if not candidate.startswith("{"):
-				# Ignore debug noise or partial binary garbage and keep waiting.
-				buffer = ""
-				continue
-
+			# If there is serial noise before JSON, keep only the JSON tail.
 			start = candidate.find("{")
+			if start == -1:
+				# No JSON object start yet; keep waiting for more bytes.
+				continue
+			if start > 0:
+				candidate = candidate[start:]
+				buffer = candidate
+
 			end = candidate.rfind("}")
-			if start != -1 and end != -1 and end > start:
-				return candidate[start : end + 1]
+			if end != -1 and end > 0:
+				return candidate[: end + 1]
 
 		return buffer.strip()
 
@@ -163,6 +166,8 @@ class ESP32Connection:
 		resp = re.sub(r'"([A-Za-z_][A-Za-z0-9_]*)"(-?\d)', r'"\1":\2', resp)
 		# Generic missing comma between fields: ...123"next": -> ...123,"next":
 		resp = re.sub(r'([0-9}\]"])(\s*)"([A-Za-z_][A-Za-z0-9_]*)"\s*:', r'\1,\2"\3":', resp)
+		# Missing comma after boolean/null values before next key.
+		resp = re.sub(r'(true|false|null)(\s*)"([A-Za-z_][A-Za-z0-9_]*)"\s*:', r'\1,\2"\3":', resp)
 		return resp
 
 	def _parse_response(self, resp: str) -> Dict[str, Any]:
@@ -611,6 +616,10 @@ class ESP32Display:
 	def get_status(self) -> Dict[str, Any]:
 		# Get current display status.
 		return self.conn.send({"cmd": "display", "action": "status"})
+
+	def format_storage(self) -> Dict[str, Any]:
+		# Format persistent display storage on the ESP32 (LittleFS).
+		return self.conn.send({"cmd": "display", "action": "format_storage"}, timeout=10.0)
 
 	def blit_rgb565(self, x: int, y: int, width: int, height: int, data: bytes | bytearray | memoryview) -> Dict[str, Any]:
 		# Upload a full RGB565 frame or sub-frame in one binary transfer.

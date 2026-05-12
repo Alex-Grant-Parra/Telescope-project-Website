@@ -4,6 +4,7 @@
 #include "display.h"
 #include "serial_handler.h"
 #include <ArduinoJson.h>
+#include <LittleFS.h>
 
 void sendError(const char* message) {
   JsonDocument resp;
@@ -125,21 +126,21 @@ static void handleDisplayCommand(const JsonDocument& req) {
 
   if (strcmp(action, "init") == 0) {
     initializeDisplay();
-    sendOkDisplayStatus();
+    sendOkEmpty();
     return;
   }
 
   if (strcmp(action, "power") == 0) {
     bool on = req["on"] | true;
     displayPower(on);
-    sendOkDisplayStatus();
+    sendOkEmpty();
     return;
   }
 
   if (strcmp(action, "backlight") == 0) {
     uint8_t brightness = req["brightness"] | 255;
     displayBacklight(brightness);
-    sendOkDisplayStatus();
+    sendOkEmpty();
     return;
   }
 
@@ -238,6 +239,19 @@ static void handleDisplayCommand(const JsonDocument& req) {
 
   if (strcmp(action, "status") == 0) {
     sendOkDisplayStatus();
+    return;
+  }
+
+  if (strcmp(action, "format_storage") == 0) {
+    if (!LittleFS.begin(true)) {
+      sendError("Storage mount failed");
+      return;
+    }
+    if (!LittleFS.format()) {
+      sendError("Storage format failed");
+      return;
+    }
+    sendOkEmpty();
     return;
   }
 

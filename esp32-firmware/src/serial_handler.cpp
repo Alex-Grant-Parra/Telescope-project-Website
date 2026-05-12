@@ -100,7 +100,9 @@ bool beginFileUpload(const char* name, uint32_t byteCount) {
 }
 
 void initializeSerial() {
-  Serial.begin(2000000);
+  // 921600 is significantly more stable than 2M on many USB-UART bridges
+  // during sustained binary transfers.
+  Serial.begin(921600);
 }
 
 void handleSerial() {
@@ -157,17 +159,15 @@ void handleSerial() {
               uint32_t written = 0;
               while (written < g_fileUploadIndex) {
                 size_t toWrite = g_fileUploadIndex - written;
-                if (toWrite > 1024) {
-                  toWrite = 1024;
+                if (toWrite > 4096) {
+                  toWrite = 4096;
                 }
                 size_t w = f.write(g_fileUploadBuffer + written, toWrite);
                 if (w == 0) {
                   break;
                 }
                 written += static_cast<uint32_t>(w);
-                if ((written & 0x7FF) == 0) {
-                  yield();
-                }
+                yield();
               }
               f.close();
               writeOk = (written == g_fileUploadIndex);

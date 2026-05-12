@@ -48,10 +48,15 @@ def main() -> None:
 		frame_step_env = os.getenv("ASTRA_FRAME_STEP")
 		upload_timeout_env = os.getenv("ASTRA_UPLOAD_TIMEOUT")
 		upload_retries_env = os.getenv("ASTRA_UPLOAD_RETRIES")
+		format_storage_env = os.getenv("ASTRA_FORMAT_STORAGE")
 		max_frames = int(max_frames_env) if max_frames_env else None
 		frame_step = max(1, int(frame_step_env)) if frame_step_env else 1
 		upload_timeout = float(upload_timeout_env) if upload_timeout_env else 25.0
 		upload_retries = max(1, int(upload_retries_env)) if upload_retries_env else 3
+		format_storage = True if format_storage_env is None else format_storage_env.lower() in ("1", "true", "yes", "on")
+		if format_storage:
+			print("Formatting ESP32 display storage...")
+			display.format_storage()
 		img = Image.open(gif_path)
 		frames = []
 		durations = []
