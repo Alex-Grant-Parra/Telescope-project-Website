@@ -277,6 +277,40 @@ static void handleDisplayCommand(const JsonDocument& req) {
     return;
   }
 
+  if (strcmp(action, "store") == 0) {
+    const char* name = req["name"] | "";
+    uint32_t length = req["length"] | 0;
+    if (strlen(name) == 0 || length == 0) {
+      sendError("Missing name or length");
+      return;
+    }
+
+    if (!beginFileUpload(name, length)) {
+      sendError("Unable to start file upload");
+      return;
+    }
+
+    // Response will be sent after upload completes
+    return;
+  }
+
+  if (strcmp(action, "play") == 0) {
+    const char* name = req["name"] | "";
+    if (strlen(name) == 0) {
+      sendError("Missing name");
+      return;
+    }
+
+    uint16_t x = req["x"] | 0;
+    uint16_t y = req["y"] | 0;
+    uint16_t w = req["w"] | DISPLAY_WIDTH;
+    uint16_t h = req["h"] | DISPLAY_HEIGHT;
+
+    displayPlayFile(name, x, y, w, h);
+    sendOkEmpty();
+    return;
+  }
+
   sendError("Unknown display action");
 }
 

@@ -1,5 +1,6 @@
 #include "display.h"
 #include <SPI.h>
+#include <LittleFS.h>
 
 // Global display state
 DisplayState g_display_state = {
@@ -22,6 +23,14 @@ static void displayDataMode();
 static void displayReset();
 static void displaySetWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
 static void displayFillCircleHelper(uint16_t x, uint16_t y, uint16_t r, uint8_t corners, uint16_t delta, uint16_t color);
+static String normalizeFsPath(const char* name) {
+  String path(name == nullptr ? "" : name);
+  path.trim();
+  if (path.length() > 0 && path[0] != '/') {
+    path = "/" + path;
+  }
+  return path;
+}
 
 // SPI communication helpers
 static void displayWrite8(uint8_t byte) {
@@ -399,6 +408,54 @@ void displayWriteBlitData(const uint8_t* data, size_t len) {
 
 void displayEndBlit() {
   // No-op; kept for symmetry and future hooks.
+}
+
+void displayPlayFile(const char* name, uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+  if (!g_display_state.initialized || name == nullptr) {
+    return;
+  }
+
+  if (!LittleFS.begin(true)) {
+    return;
+  }
+
+  String fname = normalizeFsPath(name);
+  if (!LittleFS.exists(fname)) {
+    return;
+  }
+
+  File f = LittleFS.open(fname, "r");
+  if (!f) {
+    return;
+  }
+
+  uint32_t fileSize = f.size();
+  uint32_t expected = (uint32_t)w * (uint32_t)h * 2U;
+  if (fileSize < expected) {
+    // Not enough data for a single frame
+    f.close();
+    return;
+  }
+
+  // Set window and begin RAM write
+  displaySetWindow(x, y, x + w - 1, y + h - 1);
+  displayCommandMode();
+  displayWrite8(0x2C); // RAMWR
+  displayDataMode();
+
+  const size_t bufSize = 512;
+  uint8_t buf[bufSize];
+  uint32_t remaining = expected;
+  while (remaining > 0) {
+    size_t toRead = (remaining > bufSize) ? bufSize : remaining;
+    size_t r = f.read(buf, toRead);
+    if (r == 0) break;
+    displayWriteBytes(buf, r);
+    remaining -= r;
+    if ((remaining & 0x3FF) == 0) yield();
+  }
+
+  f.close();
 }
 
 // Text color functions

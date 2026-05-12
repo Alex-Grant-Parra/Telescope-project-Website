@@ -112,6 +112,46 @@ class ESP32Connection:
 		except Exception:
 			pass
 
+	def _read_response_line(self, timeout: float) -> str:
+		deadline = time.monotonic() + max(0.1, float(timeout))
+		parts: list[str] = []
+		while time.monotonic() < deadline:
+			chunk = self.ser.readline().decode("utf-8", errors="ignore")
+			if chunk:
+				parts.append(chunk)
+				joined = "".join(parts).strip()
+				if joined.endswith("}"):
+					return joined
+				continue
+			time.sleep(0.01)
+		return "".join(parts).strip()
+
+	def _read_json_response(self, timeout: float) -> str:
+		deadline = time.monotonic() + max(0.1, float(timeout))
+		buffer = ""
+		while time.monotonic() < deadline:
+			chunk = self.ser.readline().decode("utf-8", errors="ignore")
+			if not chunk:
+				time.sleep(0.01)
+				continue
+
+			buffer += chunk
+			candidate = buffer.strip()
+			if not candidate:
+				continue
+
+			if not candidate.startswith("{"):
+				# Ignore debug noise or partial binary garbage and keep waiting.
+				buffer = ""
+				continue
+
+			start = candidate.find("{")
+			end = candidate.rfind("}")
+			if start != -1 and end != -1 and end > start:
+				return candidate[start : end + 1]
+
+		return buffer.strip()
+
 	@staticmethod
 	def _repair_json_response(resp: str) -> str:
 		# Recover from a small set of known serial glitches so the display can still initialize.
@@ -172,7 +212,7 @@ class ESP32Connection:
 				try:
 					self.ser.write(line.encode("utf-8"))
 					self.ser.flush()
-					last_resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
+					last_resp = self._read_json_response(timeout or self.ser.timeout)
 				finally:
 					if timeout is not None:
 						self.ser.timeout = prev_timeout
@@ -214,7 +254,7 @@ class ESP32Connection:
 					# Send binary payload
 					self.ser.write(data_bytes)
 					self.ser.flush()
-					resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
+					resp = self._read_json_response(self.ser.timeout)
 					if resp:
 						break
 					self._drain()
@@ -226,6 +266,22 @@ class ESP32Connection:
 
 	def list_motors(self) -> Dict[str, Any]:
 		return self.send({"cmd": "list_motors"})
+
+	def upload_display_file(self, name: str, data: bytes, timeout: Optional[float] = None) -> Dict[str, Any]:
+		"""Upload a binary file to the ESP32 LittleFS storage for later playback.
+
+		The ESP32 will store the exact bytes under `name`. Use `play` to display it.
+		"""
+		payload = {"cmd": "display", "action": "store", "name": name, "length": len(data)}
+		return self.send_binary(payload, data, timeout=timeout)
+
+	def play_display_file(self, name: str, x: int = 0, y: int = 0, w: int = 128, h: int = 160) -> Dict[str, Any]:
+		"""Play a stored display file previously uploaded with `upload_display_file`.
+
+		Currently supports raw RGB565 frames sized exactly w*h*2 bytes.
+		"""
+		payload = {"cmd": "display", "action": "play", "name": name, "x": int(x), "y": int(y), "w": int(w), "h": int(h)}
+		return self.send(payload)
 
 	def delete_motor(self, motor_id: str) -> Dict[str, Any]:
 		return self.send({"cmd": "delete_motor", "motor": motor_id})

@@ -71,5 +71,9 @@ void displayClearLine(uint16_t line_num);
 uint16_t hexToColor(const String& hex_str);
 String colorToHex(uint16_t color);
 void displayGetState();
+// Play a stored file from LittleFS. For now expects a raw RGB565 file sized
+// exactly w*h*2 bytes; the file will be streamed to the display at the
+// specified x,y position.
+void displayPlayFile(const char* name, uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 
 #endif // DISPLAY_H
