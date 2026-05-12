@@ -264,9 +264,13 @@ static void handleDisplayCommand(const JsonDocument& req) {
       return;
     }
 
-    if (!beginDisplayBlit(x, y, w, h, length)) {
-      sendError("Unable to start display blit");
-      return;
+    // Try buffered blit first (preferred) and fall back to streaming blit if
+    // buffering isn't available or allocation fails.
+    if (!beginDisplayBlitBuffered(x, y, w, h, length)) {
+      if (!beginDisplayBlit(x, y, w, h, length)) {
+        sendError("Unable to start display blit");
+        return;
+      }
     }
 
     // Response is sent after the binary payload is fully received.

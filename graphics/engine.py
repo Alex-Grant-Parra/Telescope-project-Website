@@ -346,8 +346,12 @@ class GraphicsEngine:
 						keep_aspect=True,
 					)
 					if clear_between_frames:
-						self.clear()
-					self.render_image(prepared, x=x, y=y, pixel_size=pixel_size)
+						# Compose full-screen frame in-memory to avoid sending a separate clear command
+						full = Image.new("RGBA", (self.width, self.height), f"#{self.default_background}FF")
+						full.alpha_composite(prepared, (int(x), int(y)))
+						self.render_image(full, x=0, y=0, pixel_size=pixel_size)
+					else:
+						self.render_image(prepared, x=x, y=y, pixel_size=pixel_size)
 
 					delay_ms = override_frame_delay_ms
 					if delay_ms is None:
@@ -359,7 +363,6 @@ class GraphicsEngine:
 
 	def render_image(self, image: Image.Image, x: int = 0, y: int = 0, pixel_size: Optional[int] = None) -> None:
 		pixel_size = max(1, int(pixel_size or self.default_pixel_size))
-		frame = Image.new("RGBA", (self.width, self.height), f"#{self.default_background}FF")
 		prepared = self._prepare_image(
 			image=image,
 			width=min(self.width, image.width * pixel_size),
@@ -367,10 +370,25 @@ class GraphicsEngine:
 			scale=float(pixel_size),
 			keep_aspect=False,
 		)
-		frame.alpha_composite(prepared, (int(x), int(y)))
 
+		# If the display supports bulk blit, send the smallest rectangle that fully
+		# represents the composed result to reduce transfer size and avoid extra
+		# separate clear commands which cause visible sweeping effects on the TFT.
 		if hasattr(self.display, "blit_rgb565"):
-			self.display.blit_rgb565(0, 0, self.width, self.height, _rgb_to_rgb565_bytes(frame))
+			# If the prepared image already covers the full display and is positioned
+			# at 0,0, compose it onto a background and send the full frame.
+			if prepared.width == self.width and prepared.height == self.height and int(x) == 0 and int(y) == 0:
+				frame = Image.new("RGBA", (self.width, self.height), f"#{self.default_background}FF")
+				frame.alpha_composite(prepared, (0, 0))
+				self.display.blit_rgb565(0, 0, self.width, self.height, _rgb_to_rgb565_bytes(frame))
+				return
+
+			# Otherwise send only the prepared region; composite it onto the
+			# background so transparent pixels overwrite correctly without a
+			# separate clear command on the device.
+			bg = Image.new("RGBA", (prepared.width, prepared.height), f"#{self.default_background}FF")
+			bg.alpha_composite(prepared, (0, 0))
+			self.display.blit_rgb565(int(x), int(y), bg.width, bg.height, _rgb_to_rgb565_bytes(bg))
 			return
 
 		# Fallback path if the connected display object does not support bulk blitting.

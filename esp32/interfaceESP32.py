@@ -108,14 +108,40 @@ class ESP32Connection:
 		return resp
 
 	def _parse_response(self, resp: str) -> Dict[str, Any]:
+		# Try direct JSON parse first
 		try:
 			data = json.loads(resp)
 		except json.JSONDecodeError:
-			repaired = self._repair_json_response(resp)
-			if repaired != resp:
-				data = json.loads(repaired)
+			# Attempt to extract a balanced JSON object from possibly-garbage input
+			start = resp.find("{")
+			if start != -1:
+				depth = 0
+				end = -1
+				for i in range(start, len(resp)):
+					if resp[i] == '{':
+						depth += 1
+					elif resp[i] == '}':
+						depth -= 1
+						if depth == 0:
+							end = i + 1
+							break
+				if end != -1:
+					candidate = resp[start:end]
+					try:
+						data = json.loads(candidate)
+					except json.JSONDecodeError:
+						data = None
+				else:
+					data = None
 			else:
-				raise
+				data = None
+
+			if data is None:
+				repaired = self._repair_json_response(resp)
+				if repaired != resp:
+					data = json.loads(repaired)
+				else:
+					raise
 		if data.get("status") != "ok":
 			error_msg = data.get("message", "ESP32 error")
 			raise RuntimeError(f"ESP32 error: {error_msg} | Full response: {data}")
