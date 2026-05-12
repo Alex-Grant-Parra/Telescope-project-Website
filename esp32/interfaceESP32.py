@@ -5,6 +5,7 @@ import json
 import re
 import threading
 import time
+import zlib
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -72,15 +73,28 @@ class ESP32Connection:
 	def _probe_identity(self) -> bool:
 		try:
 			self._drain()
+			# Send a newline to clear any stuck blit state on the ESP32
+			self.ser.write(b"\n")
+			self.ser.flush()
+			time.sleep(0.1)
+			self._drain()
+			
 			line = json.dumps({"cmd": "list_motors"}, separators=(",", ":")) + "\n"
 			self.ser.write(line.encode("utf-8"))
 			self.ser.flush()
-			resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
+			# Increase timeout for initial probe
+			prev_timeout = self.ser.timeout
+			self.ser.timeout = 2.0
+			try:
+				resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
+			finally:
+				self.ser.timeout = prev_timeout
 			if not resp:
 				return False
 			data = json.loads(resp)
 			return data.get("status") == "ok"
-		except Exception:
+		except Exception as e:
+			print(f"[DEBUG] Probe failed: {e}")
 			return False
 
 	def close(self) -> None:
@@ -522,6 +536,31 @@ class ESP32Display:
 			"length": int(len(memoryview(data))),
 		}
 		return self.conn.send_binary(payload, data)
+
+	def blit_rgb565_compressed(self, x: int, y: int, width: int, height: int, data: bytes | bytearray | memoryview, compress_level: int = 6) -> Dict[str, Any]:
+		# Upload an RGB565 frame with optional zlib compression.
+		# The firmware decompresses on receive if the frame was compressed.
+		data_bytes = bytes(memoryview(data).tobytes())
+		compressed = zlib.compress(data_bytes, level=compress_level)
+		
+		# Only use compression if it saves space (avoid overhead for random data)
+		if len(compressed) < len(data_bytes) * 0.95:  # 5% savings threshold
+			payload = {
+				"cmd": "display",
+				"action": "blit",
+				"x": int(x),
+				"y": int(y),
+				"w": int(width),
+				"h": int(height),
+				"format": "RGB565",
+				"compress": "zlib",
+				"length": int(len(compressed)),
+				"uncompressed_length": int(len(data_bytes)),
+			}
+			return self.conn.send_binary(payload, compressed, timeout=15.0)
+		else:
+			# Fallback to uncompressed if compression didn't help
+			return self.blit_rgb565(x, y, width, height, data)
 
 	def clear(self, color: Optional[str] = None) -> Dict[str, Any]:
 		# Clear the display with a background color.
