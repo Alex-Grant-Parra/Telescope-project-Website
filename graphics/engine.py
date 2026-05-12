@@ -6,7 +6,7 @@ from time import sleep
 from typing import Iterable, Optional
 
 try:
-	from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps  # type: ignore[reportMissingImports]
+	from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps, ImageSequence  # type: ignore[reportMissingImports]
 except ImportError as exc:  # pragma: no cover - dependency check
 	raise ImportError(
 		"graphics.engine requires Pillow. Install it with: pip install Pillow"
@@ -334,14 +334,12 @@ class GraphicsEngine:
 			if not getattr(gif, "is_animated", False):
 				raise ValueError(f"Asset is not an animated GIF: {img_path}")
 
-			frame_count = getattr(gif, "n_frames", 1)
 			loop_target = loops if loops > 0 else 1
 			for _ in range(loop_target):
-				for i in range(frame_count):
-					gif.seek(i)
-					frame = gif.convert("RGBA")
+				for frame in ImageSequence.Iterator(gif):
+					frame_rgba = frame.copy().convert("RGBA")
 					prepared = self._prepare_image(
-						image=frame,
+						image=frame_rgba,
 						width=width,
 						height=height,
 						scale=scale,
@@ -353,7 +351,7 @@ class GraphicsEngine:
 
 					delay_ms = override_frame_delay_ms
 					if delay_ms is None:
-						delay_ms = int(gif.info.get("duration", 100))
+						delay_ms = int(frame.info.get("duration", gif.info.get("duration", 100)))
 					sleep(max(0.01, delay_ms / 1000.0))
 
 	def render_canvas(self, canvas: DisplayCanvas, x: int = 0, y: int = 0, pixel_size: Optional[int] = None) -> None:
@@ -369,7 +367,7 @@ class GraphicsEngine:
 			scale=float(pixel_size),
 			keep_aspect=False,
 		)
-		frame.paste(prepared, (int(x), int(y)), prepared)
+		frame.alpha_composite(prepared, (int(x), int(y)))
 
 		if hasattr(self.display, "blit_rgb565"):
 			self.display.blit_rgb565(0, 0, self.width, self.height, _rgb_to_rgb565_bytes(frame))
