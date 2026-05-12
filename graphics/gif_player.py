@@ -131,7 +131,7 @@ def upload_and_play_gif(
 		
 		# Play the GIF
 		print("Playing from ESP32...")
-		display.set_backlight(255)
+		# display.set_backlight(255)
 		display.power(True)
 		time.sleep(0.2)
 		
@@ -150,7 +150,7 @@ def upload_and_play_gif(
 		if display is not None:
 			try:
 				display.clear("000000")
-				display.set_backlight(0)
+				# display.set_backlight(0)
 			except Exception:
 				pass
 		if conn is not None:
@@ -179,7 +179,7 @@ def play_stored_gif_by_uuid(uuid_str: str) -> None:
 		display.initialize()
 		
 		# Ensure backlight is on
-		display.set_backlight(255)
+		# display.set_backlight(255)
 		display.power(True)
 		time.sleep(0.2)
 		
@@ -200,7 +200,7 @@ def play_stored_gif_by_uuid(uuid_str: str) -> None:
 		if display is not None:
 			try:
 				display.clear("000000")
-				display.set_backlight(0)
+				# display.set_backlight(0)
 			except Exception:
 				pass
 		if conn is not None:
