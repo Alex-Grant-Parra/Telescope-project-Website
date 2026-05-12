@@ -119,6 +119,8 @@ static void handleLedCommand(const JsonDocument& req) {
 
 static void handleDisplayCommand(const JsonDocument& req) {
   const char* action = req["action"] | "";
+  Serial.print("[ACTION] ");
+  Serial.println(action);
   if (strlen(action) == 0) {
     sendError("Missing display action");
     return;
@@ -342,6 +344,117 @@ static void handleDisplayCommand(const JsonDocument& req) {
     return;
   }
 
+  if (strcmp(action, "play_sequence") == 0) {
+    // Play a sequence of stored files on the device for smooth animation.
+    const char* files_csv = req["files_csv"] | "";
+    if (strlen(files_csv) == 0) {
+      sendError("Missing files_csv");
+      return;
+    }
+
+    const char* durations_csv = req["durations_csv"] | "";
+
+    uint16_t x = req["x"] | 0;
+    uint16_t y = req["y"] | 0;
+    uint16_t w = req["w"] | DISPLAY_WIDTH;
+    uint16_t h = req["h"] | DISPLAY_HEIGHT;
+
+    // Ensure storage is mounted
+    if (!LittleFS.begin(true)) {
+      sendError("Storage mount failed");
+      return;
+    }
+
+    // Split CSV file list
+    String fileList(files_csv);
+    int start = 0;
+    int idx = 0;
+    while (start < fileList.length()) {
+      int comma = fileList.indexOf(',', start);
+      String fname = (comma == -1) ? fileList.substring(start) : fileList.substring(start, comma);
+      fname.trim();
+      if (fname.length() > 0) {
+        displayPlayFile(fname.c_str(), x, y, w, h);
+        // Extract duration for this frame if provided
+        uint32_t delay_ms = 100;
+        if (strlen(durations_csv) > 0) {
+          // parse durations_csv on-demand
+          String ds(durations_csv);
+          int s2 = 0;
+          for (int j = 0; j <= idx; j++) {
+            int c2 = ds.indexOf(',', s2);
+            String part = (c2 == -1) ? ds.substring(s2) : ds.substring(s2, c2);
+            part.trim();
+            if (j == idx && part.length() > 0) {
+              delay_ms = part.toInt();
+            }
+            if (c2 == -1) break;
+            s2 = c2 + 1;
+          }
+        }
+        delay(delay_ms);
+        yield();
+        idx++;
+      }
+      if (comma == -1) break;
+      start = comma + 1;
+    }
+
+    sendOkEmpty();
+    return;
+  }
+
+  if (strcmp(action, "play_sequence_prefix") == 0) {
+    const char* prefix = req["prefix"] | "";
+    int start = req["start"] | 0;
+    int count = req["count"] | 0;
+    int pad = req["pad"] | 4;
+    const char* durations_csv = req["durations_csv"] | "";
+
+    if (strlen(prefix) == 0 || count <= 0) {
+      sendError("Missing prefix or count");
+      return;
+    }
+
+    uint16_t x = req["x"] | 0;
+    uint16_t y = req["y"] | 0;
+    uint16_t w = req["w"] | DISPLAY_WIDTH;
+    uint16_t h = req["h"] | DISPLAY_HEIGHT;
+
+    if (!LittleFS.begin(true)) {
+      sendError("Storage mount failed");
+      return;
+    }
+
+    for (int i = start; i < start + count; i++) {
+      char fname[128];
+      // Build filename: prefix + zero-padded index + .rgb
+      snprintf(fname, sizeof(fname), "%s%0*d.rgb", prefix, pad, i);
+      displayPlayFile(fname, x, y, w, h);
+
+      uint32_t delay_ms = 100;
+      if (strlen(durations_csv) > 0) {
+        String ds(durations_csv);
+        int s2 = 0;
+        for (int j = 0; j <= (i - start); j++) {
+          int c2 = ds.indexOf(',', s2);
+          String part = (c2 == -1) ? ds.substring(s2) : ds.substring(s2, c2);
+          part.trim();
+          if (j == (i - start) && part.length() > 0) {
+            delay_ms = part.toInt();
+          }
+          if (c2 == -1) break;
+          s2 = c2 + 1;
+        }
+      }
+      delay(delay_ms);
+      yield();
+    }
+
+    sendOkEmpty();
+    return;
+  }
+
   sendError("Unknown display action");
 }
 
@@ -488,9 +601,19 @@ void handleCommand(const String& line) {
     return;
   }
 
-  JsonDocument req;
+  // Allocate a dynamic JSON document sized from the incoming line length to
+  // avoid deserialization failures when handling larger payloads (CSV lists,
+  // long filenames, etc.).
+  // Give generous headroom for string storage: use ~3x line length plus base.
+  size_t cap = 1024 + line.length() * 3;
+  DynamicJsonDocument req(cap);
   DeserializationError err = deserializeJson(req, line);
   if (err) {
+    // Debugging: echo error and raw input for diagnosis over serial.
+    Serial.print("[DESER_ERR] ");
+    Serial.println(err.c_str());
+    Serial.print("[RAW_LINE] ");
+    Serial.println(line);
     sendError("Invalid JSON");
     return;
   }

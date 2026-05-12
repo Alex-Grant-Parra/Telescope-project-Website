@@ -260,7 +260,9 @@ void handleSerial() {
       handleCommand(g_rxLine);
       g_rxLine = "";
     } else if (c != '\r') {
-      if (g_rxLine.length() < 256) {
+      // Allow larger command lines to support CSV lists for sequence playback
+      // (increase from 256 to 4096 characters).
+      if (g_rxLine.length() < 4096) {
         g_rxLine += c;
       }
     }

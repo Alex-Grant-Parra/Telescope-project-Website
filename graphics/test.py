@@ -24,7 +24,7 @@ def main() -> None:
 
 	print("Playing test.gif...")
 	for x in range(0, 5):
-		play_asset("test.gif", assets_dir=assets_dir, auto_sync=False)
+		play_asset("test.gif", assets_dir=assets_dir, auto_sync=False, smooth=True)
 
 
 if __name__ == "__main__":

@@ -321,6 +321,29 @@ class ESP32Connection:
 		payload = {"cmd": "display", "action": "play", "name": name, "x": int(x), "y": int(y), "w": int(w), "h": int(h)}
 		return self.send(payload)
 
+	def play_sequence(self, files: list[str], durations_ms: list[int] | None = None, x: int = 0, y: int = 0, w: int = 128, h: int = 160, timeout: float | None = None) -> Dict[str, Any]:
+		"""Play a stored sequence of files on the ESP32 for smooth animation.
+		files: list of filenames stored on the device (LittleFS)
+		durations_ms: optional list of per-frame durations in milliseconds
+		"""
+		# Use CSV strings for compatibility with firmware JSON parser.
+		# Fallback-style sequence: send a CSV of filenames (existing method).
+		payload: Dict[str, Any] = {"cmd": "display", "action": "play_sequence", "files_csv": ",".join(files), "x": int(x), "y": int(y), "w": int(w), "h": int(h)}
+		if durations_ms:
+			payload["durations_csv"] = ",".join(str(int(d)) for d in durations_ms)
+		return self.send(payload, timeout=timeout)
+
+	def play_sequence_prefix(self, prefix: str, count: int, start: int = 0, pad: int = 4, durations_ms: list[int] | None = None, x: int = 0, y: int = 0, w: int = 128, h: int = 160, timeout: float | None = None) -> Dict[str, Any]:
+		"""Request device-side playback by filename prefix and count.
+		prefix: filename prefix including any trailing underscore, e.g. 'test_abcd1234_'
+		count: number of frames to play
+		pad: zero padding width for frame indices (default 4)
+		"""
+		payload: Dict[str, Any] = {"cmd": "display", "action": "play_sequence_prefix", "prefix": prefix, "count": int(count), "start": int(start), "pad": int(pad), "x": int(x), "y": int(y), "w": int(w), "h": int(h)}
+		if durations_ms:
+			payload["durations_csv"] = ",".join(str(int(d)) for d in durations_ms)
+		return self.send(payload, timeout=timeout)
+
 	def delete_motor(self, motor_id: str) -> Dict[str, Any]:
 		return self.send({"cmd": "delete_motor", "motor": motor_id})
 

@@ -239,6 +239,7 @@ def play_asset(
 	upload_timeout: float = 25.0,
 	upload_retries: int = 3,
 	rebuild: bool = False,
+	smooth: bool = False,
 ) -> None:
 	"""Play an uploaded asset by filename, for example `test.png` or `test.gif`."""
 	assets_dir = assets_dir or ASSETS_DIR
@@ -272,12 +273,51 @@ def play_asset(
 		time.sleep(0.2)
 
 		if entry.get("kind") == "gif":
-			frames = entry.get("stored_files", [])
-			durations = entry.get("durations", [1.0] * len(frames))
-			print(f"  GIF frames: {len(frames)}")
-			for index, stored_name in enumerate(frames):
-				conn.play_display_file(stored_name, x=0, y=0, w=width, h=height)
-				time.sleep(durations[index] if index < len(durations) else 1.0)
+			# Smooth playback option: stream frames directly from the source GIF
+			# to the display over the open connection rather than issuing a
+			# separate `play_display_file` call per frame. This reduces
+			# per-frame round-trip overhead and makes animation smoother.
+			if smooth:
+				# For robust smooth playback, instruct the ESP32 to play the
+				# already-uploaded sequence of stored frame files. This avoids
+				# streaming pixel data at playback time and yields smooth timing.
+				stored_frames = entry.get("stored_files", [])
+				durations_s = entry.get("durations", [])
+				if not stored_frames:
+					raise RuntimeError("No stored frames available for smooth playback")
+				durations_ms = [int(d * 1000) for d in durations_s]
+				# Derive prefix from the first stored filename: strip trailing
+				# numeric index and extension, leaving the base prefix the
+				# firmware expects (e.g. 'test_4d1bc68f_').
+				first = stored_frames[0]
+				# Find the last underscore before the numeric index
+				stem = first
+				# Remove extension
+				if stem.endswith('.rgb'):
+					stem = stem[:-4]
+				# Trim trailing digits
+				import re
+				m = re.match(r"^(.*?_)(\d+)$", stem)
+				if not m:
+					# Fall back to explicit list if prefix cannot be derived
+					print("  Could not derive prefix; falling back to explicit file list")
+					conn.play_sequence(stored_frames, durations_ms, x=0, y=0, w=width, h=height)
+				else:
+					prefix = m.group(1)
+					count = len(stored_frames)
+					print(f"  Requesting device-side prefix playback: {prefix} ({count} frames)")
+					# Calculate reasonable timeout: sum of frame durations + margin
+					total_ms = sum(durations_ms) if durations_ms else count * 100
+					timeout_s = max(5.0, total_ms / 1000.0 + 5.0)
+					conn.play_sequence_prefix(prefix, count, start=0, pad=len(m.group(2)), durations_ms=durations_ms, x=0, y=0, w=width, h=height, timeout=timeout_s)
+            
+			else:
+				frames = entry.get("stored_files", [])
+				durations = entry.get("durations", [1.0] * len(frames))
+				print(f"  GIF frames: {len(frames)}")
+				for index, stored_name in enumerate(frames):
+					conn.play_display_file(stored_name, x=0, y=0, w=width, h=height)
+					time.sleep(durations[index] if index < len(durations) else 1.0)
 		else:
 			stored_files = entry.get("stored_files", [])
 			if not stored_files:
