@@ -11,25 +11,19 @@ Usage:
 from __future__ import annotations
 
 import sys
-import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
 	sys.path.insert(0, str(ROOT))
 
-from graphics.test import (
-	list_stored_gifs,
-	play_stored_gif_by_uuid,
-	load_upload_metadata,
-	save_upload_metadata,
-	METADATA_FILE,
-)
+from graphics import gif_storage
+from graphics.gif_player import play_stored_gif_by_uuid
 
 
 def cmd_list() -> None:
 	"""List all stored GIFs."""
-	gifs = list_stored_gifs()
+	gifs = gif_storage.list_all_gifs()
 	if not gifs:
 		print("No stored GIFs found.")
 		return
@@ -55,13 +49,14 @@ def cmd_play(uuid_str: str) -> None:
 
 def cmd_clear() -> None:
 	"""Clear all upload metadata."""
-	if METADATA_FILE.exists():
+	metadata_file = Path(__file__).resolve().parent.parent / ".astra_uploads.json"
+	if metadata_file.exists():
 		confirm = input(
-			f"⚠️  This will clear all stored GIF metadata from {METADATA_FILE}.\n"
+			f"⚠️  This will clear all stored GIF metadata from {metadata_file}.\n"
 			"Continue? (yes/no): "
 		)
 		if confirm.lower() in ("yes", "y"):
-			METADATA_FILE.unlink()
+			gif_storage.clear_all_metadata()
 			print("✓ Metadata cleared.")
 		else:
 			print("Cancelled.")
