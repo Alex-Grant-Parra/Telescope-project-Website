@@ -155,20 +155,26 @@ class ESP32Connection:
 	) -> Dict[str, Any]:
 		data_bytes = memoryview(binary_data).tobytes()
 		line = json.dumps(payload, separators=(",", ":")) + "\n"
-		transfer_timeout = timeout
-		if transfer_timeout is None:
-			baudrate = max(1, int(self.ser.baudrate))
-			transfer_timeout = max(self.ser.timeout, (len(data_bytes) * 10.0 / baudrate) + 2.0)
+		baudrate = max(1, int(self.ser.baudrate))
+		estimated_transfer_s = (len(data_bytes) * 10.0 / baudrate) + 5.0
+		transfer_timeout = max(self.ser.timeout, estimated_transfer_s)
+		if timeout is not None:
+			transfer_timeout = max(float(timeout), transfer_timeout)
 
 		with self._lock:
+			resp = ""
 			prev_timeout = self.ser.timeout
-			self.ser.timeout = transfer_timeout
 			try:
-				self.ser.write(line.encode("utf-8"))
-				self.ser.flush()
-				self.ser.write(data_bytes)
-				self.ser.flush()
-				resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
+				for attempt in range(2):
+					self.ser.timeout = transfer_timeout * (1.0 + 0.25 * attempt)
+					self.ser.write(line.encode("utf-8"))
+					self.ser.flush()
+					self.ser.write(data_bytes)
+					self.ser.flush()
+					resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
+					if resp:
+						break
+					self._drain()
 			finally:
 				self.ser.timeout = prev_timeout
 		if not resp:
@@ -486,7 +492,7 @@ class ESP32Display:
 			"format": "RGB565",
 			"length": int(len(memoryview(data))),
 		}
-		return self.conn.send_binary(payload, data, timeout=10.0)
+		return self.conn.send_binary(payload, data)
 
 	def clear(self, color: Optional[str] = None) -> Dict[str, Any]:
 		# Clear the display with a background color.
