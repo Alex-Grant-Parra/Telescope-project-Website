@@ -105,24 +105,46 @@
                 </div>
             </div>
         </div>
+        <!-- Time rail overlaid on the bottom of the map -->
+        <div class="time-rail" aria-label="Weather time scrubber">
+            <div class="time-rail-head">
+                <div>
+                    <div class="time-rail-label">Forecast time</div>
+                    <div class="time-rail-note">Drag to scrub through past 24h and upcoming forecast.</div>
+                </div>
+                <div id="weather-time-value" class="time-rail-value">Loading forecast times…</div>
+            </div>
+            <input id="weather-time-slider" type="range" min="0" max="0" step="1" value="0" disabled>
+        </div>
     </div>
 </section>
 {% endblock %}
 
 {% block extra_js %}
+<script id="map-config" type="application/json">
+{{ {
+    "openMeteoTileUrl": open_meteo_tile_url,
+    "openMeteoAttribution": open_meteo_attribution,
+    "bortleTileUrl": bortle_tile_url,
+    "bortleWmsUrl": bortle_wms_url,
+    "bortleWmsLayer": bortle_wms_layer,
+    "bortleWmsTime": bortle_wms_time,
+    "bortleAttribution": bortle_attribution,
+    "bortleFixedUrl": bortle_fixed_url,
+    "satelliteTileUrl": satellite_tile_url,
+    "satelliteAttribution": satellite_attribution
+} | tojson }}
+</script>
 <script>
-    window.MAP_CONFIG = {
-        openMeteoTileUrl: {{ open_meteo_tile_url | tojson }},
-        openMeteoAttribution: {{ open_meteo_attribution | tojson }},
-        bortleTileUrl: {{ bortle_tile_url | tojson }},
-        bortleWmsUrl: {{ bortle_wms_url | tojson }},
-        bortleWmsLayer: {{ bortle_wms_layer | tojson }},
-        bortleWmsTime: {{ bortle_wms_time | tojson }},
-        bortleAttribution: {{ bortle_attribution | tojson }},
-        bortleFixedUrl: {{ bortle_fixed_url | tojson }},
-        satelliteTileUrl: {{ satellite_tile_url | tojson }},
-        satelliteAttribution: {{ satellite_attribution | tojson }}
-    };
+    (function () {
+        const configEl = document.getElementById('map-config');
+        try {
+            window.MAP_CONFIG = configEl ? JSON.parse(configEl.textContent || '{}') : {};
+        } catch (err) {
+            console.error('Failed to parse MAP_CONFIG JSON', err);
+            window.MAP_CONFIG = {};
+        }
+    })();
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="https://unpkg.com/@openmeteo/weather-map-layer@0.0.19/dist/index.js" defer></script>

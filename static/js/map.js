@@ -8,13 +8,24 @@
     const statusEl = document.getElementById("map-status");
     const weatherOpacityInput = document.getElementById("weather-opacity");
     const bortleOpacityInput = document.getElementById("bortle-opacity");
+    const weatherTimeSlider = document.getElementById("weather-time-slider");
+    const weatherTimeValue = document.getElementById("weather-time-value");
     const layerInputs = Array.from(document.querySelectorAll("[data-layer]"));
 
     const openMeteoTileUrl = (config.openMeteoTileUrl || "").trim();
     const openMeteoAttribution = (config.openMeteoAttribution || "").trim() ||
         "Weather data &copy; Open-Meteo.com";
     const openMeteoBaseUrl = openMeteoTileUrl ||
-        "https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json?time_step=current_time_1H";
+        "https://map-tiles.open-meteo.com/data_spatial/ncep_gfs025/latest.json?time_step=current_time_1H";
+    const openMeteoMetaUrl = (() => {
+        try {
+            const url = new URL(openMeteoBaseUrl);
+            url.search = "";
+            return url.toString();
+        } catch (err) {
+            return "";
+        }
+    })();
     const bortleUrl = (config.bortleTileUrl || "").trim();
     const bortleWmsUrl = (config.bortleWmsUrl || "").trim();
     const bortleWmsLayer = (config.bortleWmsLayer || "VIIRS_Night_Lights").trim() || "VIIRS_Night_Lights";
@@ -26,6 +37,16 @@
         "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics";
     const bortleAttribution = (config.bortleAttribution || "").trim() || "NASA GIBS VIIRS Night Lights";
     const bortleSourceUrl = bortleUrl || bortleWmsUrl || bortleFixedUrl;
+    const weatherVariables = {
+        rain: "rain",
+        wind: "wind_gusts_10m",
+        temperature: "temperature_2m"
+    };
+    const utcFormatter = new Intl.DateTimeFormat("en-GB", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "UTC"
+    });
 
     const map = L.map(mapElement, {
         zoomControl: false,
@@ -58,6 +79,8 @@
 
     let weatherOpacity = weatherOpacityInput ? parseFloat(weatherOpacityInput.value) : 0.7;
     let bortleOpacity = bortleOpacityInput ? parseFloat(bortleOpacityInput.value) : 0.6;
+    let weatherTimeline = [];
+    let weatherTimeStep = "current_time_1H";
 
     const overlayLayers = {};
 
@@ -138,6 +161,130 @@
             return null;
         }
     }
+
+    function estimateBortleFromRadiance(radiance) {
+        if (!Number.isFinite(radiance) || radiance < 0) {
+            return null;
+        }
+        // Heuristic bins to convert VIIRS-like radiance values into a 1..9 Bortle estimate.
+        if (radiance <= 0.25) return 1;
+        if (radiance <= 0.5) return 2;
+        if (radiance <= 1) return 3;
+        if (radiance <= 2) return 4;
+        if (radiance <= 5) return 5;
+        if (radiance <= 10) return 6;
+        if (radiance <= 20) return 7;
+        if (radiance <= 40) return 8;
+        return 9;
+    }
+
+    function parseBortleValueFromFeatureInfo(text) {
+        if (!text || typeof text !== "string") {
+            return null;
+        }
+
+        // First, try to parse JSON-style GetFeatureInfo responses.
+        try {
+            const parsed = JSON.parse(text);
+            const feature = parsed && Array.isArray(parsed.features) ? parsed.features[0] : null;
+            const properties = feature && feature.properties ? feature.properties : null;
+            if (properties && typeof properties === "object") {
+                const numericValues = Object.values(properties)
+                    .map((value) => Number(value))
+                    .filter((value) => Number.isFinite(value));
+
+                const directBortle = numericValues.find((value) => value >= 1 && value <= 9);
+                if (Number.isFinite(directBortle)) {
+                    return Math.max(1, Math.min(9, Math.round(directBortle)));
+                }
+
+                if (numericValues.length > 0) {
+                    return estimateBortleFromRadiance(numericValues[0]);
+                }
+            }
+        } catch (err) {
+            // Not JSON, continue with plain-text parsing.
+        }
+
+        const numberMatches = text.match(/-?\d+(?:\.\d+)?/g);
+        if (!numberMatches || numberMatches.length === 0) {
+            return null;
+        }
+
+        const numbers = numberMatches
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value));
+
+        if (numbers.length === 0) {
+            return null;
+        }
+
+        const directBortle = numbers.find((value) => value >= 1 && value <= 9);
+        if (Number.isFinite(directBortle)) {
+            return Math.max(1, Math.min(9, Math.round(directBortle)));
+        }
+
+        return estimateBortleFromRadiance(numbers[0]);
+    }
+
+    async function fetchBortleLevel(lat, lon) {
+        if (!bortleWmsUrl || !bortleWmsLayer) {
+            return null;
+        }
+
+        try {
+            const latLng = L.latLng(lat, lon);
+            const point = map.latLngToContainerPoint(latLng);
+            const size = map.getSize();
+            const bounds = map.getBounds();
+            const sw = map.options.crs.project(bounds.getSouthWest());
+            const ne = map.options.crs.project(bounds.getNorthEast());
+            const bbox = [sw.x, sw.y, ne.x, ne.y].join(",");
+
+            const url = new URL(bortleWmsUrl);
+            url.searchParams.set("service", "WMS");
+            url.searchParams.set("version", "1.1.1");
+            url.searchParams.set("request", "GetFeatureInfo");
+            url.searchParams.set("layers", bortleWmsLayer);
+            url.searchParams.set("query_layers", bortleWmsLayer);
+            url.searchParams.set("styles", "");
+            url.searchParams.set("bbox", bbox);
+            url.searchParams.set("srs", "EPSG:3857");
+            url.searchParams.set("width", String(Math.round(size.x)));
+            url.searchParams.set("height", String(Math.round(size.y)));
+            url.searchParams.set("x", String(Math.round(point.x)));
+            url.searchParams.set("y", String(Math.round(point.y)));
+            url.searchParams.set("feature_count", "1");
+            url.searchParams.set("info_format", "application/json");
+
+            const response = await fetch(url.toString());
+            const text = await response.text();
+
+            if (!response.ok) {
+                throw new Error(`Bortle WMS GetFeatureInfo failed (${response.status})`);
+            }
+
+            let bortle = parseBortleValueFromFeatureInfo(text);
+            if (Number.isFinite(bortle)) {
+                return bortle;
+            }
+
+            // Fallback for servers that do not support JSON GetFeatureInfo.
+            url.searchParams.set("info_format", "text/plain");
+            const plainResponse = await fetch(url.toString());
+            const plainText = await plainResponse.text();
+            if (!plainResponse.ok) {
+                throw new Error(`Bortle WMS text GetFeatureInfo failed (${plainResponse.status})`);
+            }
+
+            bortle = parseBortleValueFromFeatureInfo(plainText);
+            return Number.isFinite(bortle) ? bortle : null;
+        } catch (err) {
+            console.warn("Bortle lookup failed", err);
+            return null;
+        }
+    }
+
     function setStatus(messages) {
         if (!statusEl) {
             return;
@@ -159,16 +306,122 @@
         }
     }
 
+    function formatWeatherTime(isoString) {
+        return `${utcFormatter.format(new Date(isoString))} UTC`;
+    }
+
+    // `index` here refers to an index in `weatherTimeline` (0..N-1).
+    // We keep track of `nowTimelineIndex` which says which timeline index corresponds to "Now".
+    let nowTimelineIndex = -1;
+    let weatherOriginalStartIndex = 0;
+
+    function setWeatherTimeReadout(index) {
+        if (!weatherTimeSlider || !weatherTimeValue) {
+            return;
+        }
+
+        const safeIndex = Math.max(0, Math.min(index, Math.max(0, weatherTimeline.length - 1)));
+        weatherTimeSlider.value = String(safeIndex);
+
+        if (weatherTimeline.length === 0 || nowTimelineIndex === -1) {
+            weatherTimeStep = "current_time_1H";
+            weatherTimeValue.textContent = "Now";
+            return;
+        }
+
+        if (safeIndex === nowTimelineIndex) {
+            weatherTimeStep = "current_time_1H";
+            weatherTimeValue.textContent = "Now";
+            return;
+        }
+
+        const selectedTime = weatherTimeline[safeIndex];
+        if (!selectedTime) {
+            weatherTimeStep = "current_time_1H";
+            weatherTimeValue.textContent = "Now";
+            return;
+        }
+
+        // `valid_times_{n}` expects an index into the original `valid_times` array returned
+        // by the open-meteo metadata. We preserved the `weatherOriginalStartIndex` when
+        // slicing the timeline so convert back to the original index here.
+        const originalIndex = weatherOriginalStartIndex + safeIndex;
+        weatherTimeStep = `valid_times_${originalIndex}`;
+        weatherTimeValue.textContent = formatWeatherTime(selectedTime);
+    }
+
+    async function loadWeatherTimeline() {
+        if (!weatherTimeSlider || !weatherTimeValue || !openMeteoMetaUrl) {
+            return;
+        }
+
+        weatherTimeSlider.disabled = true;
+        weatherTimeValue.textContent = "Loading forecast times…";
+
+        try {
+            const response = await fetch(openMeteoMetaUrl);
+            if (!response.ok) {
+                throw new Error(`Open-Meteo metadata error ${response.status}`);
+            }
+
+            const data = await response.json();
+            const validTimes = Array.isArray(data.valid_times) ? data.valid_times : [];
+
+            // Determine the hour-aligned "now" index within the returned valid_times.
+            const nowDate = new Date();
+            nowDate.setMinutes(0, 0, 0);
+            let nowIndex = -1;
+            for (let i = 0; i < validTimes.length; i++) {
+                try {
+                    const t = new Date(validTimes[i]);
+                    if (t.getTime() === nowDate.getTime()) {
+                        nowIndex = i;
+                        break;
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
+            // If exact match not found, find the closest index before or at now.
+            if (nowIndex === -1) {
+                for (let i = 0; i < validTimes.length; i++) {
+                    const t = new Date(validTimes[i]);
+                    if (t > nowDate) {
+                        nowIndex = Math.max(0, i - 1);
+                        break;
+                    }
+                }
+                if (nowIndex === -1 && validTimes.length > 0) {
+                    nowIndex = validTimes.length - 1;
+                }
+            }
+
+            // Provide one day (24h) of past coverage where available, plus up to 7 days (168h) forward.
+            const pastHours = 24;
+            const futureHours = 168;
+            const startIndex = Math.max(0, (nowIndex === -1 ? 0 : nowIndex) - pastHours);
+            const endIndex = Math.min(validTimes.length, startIndex + pastHours + futureHours + 1);
+
+            weatherOriginalStartIndex = startIndex;
+            weatherTimeline = validTimes.slice(startIndex, endIndex);
+
+            // Track which index in the sliced timeline represents "Now"
+            nowTimelineIndex = (nowIndex === -1) ? (weatherTimeline.length - 1) : Math.max(0, nowIndex - startIndex);
+
+            // Configure slider to index into the sliced timeline.
+            weatherTimeSlider.min = "0";
+            weatherTimeSlider.max = String(Math.max(0, weatherTimeline.length - 1));
+            weatherTimeSlider.step = "1";
+            weatherTimeSlider.disabled = false;
+            setWeatherTimeReadout(nowTimelineIndex);
+        } catch (err) {
+            console.error("Failed to load weather timeline", err);
+            weatherTimeValue.textContent = "Forecast times unavailable";
+        }
+    }
+
     const omLib = window.OMWeatherMapLayer;
     const openMeteoReady = Boolean(omLib && omLib.addLeafletProtocolSupport && omLib.omProtocol);
-
-    function buildOpenMeteoUrl(variable) {
-        if (!openMeteoBaseUrl) {
-            return "";
-        }
-        const joiner = openMeteoBaseUrl.includes("?") ? "&" : "?";
-        return `om://${openMeteoBaseUrl}${joiner}variable=${encodeURIComponent(variable)}`;
-    }
 
     // Configure tile overlays once, then wire inputs to toggles.
     if (openMeteoReady && openMeteoBaseUrl) {
@@ -182,21 +435,50 @@
             maxZoom: 12
         };
 
-        overlayLayers.rain = leafletAdapter.createTileLayer(
-            buildOpenMeteoUrl("rain"),
-            weatherLayerOptions
-        );
+        const createWeatherLayer = (name) => {
+            const variable = weatherVariables[name];
+            if (!variable) {
+                return null;
+            }
+
+            const url = new URL(openMeteoBaseUrl);
+            url.searchParams.set("time_step", weatherTimeStep);
+            url.searchParams.set("variable", variable);
+
+            return leafletAdapter.createTileLayer(`om://${url.toString()}`, weatherLayerOptions);
+        };
+
+        const refreshWeatherLayers = () => {
+            weatherLayerNames.forEach((name) => {
+                const oldLayer = overlayLayers[name];
+                const wasActive = oldLayer ? map.hasLayer(oldLayer) : false;
+                if (wasActive) {
+                    map.removeLayer(oldLayer);
+                }
+
+                overlayLayers[name] = createWeatherLayer(name);
+
+                if (wasActive && overlayLayers[name]) {
+                    map.addLayer(overlayLayers[name]);
+                }
+            });
+        };
+
+        overlayLayers.rain = createWeatherLayer("rain");
         // NOTE: some models (like dwd_icon) don't expose a `wind_speed_10m` variable.
         // Use `wind_gusts_10m` which is available for the default model, or
         // replace with a model that exposes wind speed if you prefer magnitude.
-        overlayLayers.wind = leafletAdapter.createTileLayer(
-            buildOpenMeteoUrl("wind_gusts_10m"),
-            weatherLayerOptions
-        );
-        overlayLayers.temperature = leafletAdapter.createTileLayer(
-            buildOpenMeteoUrl("temperature_2m"),
-            weatherLayerOptions
-        );
+        overlayLayers.wind = createWeatherLayer("wind");
+        overlayLayers.temperature = createWeatherLayer("temperature");
+
+        weatherTimeSlider?.addEventListener("input", (event) => {
+            const target = event.target;
+            const nextIndex = Number(target.value || 0);
+            setWeatherTimeReadout(nextIndex);
+            refreshWeatherLayers();
+        });
+
+        loadWeatherTimeline();
     }
 
     if (bortleUrl) {
@@ -274,7 +556,10 @@
         const loadingHtml = `<div style="min-width:160px">Loading data for<br><strong>${lat.toFixed(5)}, ${lon.toFixed(5)}</strong>…</div>`;
         placePin(lat, lon, loadingHtml);
 
-        const weather = await fetchPointWeather(lat, lon);
+        const [weather, bortleLevel] = await Promise.all([
+            fetchPointWeather(lat, lon),
+            fetchBortleLevel(lat, lon)
+        ]);
         let popupHtml = `<div style="min-width:200px"><strong>Coords:</strong> ${lat.toFixed(5)}, ${lon.toFixed(5)}<br>`;
         if (!weather) {
             popupHtml += `<em>Weather data unavailable</em>`;
@@ -282,13 +567,16 @@
             popupHtml += `<strong>Temperature:</strong> ${weather.temperature !== null ? weather.temperature + ' °C' : 'N/A'}<br>`;
             popupHtml += `<strong>Wind:</strong> ${weather.wind !== null ? weather.wind + ' m/s' : 'N/A'}<br>`;
             popupHtml += `<strong>Precipitation (hour):</strong> ${weather.precipitation !== null ? weather.precipitation + ' mm' : 'N/A'}<br>`;
-            // Sky brightness: best-effort – not available from Open-Meteo REST; indicate availability
-            if (overlayLayers.bortle) {
-                popupHtml += `<strong>Sky brightness:</strong> Bortle overlay enabled (visual only)<br>`;
-            } else {
-                popupHtml += `<strong>Sky brightness:</strong> Unavailable<br>`;
-            }
         }
+
+        if (bortleLevel !== null) {
+            popupHtml += `<strong>Bortle level:</strong> ${bortleLevel}<br>`;
+        } else if (overlayLayers.bortle) {
+            popupHtml += `<strong>Bortle level:</strong> Unavailable at this point<br>`;
+        } else {
+            popupHtml += `<strong>Bortle level:</strong> Overlay unavailable<br>`;
+        }
+
         popupHtml += `</div>`;
         if (infoMarker) {
             infoMarker.setLatLng([lat, lon]);
