@@ -277,6 +277,23 @@ static void handleDisplayCommand(const JsonDocument& req) {
     return;
   }
 
+  if (strcmp(action, "store_begin") == 0) {
+    const char* name = req["name"] | "";
+    uint32_t length = req["length"] | 0;
+    if (strlen(name) == 0 || length == 0) {
+      sendError("Missing name or length");
+      return;
+    }
+
+    if (!beginFileUpload(name, length)) {
+      sendError("Unable to start file upload");
+      return;
+    }
+
+    sendOkEmpty();
+    return;
+  }
+
   if (strcmp(action, "store") == 0) {
     const char* name = req["name"] | "";
     uint32_t length = req["length"] | 0;

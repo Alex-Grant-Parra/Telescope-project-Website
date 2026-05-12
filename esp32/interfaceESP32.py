@@ -159,6 +159,10 @@ class ESP32Connection:
 		resp = resp.replace('"bright255', '"brightness":255')
 		resp = re.sub(r'"bright(?:ness)?(\d+)', r'"brightness":\1', resp)
 		resp = re.sub(r'("brightness")([0-9]+)', r'\1:\2', resp)
+		# Generic key-value colon loss: "key"123 -> "key":123
+		resp = re.sub(r'"([A-Za-z_][A-Za-z0-9_]*)"(-?\d)', r'"\1":\2', resp)
+		# Generic missing comma between fields: ...123"next": -> ...123,"next":
+		resp = re.sub(r'([0-9}\]"])(\s*)"([A-Za-z_][A-Za-z0-9_]*)"\s*:', r'\1,\2"\3":', resp)
 		return resp
 
 	def _parse_response(self, resp: str) -> Dict[str, Any]:
@@ -272,8 +276,37 @@ class ESP32Connection:
 
 		The ESP32 will store the exact bytes under `name`. Use `play` to display it.
 		"""
-		payload = {"cmd": "display", "action": "store", "name": name, "length": len(data)}
-		return self.send_binary(payload, data, timeout=timeout)
+		payload = {"cmd": "display", "action": "store_begin", "name": name, "length": len(data)}
+		transfer_timeout = timeout
+		if transfer_timeout is None:
+			baudrate = max(1, int(self.ser.baudrate))
+			transfer_timeout = max(self.ser.timeout, (len(data) * 10.0 / baudrate) + 20.0, 25.0)
+
+		# First send the JSON control command and wait for the ESP32 to enter
+		# file-upload mode.
+		self.send(payload, timeout=timeout)
+
+		# Then stream the raw bytes. The firmware will emit the final OK after
+		# all bytes are written to LittleFS.
+		with self._lock:
+			prev_timeout = self.ser.timeout
+			try:
+				self.ser.timeout = transfer_timeout
+				data_view = memoryview(data)
+				chunk_size = 512
+				for start in range(0, len(data_view), chunk_size):
+					self.ser.write(data_view[start : start + chunk_size])
+					# Pace upload slightly to avoid overflowing UART RX while the ESP32
+					# services other tasks.
+					time.sleep(0.001)
+				self.ser.flush()
+				resp = self._read_json_response(transfer_timeout)
+			finally:
+				self.ser.timeout = prev_timeout
+
+		if not resp:
+			raise TimeoutError("No response from ESP32")
+		return self._parse_response(resp)
 
 	def play_display_file(self, name: str, x: int = 0, y: int = 0, w: int = 128, h: int = 160) -> Dict[str, Any]:
 		"""Play a stored display file previously uploaded with `upload_display_file`.

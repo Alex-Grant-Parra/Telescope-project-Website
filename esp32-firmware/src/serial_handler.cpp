@@ -2,6 +2,7 @@
 #include "commands.h"
 #include "display.h"
 #include <LittleFS.h>
+#include <cstring>
 
 String g_rxLine;
 static bool g_displayBlitActive = false;
@@ -19,7 +20,9 @@ static uint16_t g_displayBlitH = 0;
 // File upload state
 static bool g_fileUploadActive = false;
 static uint32_t g_fileUploadRemaining = 0;
-static File g_fileUploadHandle;
+static uint8_t* g_fileUploadBuffer = nullptr;
+static uint32_t g_fileUploadIndex = 0;
+static uint32_t g_fileUploadLastByteMs = 0;
 static char g_fileUploadName[64];
 
 static String normalizeFsPath(const char* name) {
@@ -78,27 +81,20 @@ bool beginFileUpload(const char* name, uint32_t byteCount) {
     return false;
   }
 
-  // Ensure LittleFS is mounted
-  if (!LittleFS.begin(true)) {
-    // Attempt mount; if it fails, we can't accept uploads
-    return false;
-  }
-
-  // Remove any existing file with the same name
-  if (LittleFS.exists(fname)) {
-    LittleFS.remove(fname);
-  }
-
-  File f = LittleFS.open(fname, FILE_WRITE);
-  if (!f) {
+  // Allocate a RAM buffer for fast serial ingest; file I/O happens after the
+  // full payload is received to avoid UART overruns while LittleFS writes.
+  uint8_t* uploadBuf = (uint8_t*)malloc(byteCount);
+  if (uploadBuf == nullptr) {
     return false;
   }
 
   // Save state
   strncpy(g_fileUploadName, fname.c_str(), sizeof(g_fileUploadName) - 1);
   g_fileUploadName[sizeof(g_fileUploadName) - 1] = '\0';
-  g_fileUploadHandle = f;
+  g_fileUploadBuffer = uploadBuf;
+  g_fileUploadIndex = 0;
   g_fileUploadRemaining = byteCount;
+  g_fileUploadLastByteMs = millis();
   g_fileUploadActive = true;
   return true;
 }
@@ -108,6 +104,21 @@ void initializeSerial() {
 }
 
 void handleSerial() {
+  if (g_fileUploadActive) {
+    uint32_t now = millis();
+    if ((now - g_fileUploadLastByteMs) > 5000U) {
+      // Abort stale upload sessions (for example, host interrupted mid-transfer)
+      // so the command parser can recover without requiring a reboot.
+      free(g_fileUploadBuffer);
+      g_fileUploadBuffer = nullptr;
+      g_fileUploadActive = false;
+      g_fileUploadIndex = 0;
+      g_fileUploadRemaining = 0;
+      g_fileUploadName[0] = '\0';
+      sendError("Upload timeout");
+    }
+  }
+
   while (Serial.available() > 0) {
     if (g_fileUploadActive) {
       size_t toRead = Serial.available();
@@ -123,21 +134,61 @@ void handleSerial() {
         return;
       }
 
-      // Write directly to LittleFS file
-      if (g_fileUploadHandle) {
-        g_fileUploadHandle.write(g_displayStreamBuffer, readCount);
+      g_fileUploadLastByteMs = millis();
+
+      if (g_fileUploadBuffer != nullptr) {
+        memcpy(g_fileUploadBuffer + g_fileUploadIndex, g_displayStreamBuffer, readCount);
       }
+      g_fileUploadIndex += static_cast<uint32_t>(readCount);
 
       g_fileUploadRemaining -= static_cast<uint32_t>(readCount);
 
       if (g_fileUploadRemaining == 0) {
-        if (g_fileUploadHandle) {
-          g_fileUploadHandle.close();
+        bool writeOk = false;
+        if (g_fileUploadBuffer != nullptr && g_fileUploadName[0] != '\0') {
+          if (LittleFS.begin(true)) {
+            String fname(g_fileUploadName);
+            if (LittleFS.exists(fname)) {
+              LittleFS.remove(fname);
+            }
+
+            File f = LittleFS.open(fname, FILE_WRITE);
+            if (f) {
+              uint32_t written = 0;
+              while (written < g_fileUploadIndex) {
+                size_t toWrite = g_fileUploadIndex - written;
+                if (toWrite > 1024) {
+                  toWrite = 1024;
+                }
+                size_t w = f.write(g_fileUploadBuffer + written, toWrite);
+                if (w == 0) {
+                  break;
+                }
+                written += static_cast<uint32_t>(w);
+                if ((written & 0x7FF) == 0) {
+                  yield();
+                }
+              }
+              f.close();
+              writeOk = (written == g_fileUploadIndex);
+            }
+          }
         }
+
+        free(g_fileUploadBuffer);
+        g_fileUploadBuffer = nullptr;
         g_fileUploadActive = false;
+        g_fileUploadIndex = 0;
         g_fileUploadRemaining = 0;
+        g_fileUploadLastByteMs = 0;
         g_fileUploadName[0] = '\0';
+
+        if (!writeOk) {
+          sendError("File write failed");
+          return;
+        }
         sendOkEmpty();
+        return;
       }
       continue;
     }
@@ -173,6 +224,7 @@ void handleSerial() {
         g_displayBlitRemaining = 0;
 
         sendOkEmpty();
+        return;
       }
       continue;
     }
@@ -198,6 +250,7 @@ void handleSerial() {
         g_displayBlitActive = false;
         displayEndBlit();
         sendOkEmpty();
+        return;
       }
       continue;
     }

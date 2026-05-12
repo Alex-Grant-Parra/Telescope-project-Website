@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 
 
@@ -43,16 +44,49 @@ def main() -> None:
 
 		gif_path = ROOT / "graphics" / "assets" / "test.gif"
 		print(f"Uploading frames from {gif_path.name} to ESP32...")
+		max_frames_env = os.getenv("ASTRA_MAX_FRAMES")
+		frame_step_env = os.getenv("ASTRA_FRAME_STEP")
+		upload_timeout_env = os.getenv("ASTRA_UPLOAD_TIMEOUT")
+		upload_retries_env = os.getenv("ASTRA_UPLOAD_RETRIES")
+		max_frames = int(max_frames_env) if max_frames_env else None
+		frame_step = max(1, int(frame_step_env)) if frame_step_env else 1
+		upload_timeout = float(upload_timeout_env) if upload_timeout_env else 25.0
+		upload_retries = max(1, int(upload_retries_env)) if upload_retries_env else 3
 		img = Image.open(gif_path)
 		frames = []
 		durations = []
 		for i, frame in enumerate(ImageSequence.Iterator(img)):
+			if i % frame_step != 0:
+				continue
+			if max_frames is not None and len(frames) >= max_frames:
+				break
 			duration = frame.info.get("duration", 100) / 1000.0
 			durations.append(duration)
 			raw = image_to_rgb565_bytes(frame, ESP32Display.WIDTH, ESP32Display.HEIGHT)
 			name = f"{gif_path.stem}_{i}.rgb"
 			print(f"  Uploading frame {i} as {name} ({len(raw)} bytes)...")
-			conn.upload_display_file(name, raw)
+			last_exc = None
+			for attempt in range(1, upload_retries + 1):
+				try:
+					conn.upload_display_file(name, raw, timeout=upload_timeout)
+					last_exc = None
+					break
+				except Exception as exc:
+					last_exc = exc
+					if attempt == upload_retries:
+						break
+					print(f"    Upload failed (attempt {attempt}/{upload_retries}): {exc}")
+					print("    Reconnecting and retrying...")
+					try:
+						conn.close()
+					except Exception:
+						pass
+					time.sleep(0.5)
+					conn = ESP32Connection()
+					display = ESP32Display(conn)
+					display.initialize()
+			if last_exc is not None:
+				raise last_exc
 			frames.append(name)
 
 		print("Upload complete. Playing from ESP32...")
