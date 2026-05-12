@@ -424,7 +424,14 @@ class GraphicsEngine:
 			img = ImageOps.flip(img)
 
 		target_w = int(width) if width is not None else max(1, int(img.width * scale))
-		target_h = int(height) if height is not None else max(1, int(img.height * scale))
+		# If neither width nor height is specified, default to fitting the
+		# display area so images/gifs are auto-scaled to the screen.
+		if width is None and height is None:
+			# Fit to engine display size while preserving aspect when requested
+			target_w = self.width
+			target_h = self.height
+		else:
+			target_h = int(height) if height is not None else max(1, int(img.height * scale))
 
 		target_w = max(1, target_w)
 		target_h = max(1, target_h)
