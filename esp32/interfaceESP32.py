@@ -167,8 +167,11 @@ class ESP32Connection:
 			try:
 				for attempt in range(2):
 					self.ser.timeout = transfer_timeout * (1.0 + 0.25 * attempt)
+					# Send JSON header and give the ESP32 a short moment to parse it
 					self.ser.write(line.encode("utf-8"))
 					self.ser.flush()
+					time.sleep(0.02)
+					# Send binary payload
 					self.ser.write(data_bytes)
 					self.ser.flush()
 					resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
