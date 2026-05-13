@@ -24,11 +24,11 @@ void sendOkEmpty() {
 void sendOkLedStatus(const LedChannel& led) {
   JsonDocument resp;
   resp["status"] = "ok";
-  JsonObject data = resp["data"].to<JsonObject>();
+  JsonObject data = resp.createNestedObject("data");
   data["led"] = led.name;
   data["pin"] = led.pin;
   data["state"] = led.state;
-  data["blink_enabled"] = led.blinkEnabled;
+  data["blink"] = led.blinkEnabled;
   data["blink_interval_ms"] = led.blinkIntervalMs;
   serializeJson(resp, Serial);
   Serial.println();

@@ -282,20 +282,29 @@ def sync_assets_folder(
 	upload_timeout: float = 25.0,
 	upload_retries: int = 3,
 	rebuild: bool = False,
+	conn: ESP32Connection | None = None,
 ) -> dict[str, Any]:
-	"""Upload all supported assets in the folder and cache them for quick access."""
+	"""Upload all supported assets in the folder and cache them for quick access.
+	
+	Args:
+		conn: Optional existing ESP32Connection. If not provided, creates a new one.
+	"""
 	assets_dir = assets_dir or ASSETS_DIR
 	if not assets_dir.exists():
 		raise FileNotFoundError(f"Assets folder not found: {assets_dir}")
 
 	index = _load_index()
 	results: dict[str, Any] = {}
-	conn = None
+	own_conn = False
 	display = None
 
 	try:
-		print("Connecting to ESP32...")
-		conn = ESP32Connection()
+		# Use provided connection or create a new one
+		if conn is None:
+			print("Connecting to ESP32...")
+			conn = ESP32Connection()
+			own_conn = True
+		
 		display = ESP32Display(conn)
 		display.initialize()
 
@@ -329,7 +338,8 @@ def sync_assets_folder(
 		print(f"Prepared {len(results)} asset(s).")
 		return results
 	finally:
-		if conn is not None:
+		# Only close connection if we created it, don't close provided ones
+		if own_conn and conn is not None:
 			try:
 				conn.close()
 			except Exception:
@@ -437,6 +447,81 @@ def play_asset(
 				conn.close()
 			except Exception:
 				pass
+
+
+def sync_assets_on_connect(conn: ESP32Connection | None = None) -> bool:
+	"""Sync assets from RPi to ESP32 on startup.
+	
+	Flashes blue LED during sync and uploads all assets.
+	Runs in a background thread to avoid blocking.
+	
+	Args:
+		conn: Optional existing ESP32Connection instance. If not provided,
+			  will attempt to create a new connection.
+	
+	Returns:
+		True if sync started successfully, False otherwise
+	"""
+	def _sync_with_led(existing_conn: ESP32Connection | None) -> None:
+		conn_to_use = existing_conn
+		own_conn = False
+		led = None
+		try:
+			# Only create a new connection if one wasn't provided
+			if conn_to_use is None:
+				print("[Assets] Connecting to ESP32 for asset sync...")
+				conn_to_use = ESP32Connection()
+				own_conn = True
+			
+			# Import here to avoid circular dependency
+			from esp32.interfaceESP32 import ESP32LED
+			
+			# Try to flash blue LED during sync
+			try:
+				led = ESP32LED(conn_to_use)
+				led.blue.blink(interval_ms=500)
+				print("[Assets] Blue LED blinking during asset sync")
+			except Exception as e:
+				print(f"[Assets] Could not control LED: {e}")
+				led = None
+			
+			try:
+				print("[Assets] Starting asset sync to ESP32...")
+				sync_assets_folder(conn=conn_to_use)
+				print("[Assets] Asset sync completed successfully")
+			finally:
+				# Stop the LED blinking
+				if led is not None:
+					try:
+						led.blue.off()
+						print("[Assets] Blue LED turned off")
+					except Exception:
+						pass
+		except Exception as e:
+			print(f"[Assets] Error during asset sync: {e}")
+			# Try to turn off LED in case of error
+			if led is not None:
+				try:
+					led.blue.off()
+				except Exception:
+					pass
+		finally:
+			# Only close the connection if we created it
+			if own_conn and conn_to_use is not None:
+				try:
+					conn_to_use.close()
+				except Exception:
+					pass
+	
+	# Run sync in background thread to avoid blocking
+	try:
+		import threading
+		sync_thread = threading.Thread(target=_sync_with_led, args=(conn,), daemon=True)
+		sync_thread.start()
+		return True
+	except Exception as e:
+		print(f"[Assets] Failed to start asset sync thread: {e}")
+		return False
 
 
 prepare_assets_folder = sync_assets_folder

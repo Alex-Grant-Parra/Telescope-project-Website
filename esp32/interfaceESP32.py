@@ -172,6 +172,20 @@ class ESP32Connection:
 		resp = resp.replace('"bright255', '"brightness":255')
 		resp = re.sub(r'"bright(?:ness)?(\d+)', r'"brightness":\1', resp)
 		resp = re.sub(r'("brightness")([0-9]+)', r'\1:\2', resp)
+		# Fix corrupted blink key from serial corruption: "blink_:false -> "blink":false
+		resp = re.sub(r'"blink_":([a-z]+)', r'"blink":\1', resp)
+		# Fix adjacent/truncated keys cases where a quoted key is directly
+		# followed by another identifier and then a colon, e.g.
+		#  '"blink"blink_interval_ms":500' -> '"blink":false,"blink_interval_ms":500'
+		resp = re.sub(r'"([A-Za-z_][A-Za-z0-9_]*)"([A-Za-z_][A-Za-z0-9_]*)"\s*:', r'"\1":false,"\2":', resp)
+		# Handle cases where key and boolean merged like '"blifalse' -> assume 'blink':false
+		# common truncated prefix 'bli' -> 'blink'
+		resp = re.sub(r'"bli(true|false)', r'"blink":\1', resp)
+		resp = re.sub(r'"bli(false)', r'"blink":false', resp)
+		# Fix missing colon between quoted key and boolean: '"key"false' -> '"key":false'
+		resp = re.sub(r'"([A-Za-z_][A-Za-z0-9_]*)"(true|false)', r'"\1":\2', resp)
+		# Ensure comma separation when boolean directly precedes a quoted key: 'false"next":' -> 'false,"next":'
+		resp = re.sub(r'(true|false)(\s*)"([A-Za-z_][A-Za-z0-9_]*)"\s*:', r'\1,\2"\3":', resp)
 		# Generic key-value colon loss: "key"123 -> "key":123
 		resp = re.sub(r'"([A-Za-z_][A-Za-z0-9_]*)"(-?\d)', r'"\1":\2', resp)
 		# Generic missing comma between fields: ...123"next": -> ...123,"next":
