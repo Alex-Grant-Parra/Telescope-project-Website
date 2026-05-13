@@ -149,9 +149,19 @@ class ESP32Connection:
 				candidate = candidate[start:]
 				buffer = candidate
 
-			end = candidate.rfind("}")
-			if end != -1 and end > 0:
-				return candidate[: end + 1]
+			# Find the first balanced JSON object (handle concatenated JSONs)
+			depth = 0
+			end_idx = -1
+			for i, ch in enumerate(candidate):
+				if ch == '{':
+					depth += 1
+				elif ch == '}':
+					depth -= 1
+					if depth == 0:
+						end_idx = i
+						break
+			if end_idx != -1:
+				return candidate[: end_idx + 1]
 
 		return buffer.strip()
 
@@ -202,9 +212,14 @@ class ESP32Connection:
 			if data is None:
 				repaired = self._repair_json_response(resp)
 				if repaired != resp:
-					data = json.loads(repaired)
+					try:
+						data = json.loads(repaired)
+					except json.JSONDecodeError:
+						# Fall through to raising a descriptive error below
+						data = None
 				else:
-					raise
+					# No repair possible; include raw response for debugging
+					raise RuntimeError(f"Failed to parse JSON response from ESP32: {resp!r}")
 		if data.get("status") != "ok":
 			error_msg = data.get("message", "ESP32 error")
 			raise RuntimeError(f"ESP32 error: {error_msg} | Full response: {data}")
@@ -643,6 +658,18 @@ class ESP32Display:
 	def format_storage(self) -> Dict[str, Any]:
 		# Format persistent display storage on the ESP32 (LittleFS).
 		return self.conn.send({"cmd": "display", "action": "format_storage"}, timeout=10.0)
+
+	def storage_info(self) -> Dict[str, Any]:
+		"""Return storage total/used/free bytes from the ESP32."""
+		return self.conn.send({"cmd": "display", "action": "storage_info"}, timeout=5.0)
+
+	def list_files(self) -> Dict[str, Any]:
+		"""Return a list of files stored on the ESP32 LittleFS."""
+		return self.conn.send({"cmd": "display", "action": "list_files"}, timeout=5.0)
+
+	def delete_file(self, name: str) -> Dict[str, Any]:
+		"""Delete a file on the ESP32 LittleFS by name."""
+		return self.conn.send({"cmd": "display", "action": "delete_file", "name": name}, timeout=5.0)
 
 	def blit_rgb565(self, x: int, y: int, width: int, height: int, data: bytes | bytearray | memoryview) -> Dict[str, Any]:
 		# Upload a full RGB565 frame or sub-frame in one binary transfer.

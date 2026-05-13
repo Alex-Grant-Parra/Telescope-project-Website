@@ -73,6 +73,52 @@ def list_assets() -> dict[str, Any]:
 	return _load_index()
 
 
+def list_remote_assets(timeout: float = 5.0) -> list[dict[str, Any]]:
+	"""Query the ESP32 for stored files and return list of {name,size}.
+
+	Raises on connection errors.
+	"""
+	conn = ESP32Connection()
+	display = ESP32Display(conn)
+	try:
+		display.initialize()
+		resp = display.list_files()
+		return resp.get("files", [])
+	finally:
+		try:
+			conn.close()
+		except Exception:
+			pass
+
+
+def remote_storage_info() -> dict[str, int]:
+	"""Return storage info from ESP32: total_bytes, used_bytes, free_bytes."""
+	conn = ESP32Connection()
+	display = ESP32Display(conn)
+	try:
+		display.initialize()
+		return display.storage_info()
+	finally:
+		try:
+			conn.close()
+		except Exception:
+			pass
+
+
+def delete_remote_asset(name: str) -> None:
+	"""Delete a stored file on the ESP32 by name. Raises on error."""
+	conn = ESP32Connection()
+	display = ESP32Display(conn)
+	try:
+		display.initialize()
+		display.delete_file(name)
+	finally:
+		try:
+			conn.close()
+		except Exception:
+			pass
+
+
 def _asset_is_current(asset_path: Path, entry: dict[str, Any]) -> bool:
 	return entry.get("source_hash") == _compute_file_hash(asset_path) and bool(entry.get("stored_files"))
 

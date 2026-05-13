@@ -119,8 +119,7 @@ static void handleLedCommand(const JsonDocument& req) {
 
 static void handleDisplayCommand(const JsonDocument& req) {
   const char* action = req["action"] | "";
-  Serial.print("[ACTION] ");
-  Serial.println(action);
+  (void)action; // avoid unused var warnings when debug is disabled
   if (strlen(action) == 0) {
     sendError("Missing display action");
     return;
@@ -251,6 +250,101 @@ static void handleDisplayCommand(const JsonDocument& req) {
     }
     if (!LittleFS.format()) {
       sendError("Storage format failed");
+      return;
+    }
+    sendOkEmpty();
+    return;
+  }
+
+  if (strcmp(action, "storage_info") == 0) {
+    if (!LittleFS.begin(true)) {
+      sendError("Storage mount failed");
+      return;
+    }
+    // Report total and free space — stream manually to avoid possible truncation
+    size_t total = LittleFS.totalBytes();
+    size_t used = LittleFS.usedBytes();
+    uint64_t freeb = (uint64_t)(total >= used ? (total - used) : 0);
+
+    Serial.print("{\"status\":\"ok\",\"data\":{\"total_bytes\":");
+    Serial.print((uint64_t)total);
+    Serial.print(",\"used_bytes\":");
+    Serial.print((uint64_t)used);
+    Serial.print(",\"free_bytes\":");
+    Serial.print(freeb);
+    Serial.print("}}\n");
+    return;
+  }
+
+  if (strcmp(action, "list_files") == 0) {
+    if (!LittleFS.begin(true)) {
+      sendError("Storage mount failed");
+      return;
+    }
+    // Stream JSON manually to avoid ArduinoJson capacity/truncation issues
+    if (!LittleFS.begin(true)) {
+      sendError("Storage mount failed");
+      return;
+    }
+
+    Serial.print("{\"status\":\"ok\",\"data\":{\"files\":[");
+    bool first = true;
+    File root = LittleFS.open("/");
+    if (root) {
+      File file = root.openNextFile();
+      while (file) {
+        if (!first) {
+          Serial.print(',');
+        }
+        first = false;
+        // Print object: {"name":"...","size":123}
+        Serial.print('{');
+        // name (escape quotes/backslashes)
+        Serial.print("\"name\":\"");
+        String fname = String(file.name());
+        for (size_t i = 0; i < fname.length(); i++) {
+          char c = fname[i];
+          if (c == '\\' || c == '"') {
+            Serial.print('\\');
+            Serial.print(c);
+          } else {
+            Serial.print(c);
+          }
+        }
+        Serial.print("\"");
+        Serial.print(',');
+        Serial.print("\"size\":");
+        Serial.print((uint64_t)file.size());
+        Serial.print('}');
+        file = root.openNextFile();
+      }
+      root.close();
+    }
+    Serial.print("]}}\n");
+    return;
+  }
+
+  if (strcmp(action, "delete_file") == 0) {
+    const char* name = req["name"] | "";
+    if (strlen(name) == 0) {
+      sendError("Missing name");
+      return;
+    }
+    if (!LittleFS.begin(true)) {
+      sendError("Storage mount failed");
+      return;
+    }
+    String fname(name == nullptr ? "" : name);
+    fname.trim();
+    if (fname.length() > 0 && fname[0] != '/') {
+      fname = "/" + fname;
+    }
+    if (!LittleFS.exists(fname)) {
+      sendError("File not found");
+      return;
+    }
+    if (!LittleFS.remove(fname)) {
+      sendError("Delete failed");
       return;
     }
     sendOkEmpty();
@@ -609,11 +703,7 @@ void handleCommand(const String& line) {
   DynamicJsonDocument req(cap);
   DeserializationError err = deserializeJson(req, line);
   if (err) {
-    // Debugging: echo error and raw input for diagnosis over serial.
-    Serial.print("[DESER_ERR] ");
-    Serial.println(err.c_str());
-    Serial.print("[RAW_LINE] ");
-    Serial.println(line);
+    // Do not emit raw debug lines here as they contaminate JSON responses
     sendError("Invalid JSON");
     return;
   }

@@ -166,10 +166,10 @@ class GraphicsEngine:
 
 	def initialize(self, backlight: int = 220) -> None:
 		self.display.initialize()
-		self.display.set_backlight(backlight)
 		self.display.set_text_color(self.default_foreground)
 		self.display.set_background_color(self.default_background)
-		self.display.clear(self.default_background)
+		self.clear(self.default_background)
+		self.display.set_backlight(backlight)
 
 	def set_theme(self, foreground: str = "FFFFFF", background: str = "000000") -> None:
 		self.default_foreground = _normalize_hex_color(foreground)
@@ -179,6 +179,7 @@ class GraphicsEngine:
 
 	def clear(self, color: Optional[str] = None) -> None:
 		self.display.clear(_normalize_hex_color(color or self.default_background))
+		self.display.set_backlight(0)
 
 	def set_backlight(self, value: int) -> None:
 		self.display.set_backlight(max(0, min(255, int(value))))
