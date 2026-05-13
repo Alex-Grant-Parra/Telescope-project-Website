@@ -140,12 +140,38 @@ def remote_storage_info() -> dict[str, int]:
 
 
 def delete_remote_asset(name: str) -> None:
-	"""Delete a stored file on the ESP32 by name. Raises on error."""
+	"""Delete a stored file on the ESP32 by name.
+	
+	For synthetic GIF names (e.g., "test.gif"), deletes all frame files.
+	For regular files, deletes the file directly.
+	Raises on error.
+	"""
+	import re
 	conn = ESP32Connection()
 	display = ESP32Display(conn)
 	try:
 		display.initialize()
-		display.delete_file(name)
+		
+		# Check if this is a synthetic GIF name (ends with .gif)
+		if name.endswith(".gif"):
+			prefix = name[:-4]  # Remove .gif extension
+			# Query device for all files matching this prefix pattern
+			resp = display.list_files()
+			files = resp.get("files", [])
+			
+			# Find all frame files matching this prefix
+			frame_pattern = re.compile(f'^{re.escape(prefix)}_\\d{{4}}\\.rgb$')
+			matching_files = [f.get("name", "") for f in files if frame_pattern.match(f.get("name", ""))]
+			
+			if not matching_files:
+				raise RuntimeError(f"No frame files found for GIF: {name}")
+			
+			# Delete each frame file
+			for frame_file in matching_files:
+				display.delete_file(frame_file)
+		else:
+			# Regular file - delete directly
+			display.delete_file(name)
 	finally:
 		try:
 			conn.close()

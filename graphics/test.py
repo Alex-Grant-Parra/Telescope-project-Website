@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Example app-style entry point for asset sync and playback."""
+"""Asset management utilities for ESP32."""
 
 from __future__ import annotations
 
@@ -10,62 +10,41 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
 	sys.path.insert(0, str(ROOT))
 
-from graphics.assets_player import play_asset, sync_assets_folder
-from graphics.image_display import clear_display
-from time import sleep
-
 from graphics.assets_player import (
-	list_assets,
 	list_remote_assets,
 	remote_storage_info,
 	delete_remote_asset,
 )
 
-def main() -> None:
-	"""Prepare all assets, then play a PNG and a GIF by filename."""
-	assets_dir = ROOT / "graphics" / "assets"
-	print("Syncing assets folder...")
-	sync_assets_folder(assets_dir=assets_dir)
 
-	play_asset("test.png", assets_dir=assets_dir, auto_sync=False)
-	sleep(2)
-	play_asset("test.gif", assets_dir=assets_dir, auto_sync=False, smooth=True)
-	play_asset("photoMe.jpg", assets_dir=assets_dir, auto_sync=False)
-	sleep(5)
-	clear_display()
-
-
-def test_storage_helpers() -> None:
-	"""Minimal test for the new storage helper functions.
-
-	This attempts to exercise the local index function and will try to
-	query the ESP32 for remote storage info if a device is available.
-	Failures to contact a device are caught and reported as skipped.
-	"""
-	print("Running storage helper tests...")
-	# Local index should always be loadable
-	idx = list_assets()
-	print(f"Local index contains {len(idx.get('assets', []))} assets")
-
-	# Remote calls are optional and may fail when no device is connected
+def clear_all_remote_assets() -> None:
+	"""List all assets on the ESP32 and delete them one by one."""
+	print("Fetching assets from ESP32...")
 	try:
 		files = list_remote_assets()
-		print(f"Remote device contains {len(files)} items:")
-		for name, size in sorted(files.items()):
-			size_kb = size / 1024.0
-			print(f"  {name}: {size_kb:.1f} KB")
-	except Exception as e:
-		print(f"list_remote_assets() skipped: {e}")
-
-	try:
+		if not files:
+			print("No assets found on device.")
+			return
+		
+		print(f"Found {len(files)} items on device:")
+		for name in sorted(files.keys()):
+			print(f"  {name}")
+		
+		print("\nDeleting all assets...")
+		for name in sorted(files.keys()):
+			try:
+				delete_remote_asset(name)
+				print(f"  ✓ Deleted {name}")
+			except Exception as e:
+				print(f"  ✗ Failed to delete {name}: {e}")
+		
+		# Show final storage info
 		info = remote_storage_info()
-		print(f"Remote storage: {info}")
+		print(f"\nFinal storage: {info['used_bytes']} / {info['total_bytes']} bytes used")
 	except Exception as e:
-		print(f"remote_storage_info() skipped: {e}")
-
-	print("Storage helper tests complete.")
+		print(f"Error: {e}")
 
 
 
 if __name__ == "__main__":
-	test_storage_helpers()
+	clear_all_remote_assets()
