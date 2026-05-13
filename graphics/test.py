@@ -50,7 +50,10 @@ def test_storage_helpers() -> None:
 	# Remote calls are optional and may fail when no device is connected
 	try:
 		files = list_remote_assets()
-		print(f"Remote device reports {len(files)} files")
+		print(f"Remote device contains {len(files)} items:")
+		for name, size in sorted(files.items()):
+			size_kb = size / 1024.0
+			print(f"  {name}: {size_kb:.1f} KB")
 	except Exception as e:
 		print(f"list_remote_assets() skipped: {e}")
 

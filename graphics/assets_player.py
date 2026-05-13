@@ -73,17 +73,51 @@ def list_assets() -> dict[str, Any]:
 	return _load_index()
 
 
-def list_remote_assets(timeout: float = 5.0) -> list[dict[str, Any]]:
-	"""Query the ESP32 for stored files and return list of {name,size}.
+def list_remote_assets(timeout: float = 5.0) -> dict[str, int]:
+	"""Query the ESP32 for stored files and return dict of {name: size}.
 
+	Automatically groups GIF frame sequences (e.g., prefix_0000.rgb, prefix_0001.rgb)
+	into synthetic entries (prefix.gif with combined size).
 	Raises on connection errors.
 	"""
+	import re
 	conn = ESP32Connection()
 	display = ESP32Display(conn)
 	try:
 		display.initialize()
 		resp = display.list_files()
-		return resp.get("files", [])
+		files = resp.get("files", [])
+		
+		# Build dict and group GIF frames
+		file_dict: dict[str, int] = {}
+		frame_prefixes: dict[str, list[tuple[str, int]]] = {}  # prefix -> [(name, size), ...]
+		
+		for f in files:
+			name = f.get("name", "")
+			size = f.get("size", 0)
+			
+			# Check if this is a numbered frame: matches pattern like "prefix_XXXX.rgb"
+			match = re.match(r'^(.+?)_(\d{4})\.rgb$', name)
+			if match:
+				prefix = match.group(1)
+				if prefix not in frame_prefixes:
+					frame_prefixes[prefix] = []
+				frame_prefixes[prefix].append((name, size))
+			else:
+				# Regular file, add directly
+				file_dict[name] = size
+		
+		# Convert grouped frames into GIF entries
+		for prefix, frames in frame_prefixes.items():
+			if len(frames) > 1:
+				# Multiple frames: treat as a GIF
+				total_size = sum(size for _, size in frames)
+				file_dict[f"{prefix}.gif"] = total_size
+			else:
+				# Single frame: keep as .rgb
+				file_dict[frames[0][0]] = frames[0][1]
+		
+		return file_dict
 	finally:
 		try:
 			conn.close()
