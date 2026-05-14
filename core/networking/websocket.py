@@ -1,4 +1,5 @@
 import asyncio
+import os
 import websockets
 import ujson as json  # Using ujson for faster serialization
 import time
@@ -13,24 +14,11 @@ from utils.esp32_state import esp32_state, esp32_scanner_task
 
 
 async def peripheral_refresh_task(led_manager, refresh_interval: float = 1.0):
-    # Periodic task to refresh ESP32 peripherals (LEDs, motors) after reconnections.
-    print(f"[peripheral_refresh] Started peripheral refresh task (every {refresh_interval}s)")
+    # Keep the task alive without polling the ESP32 on a fixed interval.
+    # The scanner tasks already manage reconnection, and repeated refresh
+    # probes were creating serial contention with the LED commands.
+    print(f"[peripheral_refresh] Started peripheral refresh task (no polling, interval {refresh_interval}s)")
     while True:
-        try:
-            # Ensure ESP32 connection is active
-            conn = esp32_state.ensure_connection()
-            if conn is not None:
-                # Verify motors are accessible
-                try:
-                    conn.list_motors()
-                except Exception as exc:
-                    print(f"[peripheral_refresh] Motor registry check failed: {exc}")
-                    esp32_state.mark_disconnected()
-            
-            # Reapply LED state (handles reconnection via _ensure_connection)
-            led_manager.apply()
-        except Exception as exc:
-            print(f"[peripheral_refresh] Error refreshing peripherals: {exc}")
         await asyncio.sleep(refresh_interval)
 from utils.config_state import get_client_config, save_client_config, build_service_urls
 from utils.LEDmanager import get_led_manager
@@ -505,7 +493,7 @@ def handle_exit(signum, frame):
     # Handle exit signals
     print(f"[signal] Received signal {signum}, exiting and releasing camera...")
     cleanup_camera()
-    sys.exit(0)
+    sys._exit(0)
 
 def setup_client_config():
     # Interactive setup for client configuration

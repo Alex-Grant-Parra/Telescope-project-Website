@@ -94,6 +94,9 @@ def list_remote_assets(timeout: float = 5.0) -> dict[str, int]:
 		
 		for f in files:
 			name = f.get("name", "")
+			# Normalize device-returned names which may include a leading '/'
+			if name.startswith('/'):
+				name = name[1:]
 			size = f.get("size", 0)
 			
 			# Check if this is a numbered frame: matches pattern like "prefix_XXXX.rgb"
@@ -117,6 +120,12 @@ def list_remote_assets(timeout: float = 5.0) -> dict[str, int]:
 				# Single frame: keep as .rgb
 				file_dict[frames[0][0]] = frames[0][1]
 		
+		if not file_dict:
+			# Debug helper: show raw response structure when device reports no files
+			try:
+				print(f"[Assets] Remote list_files raw response: {resp!r}")
+			except Exception:
+				pass
 		return file_dict
 	finally:
 		try:
@@ -159,9 +168,15 @@ def delete_remote_asset(name: str) -> None:
 			resp = display.list_files()
 			files = resp.get("files", [])
 			
-			# Find all frame files matching this prefix
+			# Find all frame files matching this prefix. Normalize leading '/'.
 			frame_pattern = re.compile(f'^{re.escape(prefix)}_\\d{{4}}\\.rgb$')
-			matching_files = [f.get("name", "") for f in files if frame_pattern.match(f.get("name", ""))]
+			matching_files = []
+			for f in files:
+				fname = f.get("name", "")
+				if fname.startswith('/'):
+					fname = fname[1:]
+				if frame_pattern.match(fname):
+					matching_files.append(fname)
 			
 			if not matching_files:
 				raise RuntimeError(f"No frame files found for GIF: {name}")
@@ -308,6 +323,18 @@ def sync_assets_folder(
 		display = ESP32Display(conn)
 		display.initialize()
 
+		# Fetch device file list once to validate cached entries (normalize leading '/')
+		try:
+			_device_files = display.list_files().get("files", [])
+			_device_file_names = set()
+			for f in _device_files:
+				fname = f.get("name", "")
+				if fname.startswith('/'):
+					fname = fname[1:]
+				_device_file_names.add(fname)
+		except Exception:
+			_device_file_names = set()
+
 		if rebuild:
 			print("Formatting ESP32 storage for a full rebuild...")
 			display.format_storage()
@@ -318,10 +345,19 @@ def sync_assets_folder(
 
 			asset_key = _asset_name(asset_path)
 			existing_entry = index.get(asset_key)
+			# If we have an index entry, ensure it truly exists on device as well
 			if existing_entry and not rebuild and _asset_is_current(asset_path, existing_entry):
-				print(f"✓ Cached: {asset_key}")
-				results[asset_key] = existing_entry
-				continue
+				stored_ok = True
+				for sf in existing_entry.get("stored_files", []):
+					check_name = sf[1:] if sf.startswith('/') else sf
+					if check_name not in _device_file_names:
+						stored_ok = False
+						break
+				if stored_ok:
+					print(f"✓ Cached: {asset_key}")
+					results[asset_key] = existing_entry
+					continue
+				# Device missing files; fall through to upload
 
 			print(f"Uploading {asset_key}...")
 			if asset_path.suffix.lower() == ".gif":
@@ -453,14 +489,13 @@ def sync_assets_on_connect(conn: ESP32Connection | None = None) -> bool:
 	"""Sync assets from RPi to ESP32 on startup.
 	
 	Flashes blue LED during sync and uploads all assets.
-	Runs in a background thread to avoid blocking.
 	
 	Args:
 		conn: Optional existing ESP32Connection instance. If not provided,
 			  will attempt to create a new connection.
 	
 	Returns:
-		True if sync started successfully, False otherwise
+		True if sync completed successfully, False otherwise
 	"""
 	def _sync_with_led(existing_conn: ESP32Connection | None) -> None:
 		conn_to_use = existing_conn
@@ -493,8 +528,10 @@ def sync_assets_on_connect(conn: ESP32Connection | None = None) -> bool:
 				# Stop the LED blinking
 				if led is not None:
 					try:
+						time.sleep(0.5)
 						led.blue.off()
 						print("[Assets] Blue LED turned off")
+						time.sleep(0.5)
 					except Exception:
 						pass
 		except Exception as e:
@@ -513,11 +550,8 @@ def sync_assets_on_connect(conn: ESP32Connection | None = None) -> bool:
 				except Exception:
 					pass
 	
-	# Run sync in background thread to avoid blocking
 	try:
-		import threading
-		sync_thread = threading.Thread(target=_sync_with_led, args=(conn,), daemon=True)
-		sync_thread.start()
+		_sync_with_led(conn)
 		return True
 	except Exception as e:
 		print(f"[Assets] Failed to start asset sync thread: {e}")

@@ -26,6 +26,9 @@ class LEDManager:
 		self._state = _LedState()
 		self._lock = threading.RLock()
 		self._flash_lock = threading.Lock()
+		self._last_led_command_at = 0.0
+		self._command_gap_s = 0.5
+		self._applied_signatures: dict[str, tuple[str, int]] = {}
 		self._conn: Optional[ESP32Connection] = None
 		self._leds: Optional[ESP32LED] = None
 
@@ -39,12 +42,20 @@ class LEDManager:
 			return True
 		self._conn = conn
 		self._leds = ESP32LED(conn)
+		self._applied_signatures.clear()
 		print("[LEDManager] ESP32 LED connection established")
 		return True
 
 	def _set_channel(self, channel_name: str, mode: str, interval_ms: int = 500) -> None:
 		if not self._ensure_connection() or self._leds is None:
 			return
+		signature = (mode, int(interval_ms) if mode == "blink" else 0)
+		if self._applied_signatures.get(channel_name) == signature:
+			return
+		now = time.monotonic()
+		elapsed = now - self._last_led_command_at
+		if elapsed < self._command_gap_s:
+			time.sleep(self._command_gap_s - elapsed)
 		channel = getattr(self._leds, channel_name, None)
 		if channel is None:
 			return
@@ -56,6 +67,8 @@ class LEDManager:
 			channel.blink(interval_ms=interval_ms)
 		else:
 			raise ValueError(f"Unsupported LED mode: {mode}")
+		self._applied_signatures[channel_name] = signature
+		self._last_led_command_at = time.monotonic()
 
 	def _apply_locked(self) -> None:
 		if not self._ensure_connection() or self._leds is None:
@@ -128,7 +141,8 @@ class LEDManager:
 	def set_ui_connected(self, connected: bool) -> None:
 		with self._lock:
 			self._state.blue_on_when_idle = bool(connected)
-			self._apply_locked()
+			# Defer the actual LED update to the normal refresh path so startup
+			# does not immediately issue another burst of serial LED commands.
 
 	def set_movement(self, mode: Optional[str]) -> None:
 		mode = mode.lower() if isinstance(mode, str) else None

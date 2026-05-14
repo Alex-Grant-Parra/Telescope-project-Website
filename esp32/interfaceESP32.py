@@ -167,31 +167,8 @@ class ESP32Connection:
 
 	@staticmethod
 	def _repair_json_response(resp: str) -> str:
-		# Recover from a small set of known serial glitches so the display can still initialize.
-		resp = resp.strip()
-		resp = resp.replace('"bright255', '"brightness":255')
-		resp = re.sub(r'"bright(?:ness)?(\d+)', r'"brightness":\1', resp)
-		resp = re.sub(r'("brightness")([0-9]+)', r'\1:\2', resp)
-		# Fix corrupted blink key from serial corruption: "blink_:false -> "blink":false
-		resp = re.sub(r'"blink_":([a-z]+)', r'"blink":\1', resp)
-		# Fix adjacent/truncated keys cases where a quoted key is directly
-		# followed by another identifier and then a colon, e.g.
-		#  '"blink"blink_interval_ms":500' -> '"blink":false,"blink_interval_ms":500'
-		resp = re.sub(r'"([A-Za-z_][A-Za-z0-9_]*)"([A-Za-z_][A-Za-z0-9_]*)"\s*:', r'"\1":false,"\2":', resp)
-		# Handle cases where key and boolean merged like '"blifalse' -> assume 'blink':false
-		# common truncated prefix 'bli' -> 'blink'
-		resp = re.sub(r'"bli(true|false)', r'"blink":\1', resp)
-		resp = re.sub(r'"bli(false)', r'"blink":false', resp)
-		# Fix missing colon between quoted key and boolean: '"key"false' -> '"key":false'
-		resp = re.sub(r'"([A-Za-z_][A-Za-z0-9_]*)"(true|false)', r'"\1":\2', resp)
-		# Ensure comma separation when boolean directly precedes a quoted key: 'false"next":' -> 'false,"next":'
-		resp = re.sub(r'(true|false)(\s*)"([A-Za-z_][A-Za-z0-9_]*)"\s*:', r'\1,\2"\3":', resp)
-		# Generic key-value colon loss: "key"123 -> "key":123
-		resp = re.sub(r'"([A-Za-z_][A-Za-z0-9_]*)"(-?\d)', r'"\1":\2', resp)
-		# Generic missing comma between fields: ...123"next": -> ...123,"next":
-		resp = re.sub(r'([0-9}\]"])(\s*)"([A-Za-z_][A-Za-z0-9_]*)"\s*:', r'\1,\2"\3":', resp)
-		# Missing comma after boolean/null values before next key.
-		resp = re.sub(r'(true|false|null)(\s*)"([A-Za-z_][A-Za-z0-9_]*)"\s*:', r'\1,\2"\3":', resp)
+		# Host-side repair disabled now that the firmware emits deterministic
+		# JSON for LED status responses.
 		return resp
 
 	def _parse_response(self, resp: str) -> Dict[str, Any]:
@@ -222,18 +199,8 @@ class ESP32Connection:
 					data = None
 			else:
 				data = None
-
 			if data is None:
-				repaired = self._repair_json_response(resp)
-				if repaired != resp:
-					try:
-						data = json.loads(repaired)
-					except json.JSONDecodeError:
-						# Fall through to raising a descriptive error below
-						data = None
-				else:
-					# No repair possible; include raw response for debugging
-					raise RuntimeError(f"Failed to parse JSON response from ESP32: {resp!r}")
+				raise RuntimeError(f"Failed to parse JSON response from ESP32: {resp!r}")
 		if data.get("status") != "ok":
 			error_msg = data.get("message", "ESP32 error")
 			raise RuntimeError(f"ESP32 error: {error_msg} | Full response: {data}")
