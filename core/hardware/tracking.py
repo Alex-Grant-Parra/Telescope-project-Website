@@ -4,6 +4,7 @@ from utils.location import get_current_location
 from utils.Tools import hour_angle
 from utils.telescope_state import set_telescope_coords, get_telescope_coords, get_slew_config, set_target_coords, get_target_coords, update_hour_angle
 from utils.LEDmanager import get_led_manager
+from utils.esp32_state import esp32_state
 
 # Motor control
 from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig, ESP32Motor
@@ -11,9 +12,6 @@ from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig, ESP32Motor
 
 POLARIS_RA_DEG = 37.95456067
 POLARIS_DEC_DEG = 89.26410897
-
-# Global ESP32 connection instance (lazy loaded)
-_esp32_conn = None
 
 # Global tracking state
 _tracking_thread = None
@@ -29,17 +27,10 @@ _motors_initialized = False
 
 
 def _get_esp32_connection():
-    # Get or initialize the ESP32 connection (lazy loading).
-    global _esp32_conn
-    if _esp32_conn is None:
-        try:
-            cfg = ESP32SerialConfig(port="/dev/ttyUSB0", baudrate=115200)
-            _esp32_conn = ESP32Connection(cfg)
-            print("[tracking] ESP32 connection established")
-        except Exception as e:
-            print(f"[tracking] Error connecting to ESP32: {e}")
-            _esp32_conn = False  # Mark as failed to avoid retry
-    return _esp32_conn if _esp32_conn else None
+    # Get the ESP32 connection from the centralized singleton.
+    # This ensures tracking uses the same connection as the rest of the system,
+    # with proper reconnection handling if the port changes.
+    return esp32_state.ensure_connection()
 
 
 def _initialize_motors():
@@ -209,20 +200,18 @@ def _update_current_coords_from_motors() -> None:
         try:
             motor1_steps = motor1.get_position()
         except Exception as e:
-            # If we can't get position, use 0 and continue (coordinates won't update this cycle)
-            if "ESP32 error" not in str(e):
-                print(f"[tracking] Warning: Could not get motor1 position: {e}")
-            # Continue anyway - we'll just have no delta this cycle
+            # Log ALL position read failures for debugging
+            print(f"[tracking] Error reading motor1 position: {e}")
+            motor1_steps = 0
             
         time.sleep(0.05)  # Small delay between commands to avoid overwhelming ESP32
         
         try:
             motor2_steps = motor2.get_position()
         except Exception as e:
-            # If we can't get position, use 0 and continue (coordinates won't update this cycle)
-            if "ESP32 error" not in str(e):
-                print(f"[tracking] Warning: Could not get motor2 position: {e}")
-            # Continue anyway - we'll just have no delta this cycle
+            # Log ALL position read failures for debugging
+            print(f"[tracking] Error reading motor2 position: {e}")
+            motor2_steps = 0
         
         # Convert motor steps to sky degrees using gear ratios
         # A X:1 gearbox means X motor revolutions = 1 output revolution = 360° sky
@@ -296,6 +285,9 @@ def _update_current_coords_from_motors() -> None:
         if motor1_delta_deg != 0 or motor2_delta_deg != 0:
             print(f"[tracking] Updated current from motors: HA delta={motor1_delta_deg:.6f}°, Dec delta={motor2_delta_deg:.6f}°")
             print(f"[tracking] New current position: RA={updated_ra:.4f}°, Dec={updated_dec:.4f}°")
+        else:
+            # Log periodically even when stationary to help debug stuck coordinates
+            print(f"[tracking] Motor deltas are zero. Current position: RA={updated_ra:.4f}°, Dec={updated_dec:.4f}° (motor1_steps={motor1_steps}, motor2_steps={motor2_steps})")
     
     except Exception as e:
         print(f"[tracking] Error updating current coords from motors: {e}")
@@ -485,6 +477,7 @@ def _continuous_tracking_loop() -> None:
     sidereal_tracking_active = False
     # Track if we've already logged waiting state (to avoid spam)
     waiting_logged = False
+    coord_update_interval = 0
     
     while _tracking_active:
         try:
@@ -494,6 +487,13 @@ def _continuous_tracking_loop() -> None:
             
             # Update current position from actual motor movements
             _update_current_coords_from_motors()
+            
+            # Log current coordinates periodically for debugging
+            coord_update_interval += 1
+            if coord_update_interval >= 5:  # Log every 5 cycles
+                coords = get_telescope_coords() or {}
+                print(f"[tracking] Periodic status: Current RA={coords.get('right_ascension', 0):.4f}°, Dec={coords.get('declination', 0):.4f}°")
+                coord_update_interval = 0
             
             # Update hour angle to reflect Earth's rotation
             update_hour_angle()
