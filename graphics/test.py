@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
 	sys.path.insert(0, str(ROOT))
 
+from esp32.interfaceESP32 import ESP32Connection
 from graphics.assets_player import (
 	list_remote_assets,
 	remote_storage_info,
@@ -20,8 +21,10 @@ from graphics.assets_player import (
 def clear_all_remote_assets() -> None:
 	"""List all assets on the ESP32 and delete them one by one."""
 	print("Fetching assets from ESP32...")
+	conn = None
 	try:
-		files = list_remote_assets()
+		conn = ESP32Connection()
+		files = list_remote_assets(conn=conn)
 		if not files:
 			print("No assets found on device.")
 			return
@@ -33,16 +36,22 @@ def clear_all_remote_assets() -> None:
 		print("\nDeleting all assets...")
 		for name in sorted(files.keys()):
 			try:
-				delete_remote_asset(name)
+				delete_remote_asset(name, conn=conn)
 				print(f"  ✓ Deleted {name}")
 			except Exception as e:
 				print(f"  ✗ Failed to delete {name}: {e}")
 		
 		# Show final storage info
-		info = remote_storage_info()
+		info = remote_storage_info(conn=conn)
 		print(f"\nFinal storage: {info['used_bytes']} / {info['total_bytes']} bytes used")
 	except Exception as e:
 		print(f"Error: {e}")
+	finally:
+		if conn is not None:
+			try:
+				conn.close()
+			except Exception:
+				pass
 
 
 

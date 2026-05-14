@@ -73,7 +73,7 @@ def list_assets() -> dict[str, Any]:
 	return _load_index()
 
 
-def list_remote_assets(timeout: float = 5.0) -> dict[str, int]:
+def list_remote_assets(timeout: float = 5.0, conn: ESP32Connection | None = None) -> dict[str, int]:
 	"""Query the ESP32 for stored files and return dict of {name: size}.
 
 	Automatically groups GIF frame sequences (e.g., prefix_0000.rgb, prefix_0001.rgb)
@@ -81,7 +81,10 @@ def list_remote_assets(timeout: float = 5.0) -> dict[str, int]:
 	Raises on connection errors.
 	"""
 	import re
-	conn = ESP32Connection()
+	own_conn = False
+	if conn is None:
+		conn = ESP32Connection()
+		own_conn = True
 	display = ESP32Display(conn)
 	try:
 		display.initialize()
@@ -128,27 +131,32 @@ def list_remote_assets(timeout: float = 5.0) -> dict[str, int]:
 				pass
 		return file_dict
 	finally:
-		try:
-			conn.close()
-		except Exception:
-			pass
+		if own_conn:
+			try:
+				conn.close()
+			except Exception:
+				pass
 
 
-def remote_storage_info() -> dict[str, int]:
+def remote_storage_info(conn: ESP32Connection | None = None) -> dict[str, int]:
 	"""Return storage info from ESP32: total_bytes, used_bytes, free_bytes."""
-	conn = ESP32Connection()
+	own_conn = False
+	if conn is None:
+		conn = ESP32Connection()
+		own_conn = True
 	display = ESP32Display(conn)
 	try:
 		display.initialize()
 		return display.storage_info()
 	finally:
-		try:
-			conn.close()
-		except Exception:
-			pass
+		if own_conn:
+			try:
+				conn.close()
+			except Exception:
+				pass
 
 
-def delete_remote_asset(name: str) -> None:
+def delete_remote_asset(name: str, conn: ESP32Connection | None = None) -> None:
 	"""Delete a stored file on the ESP32 by name.
 	
 	For synthetic GIF names (e.g., "test.gif"), deletes all frame files.
@@ -156,7 +164,10 @@ def delete_remote_asset(name: str) -> None:
 	Raises on error.
 	"""
 	import re
-	conn = ESP32Connection()
+	own_conn = False
+	if conn is None:
+		conn = ESP32Connection()
+		own_conn = True
 	display = ESP32Display(conn)
 	try:
 		display.initialize()
@@ -164,12 +175,10 @@ def delete_remote_asset(name: str) -> None:
 		# Check if this is a synthetic GIF name (ends with .gif)
 		if name.endswith(".gif"):
 			prefix = name[:-4]  # Remove .gif extension
-			# Query device for all files matching this prefix pattern
+			# Delete only the frame files that exist on the device right now.
+			frame_pattern = re.compile(rf'^{re.escape(prefix)}_\d{{4}}\.rgb$')
 			resp = display.list_files()
 			files = resp.get("files", [])
-			
-			# Find all frame files matching this prefix. Normalize leading '/'.
-			frame_pattern = re.compile(f'^{re.escape(prefix)}_\\d{{4}}\\.rgb$')
 			matching_files = []
 			for f in files:
 				fname = f.get("name", "")
@@ -184,14 +193,16 @@ def delete_remote_asset(name: str) -> None:
 			# Delete each frame file
 			for frame_file in matching_files:
 				display.delete_file(frame_file)
+				time.sleep(0.02)
 		else:
 			# Regular file - delete directly
 			display.delete_file(name)
 	finally:
-		try:
-			conn.close()
-		except Exception:
-			pass
+		if own_conn:
+			try:
+				conn.close()
+			except Exception:
+				pass
 
 
 def _asset_is_current(asset_path: Path, entry: dict[str, Any]) -> bool:

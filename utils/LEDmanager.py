@@ -141,8 +141,9 @@ class LEDManager:
 	def set_ui_connected(self, connected: bool) -> None:
 		with self._lock:
 			self._state.blue_on_when_idle = bool(connected)
-			# Defer the actual LED update to the normal refresh path so startup
-			# does not immediately issue another burst of serial LED commands.
+			# Only touch the blue indicator here; the rest of the state is driven
+			# by the normal refresh path.
+			self._set_channel("blue", "on" if connected else "off")
 
 	def set_movement(self, mode: Optional[str]) -> None:
 		mode = mode.lower() if isinstance(mode, str) else None
