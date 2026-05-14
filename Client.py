@@ -12,6 +12,7 @@ from utils.config_state import (
     ensure_state_files,
     get_missing_required_client_fields,
 )
+from utils.LEDmanager import get_led_manager
 
 
 def _validate_required_client_config() -> None:
@@ -101,4 +102,8 @@ if __name__ == "__main__":
         run(websocketClient(cfg))
     except KeyboardInterrupt:
         print("[global] KeyboardInterrupt received, exiting and releasing camera...")
+        try:
+            get_led_manager().shutdown()
+        except Exception:
+            pass
         cleanup_camera()

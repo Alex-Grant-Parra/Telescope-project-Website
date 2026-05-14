@@ -492,8 +492,13 @@ def cleanup_camera():
 def handle_exit(signum, frame):
     # Handle exit signals
     print(f"[signal] Received signal {signum}, exiting and releasing camera...")
+    try:
+        leds = get_led_manager()
+        leds.shutdown()
+    except Exception:
+        pass
     cleanup_camera()
-    sys._exit(0)
+    os._exit(0)
 
 def setup_client_config():
     # Interactive setup for client configuration
@@ -572,5 +577,8 @@ async def websocketClient(cfg: dict = None):
     except Exception as e:
         print(f"[main] Unexpected exception: {e}")
     finally:
+        try:
+            leds.shutdown()
+        except Exception:
+            pass
         cleanup_camera()
-        leds.set_ui_connected(False)

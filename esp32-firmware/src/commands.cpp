@@ -22,30 +22,8 @@ void sendOkEmpty() {
 }
 
 void sendOkLedStatus(const LedChannel& led) {
-  const char* ledName = led.name != nullptr ? led.name : "";
-  const char* stateText = led.state ? "true" : "false";
-  const char* blinkText = led.blinkEnabled ? "true" : "false";
-  char response[160];
-  int written = snprintf(
-    response,
-    sizeof(response),
-    "{\"status\":\"ok\",\"data\":{\"led\":\"%s\",\"pin\":%d,\"state\":%s,\"blink\":%s,\"blink_interval_ms\":%lu}}",
-    ledName,
-    led.pin,
-    stateText,
-    blinkText,
-    static_cast<unsigned long>(led.blinkIntervalMs)
-  );
-  if (written < 0) {
-    sendError("LED status serialization failed");
-    return;
-  }
-  size_t length = static_cast<size_t>(written);
-  if (length >= sizeof(response)) {
-    length = sizeof(response) - 1;
-  }
-  Serial.write(reinterpret_cast<const uint8_t*>(response), length);
-  Serial.write('\n');
+  (void)led;
+  sendOkEmpty();
 }
 
 void sendOkStatus(const String& motorId, Motor* motor) {

@@ -541,7 +541,7 @@ def sync_assets_on_connect(conn: ESP32Connection | None = None) -> bool:
 					try:
 						time.sleep(0.5)
 						led.blue.off()
-						print("[Assets] Blue LED turned off")
+						print("[Assets] Blue LED flashing stopped")
 						time.sleep(0.5)
 					except Exception:
 						pass

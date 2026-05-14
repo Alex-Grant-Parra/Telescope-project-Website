@@ -145,6 +145,17 @@ class LEDManager:
 			# by the normal refresh path.
 			self._set_channel("blue", "on" if connected else "off")
 
+	def shutdown(self) -> None:
+		with self._lock:
+			self._state.blue_on_when_idle = False
+			channel = getattr(self._leds, "blue", None) if self._leds is not None else None
+			if channel is None:
+				return
+			try:
+				channel.off()
+			except Exception:
+				pass
+
 	def set_movement(self, mode: Optional[str]) -> None:
 		mode = mode.lower() if isinstance(mode, str) else None
 		if mode not in {None, "slewing", "homing"}:
