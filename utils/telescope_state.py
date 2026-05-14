@@ -18,6 +18,21 @@ def _write_state_to_disk(state_update: Dict[str, Any]) -> None:
     latest = load_runtime_state() or {}
     merged = latest.copy()
     merged.update(state_update)
+
+    # Preserve the last known telescope coordinates across client restarts and
+    # incidental state writes. Explicit manual resets still win.
+    if state_update.get("source") != "manual_reset":
+        for key in (
+            "current_right_ascension",
+            "current_declination",
+            "target_right_ascension",
+            "target_declination",
+        ):
+            if key in state_update and float(state_update.get(key, 0.0)) == 0.0:
+                existing_value = latest.get(key)
+                if existing_value not in (None, 0, 0.0):
+                    merged[key] = existing_value
+
     save_runtime_state(merged)
     _STATE_CACHE = merged
 

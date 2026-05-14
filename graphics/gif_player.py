@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
 
 from esp32.interfaceESP32 import ESP32Connection, ESP32Display
 from graphics import gif_storage
+from utils.esp32_state import esp32_state
 from PIL import Image, ImageSequence
 
 
@@ -52,11 +53,11 @@ def upload_and_play_gif(
 	
 	Returns: UUID of the GIF
 	"""
-	conn = None
-	display = None
 	try:
 		print("Connecting to ESP32...")
-		conn = ESP32Connection()
+		conn = esp32_state.ensure_connection()
+		if not conn:
+			raise RuntimeError("Cannot connect to ESP32")
 		display = ESP32Display(conn)
 		display.initialize()
 		
@@ -116,12 +117,9 @@ def upload_and_play_gif(
 						except Exception:
 							pass
 						time.sleep(0.5)
-						conn = ESP32Connection()
-						display = ESP32Display(conn)
-						display.initialize()
-				
-				if last_exc is not None:
-					raise last_exc
+					conn = esp32_state.ensure_connection()
+					if not conn:
+						raise RuntimeError("Cannot reconnect to ESP32")
 				
 				frames.append(name)
 				frame_idx += 1
@@ -168,7 +166,9 @@ def play_stored_gif_by_uuid(uuid_str: str) -> None:
 		print(f"Playing GIF (UUID: {uuid_str})")
 		print(f"  Path: {gif_info['original_path']}")
 		
-		conn = ESP32Connection()
+		conn = esp32_state.ensure_connection()
+		if not conn:
+			raise RuntimeError("Cannot connect to ESP32")
 		display = ESP32Display(conn)
 		display.initialize()
 		

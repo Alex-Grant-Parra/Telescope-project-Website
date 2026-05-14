@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 	sys.path.insert(0, str(ROOT))
 
 from esp32.interfaceESP32 import ESP32Connection, ESP32Display
+from utils.esp32_state import esp32_state
 from PIL import Image
 
 
@@ -69,7 +70,9 @@ def display_image(
 		if compressed:
 			print(f"  Compression: level {compress_level}")
 		
-		conn = ESP32Connection()
+		conn = esp32_state.ensure_connection()
+		if not conn:
+			raise RuntimeError("Cannot connect to ESP32")
 		display = ESP32Display(conn)
 		display.initialize()
 		
@@ -86,13 +89,11 @@ def display_image(
 			print(f"  Uncompressed size: {len(rgb565_data)} bytes")
 		
 		print("✓ Image displayed!")
-		
+	except Exception as e:
+		print(f"Error displaying image: {e}")
+		raise
 	finally:
-		if conn is not None:
-			try:
-				conn.close()
-			except Exception:
-				pass
+		pass  # Connection managed by esp32_state singleton
 
 
 def clear_display(color: str = "000000") -> None:
@@ -106,17 +107,16 @@ def clear_display(color: str = "000000") -> None:
 		from graphics.image_display import clear_display
 		clear_display("FFFFFF")  # Clear with white
 	"""
-	conn = None
-	display = None
 	try:
-		conn = ESP32Connection()
+		conn = esp32_state.ensure_connection()
+		if not conn:
+			raise RuntimeError("Cannot connect to ESP32")
 		display = ESP32Display(conn)
 		display.initialize()
 		display.clear(color)
 		print(f"✓ Display cleared with color #{color}")
+	except Exception as e:
+		print(f"Error clearing display: {e}")
+		raise
 	finally:
-		if conn is not None:
-			try:
-				conn.close()
-			except Exception:
-				pass
+		pass  # Connection managed by esp32_state singleton

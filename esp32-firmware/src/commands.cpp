@@ -27,17 +27,16 @@ void sendOkLedStatus(const LedChannel& led) {
 }
 
 void sendOkStatus(const String& motorId, Motor* motor) {
-  JsonDocument resp;
-  resp["status"] = "ok";
-  JsonObject data = resp["data"].to<JsonObject>();
-  data["motor"] = motorId;
-  data["enabled"] = motor->isEnabled();
-  data["moving"] = motor->isMoving();
-  data["step_delay_us"] = motor->getStepDelayUs();
-  data["steps_per_rev"] = motor->getStepsPerRevolution();
-  data["position"] = motor->getPosition();
-  serializeJson(resp, Serial);
-  Serial.println();
+  // Keep the status payload intentionally small so it is less likely to be
+  // truncated or corrupted over the serial link.
+  Serial.print("{\"status\":\"ok\",\"data\":{");
+  Serial.print("\"motor\":\"");
+  Serial.print(motorId);
+  Serial.print("\",\"enabled\":");
+  Serial.print(motor->isEnabled() ? "true" : "false");
+  Serial.print(",\"moving\":");
+  Serial.print(motor->isMoving() ? "true" : "false");
+  Serial.print("}}\n");
 }
 
 void sendOkMotorList() {
@@ -667,13 +666,13 @@ static void handleMotorMotionCommand(const String& cmd, const JsonDocument& req,
     String motorId = req["motor"] | "";
     sendOkStatus(motorId, motor);
   } else if (cmd == "get_position") {
-    JsonDocument resp;
-    resp["status"] = "ok";
-    JsonObject data = resp["data"].to<JsonObject>();
-    data["motor"] = req["motor"];
-    data["position"] = motor->getPosition();
-    serializeJson(resp, Serial);
-    Serial.println();
+    String motorId = req["motor"] | "";
+    Serial.print("{\"status\":\"ok\",\"data\":{");
+    Serial.print("\"motor\":\"");
+    Serial.print(motorId);
+    Serial.print("\",\"position\":");
+    Serial.print(motor->getPosition());
+    Serial.print("}}\n");
   } else if (cmd == "reset_position") {
     motor->resetPosition();
     sendOkEmpty();

@@ -23,6 +23,7 @@ if str(ROOT) not in sys.path:
 
 from esp32.interfaceESP32 import ESP32Connection, ESP32Display
 from graphics.image_display import image_to_rgb565_bytes
+from utils.esp32_state import esp32_state
 from PIL import Image, ImageSequence
 
 
@@ -81,10 +82,10 @@ def list_remote_assets(timeout: float = 5.0, conn: ESP32Connection | None = None
 	Raises on connection errors.
 	"""
 	import re
-	own_conn = False
 	if conn is None:
-		conn = ESP32Connection()
-		own_conn = True
+		conn = esp32_state.ensure_connection()
+		if not conn:
+			raise RuntimeError("Cannot connect to ESP32")
 	display = ESP32Display(conn)
 	try:
 		display.initialize()
@@ -130,30 +131,20 @@ def list_remote_assets(timeout: float = 5.0, conn: ESP32Connection | None = None
 			except Exception:
 				pass
 		return file_dict
-	finally:
-		if own_conn:
-			try:
-				conn.close()
-			except Exception:
-				pass
+	except Exception as e:
+		print(f"[Assets] Error listing remote assets: {e}")
+		raise
 
 
 def remote_storage_info(conn: ESP32Connection | None = None) -> dict[str, int]:
 	"""Return storage info from ESP32: total_bytes, used_bytes, free_bytes."""
-	own_conn = False
 	if conn is None:
-		conn = ESP32Connection()
-		own_conn = True
+		conn = esp32_state.ensure_connection()
+		if not conn:
+			raise RuntimeError("Cannot connect to ESP32")
 	display = ESP32Display(conn)
-	try:
-		display.initialize()
-		return display.storage_info()
-	finally:
-		if own_conn:
-			try:
-				conn.close()
-			except Exception:
-				pass
+	display.initialize()
+	return display.storage_info()
 
 
 def delete_remote_asset(name: str, conn: ESP32Connection | None = None) -> None:
@@ -164,10 +155,10 @@ def delete_remote_asset(name: str, conn: ESP32Connection | None = None) -> None:
 	Raises on error.
 	"""
 	import re
-	own_conn = False
 	if conn is None:
-		conn = ESP32Connection()
-		own_conn = True
+		conn = esp32_state.ensure_connection()
+		if not conn:
+			raise RuntimeError("Cannot connect to ESP32")
 	display = ESP32Display(conn)
 	try:
 		display.initialize()
@@ -197,12 +188,9 @@ def delete_remote_asset(name: str, conn: ESP32Connection | None = None) -> None:
 		else:
 			# Regular file - delete directly
 			display.delete_file(name)
-	finally:
-		if own_conn:
-			try:
-				conn.close()
-			except Exception:
-				pass
+	except Exception as e:
+		print(f"[Assets] Error deleting remote asset '{name}': {e}")
+		raise
 
 
 def _asset_is_current(asset_path: Path, entry: dict[str, Any]) -> bool:
@@ -228,12 +216,11 @@ def _upload_with_retries(
 				break
 			print(f"    Upload failed (attempt {attempt}/{upload_retries}): {exc}")
 			print("    Reconnecting and retrying...")
-			try:
-				conn.close()
-			except Exception:
-				pass
+
 			time.sleep(0.5)
-			conn = ESP32Connection()
+			conn = esp32_state.ensure_connection()
+			if not conn:
+				raise RuntimeError("Cannot reconnect to ESP32")
 			display = ESP32Display(conn)
 			display.initialize()
 	if last_exc is not None:
@@ -321,15 +308,13 @@ def sync_assets_folder(
 
 	index = _load_index()
 	results: dict[str, Any] = {}
-	own_conn = False
-	display = None
-
 	try:
-		# Use provided connection or create a new one
+		# Use provided connection or get from singleton
 		if conn is None:
 			print("Connecting to ESP32...")
-			conn = ESP32Connection()
-			own_conn = True
+			conn = esp32_state.ensure_connection()
+			if not conn:
+				raise RuntimeError("Cannot connect to ESP32")
 		
 		display = ESP32Display(conn)
 		display.initialize()
@@ -384,13 +369,9 @@ def sync_assets_folder(
 
 		print(f"Prepared {len(results)} asset(s).")
 		return results
-	finally:
-		# Only close connection if we created it, don't close provided ones
-		if own_conn and conn is not None:
-			try:
-				conn.close()
-			except Exception:
-				pass
+	except Exception as e:
+		print(f"[Assets] Error syncing assets: {e}")
+		raise
 
 
 def play_asset(
@@ -424,11 +405,11 @@ def play_asset(
 	if entry is None:
 		raise FileNotFoundError(f"Asset not found in cache: {asset_key}")
 
-	conn = None
-	display = None
 	try:
 		print(f"Playing {asset_key}...")
-		conn = ESP32Connection()
+		conn = esp32_state.ensure_connection()
+		if not conn:
+			raise RuntimeError("Cannot connect to ESP32")
 		display = ESP32Display(conn)
 		display.initialize()
 		display.set_backlight(255)
@@ -489,11 +470,7 @@ def play_asset(
 
 		print("Done.")
 	finally:
-		if conn is not None:
-			try:
-				conn.close()
-			except Exception:
-				pass
+		pass  # Connection managed by esp32_state singleton
 
 
 def sync_assets_on_connect(conn: ESP32Connection | None = None) -> bool:
@@ -510,14 +487,14 @@ def sync_assets_on_connect(conn: ESP32Connection | None = None) -> bool:
 	"""
 	def _sync_with_led(existing_conn: ESP32Connection | None) -> None:
 		conn_to_use = existing_conn
-		own_conn = False
 		led = None
 		try:
-			# Only create a new connection if one wasn't provided
+			# Get connection from singleton
 			if conn_to_use is None:
 				print("[Assets] Connecting to ESP32 for asset sync...")
-				conn_to_use = ESP32Connection()
-				own_conn = True
+				conn_to_use = esp32_state.ensure_connection()
+				if not conn_to_use:
+					raise RuntimeError("Cannot connect to ESP32")
 			
 			# Import here to avoid circular dependency
 			from esp32.interfaceESP32 import ESP32LED
@@ -553,15 +530,9 @@ def sync_assets_on_connect(conn: ESP32Connection | None = None) -> bool:
 					led.blue.off()
 				except Exception:
 					pass
-		finally:
-			# Only close the connection if we created it
-			if own_conn and conn_to_use is not None:
-				try:
-					conn_to_use.close()
-				except Exception:
-					pass
 	
 	try:
+		# Connection managed by esp32_state singleton
 		_sync_with_led(conn)
 		return True
 	except Exception as e:

@@ -44,13 +44,12 @@ def _connect_and_sync_esp32() -> None:
     """
     try:
         print("[startup] Attempting to connect to ESP32...")
-        from esp32.interfaceESP32 import ESP32Connection
         
-        # Try direct connection first with more detailed error logging
+        # Get or establish connection using centralized singleton
         try:
-            conn = ESP32Connection()
-            print(f"[startup] ESP32 connected successfully on {conn.cfg.port}")
-            esp32_state.set_connection(conn)
+            conn = esp32_state.ensure_connection()
+            if conn:
+                print(f"[startup] ESP32 connected successfully on {conn.cfg.port}")
             
             # Now sync assets using the established connection (runs in background)
             try:
