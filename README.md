@@ -11,13 +11,18 @@ It combines:
 ## What This Repo Contains
 
 - Main server: Server.py
+- Flask support code: app/ and config/
 - Controllers (Flask blueprints): controllers/
 - Realtime services: app/WebsocketServer.py
 - Data models and database layer: models/
-- Astronomy logic and coordinate tools: algorithms/
+- Astronomy and planetary models: Astrophysics/
 - Security modules: security/
 - Frontend templates and assets: templates/ and static/
+- Project docs and reference material: docs/
 - Operations scripts: scripts/
+- Deployment and runtime files: infrastructure/ and instance/
+- Utilities and helper tools: utility/ and tools/
+- Downloads, uploads, and captured images: downloads/ and camera_photos/
 
 ## Quick Start
 
@@ -81,6 +86,13 @@ Default HTTP port is 5000.
 - WS_IP: WebSocket bind IP (default 0.0.0.0)
 - WS_PING_INTERVAL, WS_PING_TIMEOUT: WebSocket keepalive settings
 - TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY: CAPTCHA support
+
+## Planetary Models
+
+ASTRA includes a few different planetary models under the Astrophysics folder, each with varying precision.
+- V1_Keplarian is a traditional keplarian algorithm
+- V2_VSOP87A is an iterative solution, taking the sum of a large number of orbital parameters
+- V3_Helios is a custom N-body engine, with a local integrator and engine, with initial parameters provided by JPL SPICE data
 
 ## Notes
 
