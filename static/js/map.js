@@ -16,7 +16,7 @@
     const openMeteoAttribution = (config.openMeteoAttribution || "").trim() ||
         "Weather data &copy; Open-Meteo.com";
     const openMeteoBaseUrl = openMeteoTileUrl ||
-        "https://map-tiles.open-meteo.com/data_spatial/ncep_gfs025/latest.json?time_step=current_time_1H";
+        "https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json?time_step=current_time_1H";
     const openMeteoMetaUrl = (() => {
         try {
             const url = new URL(openMeteoBaseUrl);
@@ -441,11 +441,12 @@
                 return null;
             }
 
-            const url = new URL(openMeteoBaseUrl);
-            url.searchParams.set("time_step", weatherTimeStep);
-            url.searchParams.set("variable", variable);
-
-            return leafletAdapter.createTileLayer(`om://${url.toString()}`, weatherLayerOptions);
+            if (!openMeteoBaseUrl) {
+                return null;
+            }
+            const joiner = openMeteoBaseUrl.includes("?") ? "&" : "?";
+            const url = `om://${openMeteoBaseUrl}${joiner}time_step=${encodeURIComponent(weatherTimeStep)}&variable=${encodeURIComponent(variable)}`;
+            return leafletAdapter.createTileLayer(url, weatherLayerOptions);
         };
 
         const refreshWeatherLayers = () => {
