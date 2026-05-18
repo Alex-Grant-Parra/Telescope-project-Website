@@ -12,3 +12,4 @@ ujson
 requests
 waitress
 pillow
+spiceypy

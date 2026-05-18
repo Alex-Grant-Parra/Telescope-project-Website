@@ -48,15 +48,25 @@ SUSPICIOUS_PATTERNS = {
     ],
     'user_agents': [
         'sqlmap', 'nikto', 'nmap', 'masscan', 'zap', 'burp',
-        'crawler', 'bot', 'spider', 'scanner', 'exploit'
+        'scanner', 'exploit', 'nessus'
     ]
 }
 
+# Rate limit cleanup configuration
+RATE_LIMIT_CONFIG = {
+    'cleanup_interval': 300,  # Clean old entries every 5 minutes
+    'tracking_window': 60,    # Track requests in 1-minute windows
+    'suspicious_decay_time': 3600,  # Reset suspicious count after 1 hour of no suspicious requests
+}
+
 # Rate limiting (requests per IP per minute)
+# Generous limits for normal users to avoid false positives
+# Stricter limits for clearly malicious behavior
 RATE_LIMITS = {
-    'default': 60,      # 60 requests per minute for normal users
-    'suspicious': 10,   # 10 requests per minute for suspicious IPs
-    'blocked': 0        # 0 requests for blocked IPs
+    'default': 120,         # 120 requests per minute for normal users (2 per second)
+    'suspicious': 15,       # 15 requests per minute for suspicious IPs
+    'aggressive_attack': 5, # 5 requests per minute after multiple malicious indicators
+    'blocked': 0            # 0 requests for blocked IPs
 }
 
 # Security logging

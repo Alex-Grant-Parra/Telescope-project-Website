@@ -314,6 +314,7 @@ generate_routes_file()
 from models.user import User
 from models.trusted_device import TrustedDevice  # Import to register the model
 from models.logging import RequestLog, SecurityLog, WebsocketSecurityLog  # Import to register log tables
+from models.client_release import ClientReleaseSubmission  # Import to register release review model
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -469,6 +470,14 @@ def wikiRedirect():
 # Exempt client registration endpoint from CSRF checks (used by non-browser clients)
 try:
     csrf.exempt(register_client)
+except Exception:
+    pass
+
+# Exempt developer release upload API endpoint from CSRF checks.
+try:
+    upload_release_view = app.view_functions.get('downloads.upload_client_release')
+    if upload_release_view:
+        csrf.exempt(upload_release_view)
 except Exception:
     pass
 

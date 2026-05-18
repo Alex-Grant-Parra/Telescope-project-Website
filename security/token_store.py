@@ -88,9 +88,8 @@ def revoke_token_by_id(token_id):
     rec = get_token_by_id(token_id)
     if not rec:
         return None
-    rec.token_hash = None
-    rec.token_prefix = None
-    rec.token_created_at = None
+    # Delete the entire telescope record instead of just clearing the token
+    db.session.delete(rec)
     db.session.commit()
     return rec
 

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Release Review Queue{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Client Release Review Queue</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} mt-2">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="card mt-3">
+        <div class="card-header bg-dark text-white">Queued Releases</div>
+        <div class="card-body">
+            {% if submissions %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Version</th>
+                            <th>Uploaded By</th>
+                            <th>Original File</th>
+                            <th>Status</th>
+                            <th>Uploaded</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in submissions %}
+                        <tr>
+                            <td>{{ s.id }}</td>
+                            <td><code>{{ s.version }}</code></td>
+                            <td>{{ s.uploaded_by_name or 'Unknown' }}</td>
+                            <td>{{ s.original_filename }}</td>
+                            <td>
+                                {% if s.status == 'pending' %}
+                                    <span class="badge bg-secondary">Pending</span>
+                                {% elif s.status == 'in_progress' %}
+                                    <span class="badge bg-info text-dark">In Progress</span>
+                                {% elif s.status == 'approved' %}
+                                    <span class="badge bg-success">Approved</span>
+                                {% elif s.status == 'deleted' %}
+                                    <span class="badge bg-danger">Deleted</span>
+                                {% else %}
+                                    <span class="badge bg-light text-dark">{{ s.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ s.uploaded_at.strftime('%Y-%m-%d %H:%M:%S') if s.uploaded_at else 'Unknown' }}</td>
+                            <td class="d-flex flex-wrap gap-1">
+                                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.admin_release_download', submission_id=s.id) }}">Download</a>
+                                <form method="post" action="{{ url_for('admin.admin_release_mark_in_progress', submission_id=s.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <button class="btn btn-sm btn-outline-info" {% if s.status in ['approved', 'deleted'] %}disabled{% endif %}>Mark In Progress</button>
+                                </form>
+                                <form method="post" action="{{ url_for('admin.admin_release_approve', submission_id=s.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <button class="btn btn-sm btn-outline-success" {% if s.status in ['approved', 'deleted'] %}disabled{% endif %}>Approve</button>
+                                </form>
+                                <form method="post" action="{{ url_for('admin.admin_release_delete', submission_id=s.id) }}" onsubmit="return confirm('Delete this release from server storage?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <button class="btn btn-sm btn-outline-danger" {% if s.status == 'deleted' %}disabled{% endif %}>Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <p class="text-muted mb-0">No release submissions yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

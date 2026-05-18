@@ -208,21 +208,20 @@ class SecurityMiddleware:
         
         return suspicious_indicators
     
-    def _check_rate_limit(self, client_ip: str, is_suspicious: bool = False) -> bool:
+    def _check_rate_limit(self, client_ip: str, is_suspicious: bool = False, is_aggressive: bool = False) -> bool:
         # Check whether client has exceeded rate limit; return True when blocked
-        from .config import RATE_LIMITS
-        
-        # Rate limiting disabled for normal users
-        if not is_suspicious:
-            return False  # Allow all requests for normal users
+        from .config import RATE_LIMITS, RATE_LIMIT_CONFIG
         
         now = datetime.now()
-        window = timedelta(minutes=1)
+        window = timedelta(seconds=RATE_LIMIT_CONFIG.get('tracking_window', 60))
         
         # Determine limit based on request type
-        if is_suspicious:
-            limit = RATE_LIMITS.get('suspicious', 10)
-        # else:
+        if is_aggressive:
+            limit = RATE_LIMITS.get('aggressive_attack', 5)
+        elif is_suspicious:
+            limit = RATE_LIMITS.get('suspicious', 15)
+        else:
+            limit = RATE_LIMITS.get('default', 120)  # Generous for normal users
         
         # Initialize tracking for this IP
         if client_ip not in self.request_history:
@@ -267,42 +266,55 @@ class SecurityMiddleware:
         
         # Check for suspicious activity
         suspicious_indicators = self._is_suspicious_request()
+        is_aggressive = False  # Track if this is an aggressive attack pattern
+        
         if suspicious_indicators:
             self._log_security_event('suspicious_request', suspicious_indicators)
             
             # Track suspicious requests from this IP
             if client_ip not in self.suspicious_request_counts:
-                self.suspicious_request_counts[client_ip] = 0
-            self.suspicious_request_counts[client_ip] += 1
+                self.suspicious_request_counts[client_ip] = {'count': 0, 'timestamp': datetime.now()}
+            
+            # Reset count if it's been over an hour since last suspicious request
+            from .config import RATE_LIMIT_CONFIG
+            decay_time = timedelta(seconds=RATE_LIMIT_CONFIG.get('suspicious_decay_time', 3600))
+            if datetime.now() - self.suspicious_request_counts[client_ip]['timestamp'] > decay_time:
+                self.suspicious_request_counts[client_ip]['count'] = 0
+            
+            self.suspicious_request_counts[client_ip]['count'] += 1
+            self.suspicious_request_counts[client_ip]['timestamp'] = datetime.now()
             
             high_risk_indicators = ['suspicious_path', 'unusual_method']
             if any(indicator in suspicious_indicators for indicator in high_risk_indicators):
                 # Check if this is part of a scanning/enumeration attack
-                if self.suspicious_request_counts[client_ip] >= 3:
+                if self.suspicious_request_counts[client_ip]['count'] >= 3:
                     # Auto-blacklist aggressive attackers after 3+ suspicious requests
                     self.blacklist.add_manual_ip(client_ip)
+                    is_aggressive = True
                     
                     self._log_security_event('auto_blacklisted', {
                         'reason': 'aggressive_attack_pattern',
-                        'suspicious_count': self.suspicious_request_counts[client_ip],
+                        'suspicious_count': self.suspicious_request_counts[client_ip]['count'],
                         'indicators': suspicious_indicators
                     })
                     
                     abort(403)
             
             # Rate limit suspicious requests more aggressively
-            if self._check_rate_limit(client_ip, is_suspicious=True):
+            if self._check_rate_limit(client_ip, is_suspicious=True, is_aggressive=is_aggressive):
                 self._log_security_event('rate_limit_exceeded', {
                     'reason': 'suspicious_request_rate',
-                    'client_ip': client_ip
+                    'client_ip': client_ip,
+                    'request_count': len(self.request_history.get(client_ip, []))
                 })
                 abort(429)  # Too Many Requests
         else:
-            # Normal rate limiting for legitimate requests
+            # Normal rate limiting for legitimate requests - now re-enabled!
             if self._check_rate_limit(client_ip, is_suspicious=False):
                 self._log_security_event('rate_limit_exceeded', {
                     'reason': 'normal_request_rate',
-                    'client_ip': client_ip
+                    'client_ip': client_ip,
+                    'request_count': len(self.request_history.get(client_ip, []))
                 })
                 abort(429)  # Too Many Requests
     

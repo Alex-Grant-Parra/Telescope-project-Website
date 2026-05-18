@@ -11,8 +11,7 @@ config.yml
 .vscode
 static/videos
 
-algorithms/__pycache__
-
+Astrophysics/__pycache__
 controllers/__pycache__
 models/__pycache__
 plateSolver/__pycache__
@@ -27,3 +26,12 @@ instance/uploads/contact/
 instance/data.db
 
 docs
+
+downloads
+
+de440.bsp
+initial_conditions.json
+
+Astrophysics/V3_Helios/tests/
+!Astrophysics/V3_Helios/tests/astra_de440_compare.py
+!Astrophysics/V3_Helios/tests/plot_diagnostics.py

@@ -5,8 +5,8 @@ from models.tables import HDSTARtable, IndexTable, NGCtable
 from app.db import db
 from sqlalchemy import func
 
-from algorithms.convert import convert
-from algorithms.astroTools import getAllCelestialData
+from Astrophysics.V1_Keplarian.convert import convert
+from Astrophysics.V1_Keplarian.astroTools import getAllCelestialData
 from app.telescopeLink import Telescope
 
 star_map_bp = Blueprint("star_map", __name__)
@@ -494,13 +494,29 @@ def get_telescope_position():
             if "result" in coords:
                 result = coords["result"]
                 if isinstance(result, dict):
-                    ra = result.get("current_right_ascension") or result.get("ra")
-                    dec = result.get("current_declination") or result.get("dec")
+                    if "current_right_ascension" in result:
+                        ra = result.get("current_right_ascension")
+                    elif "ra" in result:
+                        ra = result.get("ra")
+
+                    if "current_declination" in result:
+                        dec = result.get("current_declination")
+                    elif "dec" in result:
+                        dec = result.get("dec")
             
             # Fall back to top-level keys
             if ra is None or dec is None:
-                ra = ra or coords.get("current_right_ascension") or coords.get("ra")
-                dec = dec or coords.get("current_declination") or coords.get("dec")
+                if ra is None:
+                    if "current_right_ascension" in coords:
+                        ra = coords.get("current_right_ascension")
+                    elif "ra" in coords:
+                        ra = coords.get("ra")
+
+                if dec is None:
+                    if "current_declination" in coords:
+                        dec = coords.get("current_declination")
+                    elif "dec" in coords:
+                        dec = coords.get("dec")
         
         print(f"[TELESCOPE] Extracted RA: {ra}, DEC: {dec}", flush=True)
         

@@ -45,8 +45,8 @@ def sync_tokens():
             client_type = info.get('client_type', 'observer')
             name = info.get('name', 'Unknown')
             
-            # Only process telescope tokens
-            if client_type != 'telescope':
+            # Process telescope-capable tokens
+            if client_type not in {'telescope', 'developer'}:
                 print(f"⊘ Skipping '{name}' (type: {client_type})")
                 telescopes_skipped += 1
                 continue

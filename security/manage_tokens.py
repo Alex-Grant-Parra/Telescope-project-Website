@@ -40,7 +40,7 @@ def add_token(name, client_type="observer", telescope_type=None):
     with _with_app_context():
         token, _ = create_token_record(name, client_type)
     
-    if client_type == "telescope":
+    if client_type in {"telescope", "developer"}:
         try:
             from models.tables import Telescope
             from Server import app
@@ -110,12 +110,12 @@ def main():
                 print("Name cannot be empty.")
                 continue
             
-            client_type = input("Enter client type (telescope/observer) [observer]: ").strip().lower()
-            if client_type not in ["telescope", "observer"]:
+            client_type = input("Enter client type (telescope/developer/observer) [observer]: ").strip().lower()
+            if client_type not in ["telescope", "developer", "observer"]:
                 client_type = "observer"
             
             telescope_type = None
-            if client_type == "telescope":
+            if client_type in {"telescope", "developer"}:
                 telescope_type = input("Enter telescope type/model (optional): ").strip()
                 if not telescope_type:
                     telescope_type = None

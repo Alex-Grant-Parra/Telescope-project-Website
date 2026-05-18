@@ -1,11 +1,15 @@
 import os
+import secrets
 from datetime import datetime
-from flask import Blueprint, render_template, abort, send_file
+from flask import Blueprint, render_template, abort, send_file, request, jsonify
 from werkzeug.utils import secure_filename
+from security.token_store import verify_token
+from models.client_release import ClientReleaseSubmission
 
 downloads_bp = Blueprint("downloads", __name__)
 
 DOWNLOADS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "downloads"))
+RELEASE_CANDIDATE_DIR = ClientReleaseSubmission.candidate_dir()
 
 
 def format_bytes(num_bytes):
@@ -70,6 +74,33 @@ def resolve_version_file(version):
     return None, None
 
 
+def _extract_api_token_from_request():
+    auth_header = (request.headers.get("Authorization") or "").strip()
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip()
+
+    header_token = (request.headers.get("X-API-Token") or "").strip()
+    if header_token:
+        return header_token
+
+    body_token = (request.form.get("token") or "").strip()
+    if body_token:
+        return body_token
+
+    return None
+
+
+def _normalize_version(raw_version, fallback_filename):
+    base = (raw_version or "").strip()
+    if not base:
+        base = os.path.splitext(fallback_filename)[0]
+
+    safe = secure_filename(base)
+    if not safe:
+        return None
+    return safe
+
+
 @downloads_bp.route("/downloads")
 def downloads_home():
     versions = list_zip_versions()
@@ -95,3 +126,48 @@ def downloads_version(version):
     if not path:
         abort(404)
     return send_file(path, as_attachment=True, download_name=filename)
+
+
+@downloads_bp.route("/api/developer/releases/upload", methods=["POST"])
+def upload_client_release():
+    token = _extract_api_token_from_request()
+    rec, reason = verify_token(token)
+    if not rec:
+        return jsonify({"status": "error", "message": f"Unauthorized: {reason or 'invalid token'}"}), 403
+
+    if (rec.client_type or "").strip().lower() != "developer":
+        return jsonify({"status": "error", "message": "Developer telescope token required."}), 403
+
+    release_file = request.files.get("release_file") or request.files.get("file")
+    if not release_file:
+        return jsonify({"status": "error", "message": "Missing release_file upload."}), 400
+
+    original_filename = secure_filename(release_file.filename or "")
+    if not original_filename or not original_filename.lower().endswith(".zip"):
+        return jsonify({"status": "error", "message": "Only .zip client releases are accepted."}), 400
+
+    version = _normalize_version(request.form.get("version"), original_filename)
+    if not version:
+        return jsonify({"status": "error", "message": "Invalid version value."}), 400
+
+    os.makedirs(RELEASE_CANDIDATE_DIR, exist_ok=True)
+    unique_name = f"{version}__{int(datetime.utcnow().timestamp())}_{secrets.token_hex(4)}.zip"
+    save_path = os.path.join(RELEASE_CANDIDATE_DIR, unique_name)
+    release_file.save(save_path)
+
+    submission = ClientReleaseSubmission.create_submission(
+        version=version,
+        original_filename=original_filename,
+        stored_filename=unique_name,
+        telescope_id=rec.id,
+        telescope_name=rec.name,
+    )
+
+    return jsonify(
+        {
+            "status": "success",
+            "message": "Release uploaded and queued for admin review.",
+            "submission_id": submission.id,
+            "version": submission.version,
+        }
+    ), 201

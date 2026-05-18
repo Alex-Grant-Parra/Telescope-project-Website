@@ -1,13 +1,36 @@
 from math import sin as math_sin, cos as math_cos, tan as math_tan, \
     asin as math_asin, acos as math_acos, atan as math_atan, atan2 as math_atan2, radians, degrees, sqrt, pi, log10
-from Server import app
-from app.db import db
-from models.tables import PlanetsTable  
-from algorithms.timeUtils import SpaceTime
-from algorithms.convert import convert
+from .timeUtils import SpaceTime
+from .convert import convert
 
 from utility.timer_utils import timer
-from algorithms.ephemeris.ephemeris import get_positions as ephem_get_positions
+from .ephemeris.ephemeris import get_positions as ephem_get_positions
+
+# Lazy imports to avoid circular import issues
+_app = None
+_db = None
+_PlanetsTable = None
+
+def _get_app():
+    global _app
+    if _app is None:
+        from Server import app as _temp_app
+        _app = _temp_app
+    return _app
+
+def _get_db():
+    global _db
+    if _db is None:
+        from app.db import db as _temp_db
+        _db = _temp_db
+    return _db
+
+def _get_PlanetsTable():
+    global _PlanetsTable
+    if _PlanetsTable is None:
+        from models.tables import PlanetsTable as _temp_table
+        _PlanetsTable = _temp_table
+    return _PlanetsTable
 
 # Overriding trig functions to use degrees
 sin = lambda x: math_sin(radians(x))
@@ -78,22 +101,51 @@ def solveKepler(M_deg, e):
     return math.degrees(E % (2*math.pi))
     
 def getPlanetsData():
-    with app.app_context():
-        planets = db.session.query(PlanetsTable).all()
-        planets_data = {
-            planet.Name.lower(): {column.name: getattr(planet, column.name, None) for column in planet.__table__.columns}
-            for planet in planets
-        }
-        return planets_data
+    app = _get_app()
+    db = _get_db()
+    PlanetsTable = _get_PlanetsTable()
+    
+    try:
+        with app.app_context():
+            planets = db.session.query(PlanetsTable).all()
+            planets_data = {
+                planet.Name.lower(): {column.name: getattr(planet, column.name, None) for column in planet.__table__.columns}
+                for planet in planets
+            }
+            return planets_data
+    except Exception as e:
+        # Return empty dict if database access fails
+        print(f"Warning: Could not load planets data: {e}")
+        return {}
 
-data, planets = getPlanetsData(), {}
-for key, value in data.items():
-    planets[key] = CelestialObject(**value)
+# Lazy initialization of data and planets to avoid circular imports
+_initialized = False
+data = {}
+planets = {}
+
+def _init_planets():
+    global _initialized, data, planets
+    if not _initialized:
+        try:
+            data = getPlanetsData()
+            planets = {}
+            for key, value in data.items():
+                planets[key] = CelestialObject(**value)
+            _initialized = True
+        except Exception as e:
+            print(f"Warning: Could not initialize planets: {e}")
+            _initialized = True
+
+def _ensure_planets_initialized():
+    """Ensure planets data is initialized before use"""
+    if not _initialized:
+        _init_planets()
 
 def findAxialTilt(julianDate):
     return SpaceTime.getMeanObliquityDeg(julianDate)
 
 def findPlanet(year, month, day, planetChoice, hour: int = 0, minute: int = 0, second: float = 0.0):
+    _ensure_planets_initialized()
 
     # Constants for J2000
     EarthPeriod = 1.00004
@@ -239,6 +291,8 @@ def phase_angle(ra_moon, dec_moon, ra_sun, dec_sun):
 
 def get_vmag_for_object(name, phaseDeg=None):
     # Return V magnitude for a body without hitting the DB on every call
+    _ensure_planets_initialized()
+    
     name_l = name.lower()
 
     if name_l == "moon":
@@ -261,6 +315,8 @@ def get_vmag_for_object(name, phaseDeg=None):
 
 @timer
 def getAllCelestialData(year, month, day, hour: int = 0, minute: int = 0, second: float = 0.0):
+    _ensure_planets_initialized()
+    
     # Primary implementation now delegates to ephemeris.get_positions; map results to controller format
     results = {}
 
