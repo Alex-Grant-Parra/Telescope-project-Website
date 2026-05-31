@@ -1,71 +1,46 @@
-# ASTRA
+# ASTRA \- Automated Sidereal Tracking and Remote Astronomy
 
-ASTRA is a Flask-based telescope control and astronomy web platform.
+## A modern telescope automation system for remote observation, object tracking and astrophotography with a web-based observatory management platform.
 
-It combines:
-- a web app
-- a live star map
-- real-time WebSocket channels for telescope commands and live view streaming
-- security features
+---
 
-## What This Repo Contains
+## Features
 
-- Main server: Server.py
-- Flask support code: app/ and config/
-- Controllers (Flask blueprints): controllers/
-- Realtime services: app/WebsocketServer.py
-- Data models and database layer: models/
-- Astronomy and planetary models: Astrophysics/
-- Security modules: security/
-- Frontend templates and assets: templates/ and static/
-- Project docs and reference material: docs/
-- Operations scripts: scripts/
-- Deployment and runtime files: infrastructure/ and instance/
-- Utilities and helper tools: utility/ and tools/
-- Downloads, uploads, and captured images: downloads/ and camera_photos/
+* Web-based telescope control  
+* Distributed telescope network management  
+* Automated target acquisition and tracking  
+* Astrophotography image capture  
+* Observation scheduling and automation  
+* Interactive planetarium interface  
+* Astronomical object database  
+* Solar system object tracking  
+* Remote camera and mount control  
+* REST API for astronomical data access  
+* Raspberry Pi and ESP32 powered telescope nodes  
+* Beginner-friendly operation with advanced manual controls  
+* Source-available and self-hostable
 
-## Quick Start
+## System Architecture
 
-1. Create and activate a virtual environment.
+ASTRA uses a web-based control server connected to distributed Raspberry Pi \+ ESP32 telescope nodes. Commands, live view camera frames, and tracking data flow through WebSocket channels, while each node handles its own motor control, sensors, and imaging pipeline.
 
-Linux/macOS:
+![System Architecture](https://raw.githubusercontent.com/Alex-Grant-Parra/ASTRA/Server/canary/docs/System%20Architecture.drawio.png)
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
+## Client Setup (For running ASTRA on your telescope system)
 
-Windows PowerShell:
+* In the email you were sent when you purchased the telescope system, select register. This will give you a client ID, API token and server URL.  
+* Create an account, and link your client ID and API key to it, following the on screen directions.  
+* Power on the system, and wait for the blue LED to stay constantly lit.  
+* Use the keypad to enter in the client ID, API token and server URL. There will be an on screen confirmation when connected.  
+* (Recommended) Check for updates in the settings window. This may take several minutes if updates are found. Do not power off your device.   
+* Log in and access the main interface page. It is recommended that you follow the first time tutorial on how to use the site.
 
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-```
+## ADVANCED - Server Setup (For running your own control server)
 
-2. Install dependencies:
+ * Follow this guide to learn how to do this:
+ https://github.com/Alex-Grant-Parra/ASTRA/wiki/Server-Setup-(For-running-your-own-control-server)
 
-```bash
-pip install -r utility/requirements.txt
-```
-
-3. Create instance/.env (recommended) with at least:
-
-```env
-FLASK_SECRET_KEY=change-me
-ENCRYPTION_KEY=change-me
-MAIL_USERNAME=you@example.com
-MAIL_PASSWORD=change-me
-```
-
-4. Start the server:
-
-```bash
-python Server.py
-```
-
-Default HTTP port is 5000.
-
-## Core Runtime Behavior
+ ## Core Runtime Behavior
 
 - Flask app boots from Server.py.
 - Blueprints are auto-loaded from controllers/.
@@ -98,3 +73,4 @@ ASTRA includes a few different planetary models under the Astrophysics folder, e
 
 - instance/.env contains secrets and should not be committed.
 - infrastructure/ contains deployment-related files and logs.
+- When downloading the server, the database will not be included. This may change in future versions, but you will have to supply your own data for now.
