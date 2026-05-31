@@ -1,1 +1,13 @@
-.history
+# KiCad autosave / junk
+*.bak
+*.bck
+*~
+*_autosave*
+fp-info-cache/
+*.lck
+
+.history/
+
+# Build outputs
+gerber/
+*.zip
