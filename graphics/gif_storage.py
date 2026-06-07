@@ -16,7 +16,7 @@ import uuid
 def _get_metadata_file() -> Path:
 	"""Get path to metadata file in project root."""
 	root = Path(__file__).resolve().parent.parent
-	return root / ".astra_uploads.json"
+	return root / "graphics" / ".astra_uploads.json"
 
 
 def compute_file_hash(file_path: Path) -> str:

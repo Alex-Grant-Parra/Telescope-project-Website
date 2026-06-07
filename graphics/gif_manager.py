@@ -49,7 +49,7 @@ def cmd_play(uuid_str: str) -> None:
 
 def cmd_clear() -> None:
 	"""Clear all upload metadata."""
-	metadata_file = Path(__file__).resolve().parent.parent / ".astra_uploads.json"
+	metadata_file = Path(__file__).resolve().parent.parent / "graphics" / ".astra_uploads.json"
 	if metadata_file.exists():
 		confirm = input(
 			f"⚠️  This will clear all stored GIF metadata from {metadata_file}.\n"

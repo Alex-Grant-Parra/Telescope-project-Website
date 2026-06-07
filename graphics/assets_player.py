@@ -28,7 +28,7 @@ from PIL import Image, ImageSequence
 
 
 ASSETS_DIR = ROOT / "graphics" / "assets"
-ASSET_INDEX_FILE = ROOT / ".astra_assets.json"
+ASSET_INDEX_FILE = ROOT / "graphics" / ".astra_assets.json"
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif"}
 
 
