@@ -91,10 +91,15 @@ class ESP32Connection:
 				self.ser.timeout = prev_timeout
 			if not resp:
 				return False
-			data = json.loads(resp)
+			try:
+				data = json.loads(resp)
+			except json.JSONDecodeError:
+				# Serial noise/partial boot logs are expected during scans.
+				return False
 			return data.get("status") == "ok"
 		except Exception as e:
-			print(f"[DEBUG] Probe failed: {e}")
+			# Keep logging for unexpected probe transport/runtime failures.
+			print(f"[ESP32] Probe error: {e}")
 			return False
 
 	def close(self) -> None:

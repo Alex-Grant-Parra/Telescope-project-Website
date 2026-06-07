@@ -138,9 +138,11 @@ class LEDManager:
 	def clear_error(self) -> None:
 		self.set_error(False)
 
-	def set_ui_connected(self, connected: bool) -> None:
+	def set_ui_connected(self, connected: bool, force_reapply: bool = False) -> None:
 		with self._lock:
 			self._state.blue_on_when_idle = bool(connected)
+			if force_reapply:
+				self._applied_signatures.pop("blue", None)
 			# Only touch the blue indicator here; the rest of the state is driven
 			# by the normal refresh path.
 			self._set_channel("blue", "on" if connected else "off")
