@@ -1,4 +1,4 @@
-#include "display.h"
+#include "display.h" 
 #include <SPI.h>
 #include <LittleFS.h>
 
@@ -94,6 +94,8 @@ void initializeDisplay() {
   pinMode(DISPLAY_DC, OUTPUT);
   pinMode(DISPLAY_RES, OUTPUT);
   pinMode(DISPLAY_BL, OUTPUT);
+  // Keep backlight off until the panel RAM is explicitly cleared.
+  analogWrite(DISPLAY_BL, 0);
 
   // Initialize SPI with explicit parameters
   // SPI.begin(SCK, MISO, MOSI, CS)
@@ -162,10 +164,12 @@ void initializeDisplay() {
   delay(2);
   yield();
 
-  // Set backlight to full brightness initially
-  analogWrite(DISPLAY_BL, 255);
-
   g_display_state.initialized = true;
+  // Ensure deterministic startup visuals (no random VRAM/static).
+  displayFillScreen(COLOR_BLACK);
+
+  // Set backlight to full brightness after clear completes.
+  analogWrite(DISPLAY_BL, 255);
 }
 
 void cleanupDisplay() {
