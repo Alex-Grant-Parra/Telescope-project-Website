@@ -140,7 +140,7 @@
       },
       "rules": {
         "max_error": 0.005,
-        "min_clearance": 0.0,
+        "min_clearance": 0.2,
         "min_connection": 0.0,
         "min_copper_edge_clearance": 0.5,
         "min_groove_width": 0.0,
@@ -240,7 +240,7 @@
       "internal_id": "",
       "mfg": "",
       "mpn": "",
-      "sch_revision": "3"
+      "sch_revision": "4"
     },
     "layer_pairs": [],
     "layer_presets": [],
@@ -666,7 +666,7 @@
         "uuid": "b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
       }
     ],
-    "used_designators": "",
+    "used_designators": "U2-4,J5,#PWR41,#PWR48",
     "variants": []
   },
   "sheets": [
