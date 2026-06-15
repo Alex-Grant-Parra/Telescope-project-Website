@@ -100,23 +100,26 @@ def ensure_telescope_booking_columns():
     existing_cols = {c['name'] for c in inspector.get_columns('telescopes')}
     required = {
         'description': 'TEXT',
-        'location_text': 'TEXT',
         'latitude': 'REAL',
         'longitude': 'REAL',
         'specs_json': 'TEXT',
-        'extra_fields_json': 'TEXT',
-        'timezone': 'VARCHAR(64)',
+        'aperture': 'VARCHAR(128)',
+        'camera': 'VARCHAR(255)',
         'min_booking_minutes': 'INTEGER',
         'max_booking_minutes': 'INTEGER',
         'allowed_windows_json': 'TEXT',
     }
+    remove_if_present = {'location_text', 'extra_fields_json', 'timezone'}
 
     with engine.begin() as conn:
         for col_name, col_type in required.items():
             if col_name not in existing_cols:
                 conn.execute(text(f"ALTER TABLE telescopes ADD COLUMN {col_name} {col_type}"))
 
+        for col_name in remove_if_present:
+            if col_name in existing_cols:
+                conn.execute(text(f"ALTER TABLE telescopes DROP COLUMN {col_name}"))
+
         # sensible defaults for legacy rows
-        conn.execute(text("UPDATE telescopes SET timezone = COALESCE(timezone, 'UTC')"))
         conn.execute(text("UPDATE telescopes SET min_booking_minutes = COALESCE(min_booking_minutes, 30)"))
         conn.execute(text("UPDATE telescopes SET max_booking_minutes = COALESCE(max_booking_minutes, 720)"))

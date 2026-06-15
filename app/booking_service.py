@@ -86,7 +86,7 @@ def _overlap_exists(model, telescope_id, start_utc, end_utc, extra_filter=None):
 
 
 def _allowed_window_check(telescope, window_start_utc, window_end_utc):
-    # Optional owner-defined local booking windows (JSON array of {'start':'HH:MM','end':'HH:MM'})
+    # Optional owner-defined UTC booking windows (JSON array of {'start':'HH:MM','end':'HH:MM'})
     raw = telescope.allowed_windows_json
     if not raw:
         return True
@@ -98,14 +98,10 @@ def _allowed_window_check(telescope, window_start_utc, window_end_utc):
     except Exception:
         return True
 
-    tz = ZoneInfo(telescope.timezone or 'UTC')
-    local_start = window_start_utc.replace(tzinfo=timezone.utc).astimezone(tz)
-    local_end = window_end_utc.replace(tzinfo=timezone.utc).astimezone(tz)
-
-    # Compare by local clock minutes, handling overnight request windows
-    request_start_min = local_start.hour * 60 + local_start.minute
-    request_end_min = local_end.hour * 60 + local_end.minute
-    if local_end.date() > local_start.date() or request_end_min <= request_start_min:
+    # Compare by UTC clock minutes, handling overnight request windows
+    request_start_min = window_start_utc.hour * 60 + window_start_utc.minute
+    request_end_min = window_end_utc.hour * 60 + window_end_utc.minute
+    if window_end_utc.date() > window_start_utc.date() or request_end_min <= request_start_min:
         request_end_min += 24 * 60
 
     for w in windows:
@@ -186,7 +182,9 @@ def search_telescopes(location_query, date_list, start_time_hhmm, end_time_hhmm,
     if location_query:
         like = f"%{location_query.strip()}%"
         q = q.filter(
-            (Telescope.location_text.ilike(like)) |
+            (Telescope.description.ilike(like)) |
+            (Telescope.aperture.ilike(like)) |
+            (Telescope.camera.ilike(like)) |
             (Telescope.telescope_id.ilike(like))
         )
 
@@ -198,25 +196,21 @@ def search_telescopes(location_query, date_list, start_time_hhmm, end_time_hhmm,
         statuses = [evaluate_telescope_slot(t, w_start, w_end) for w_start, w_end in windows]
         aggregate_status = 'available' if all(s == 'available' for s in statuses) else 'unavailable'
 
-        specs = {}
-        try:
-            specs = json.loads(t.specs_json) if t.specs_json else {}
-            if not isinstance(specs, dict):
-                specs = {}
-        except Exception:
-            specs = {}
-
         results.append({
             'id': t.id,
             'name': t.telescope_id,
-            'location': t.location_text,
+            'location': (
+                f"{t.latitude}, {t.longitude}"
+                if (t.latitude is not None and t.longitude is not None)
+                else None
+            ),
             'description': t.description,
             'status': aggregate_status,
             'specifications': {
-                'aperture': specs.get('aperture'),
-                'telescope_type': specs.get('telescope_type') or t.type,
-                'mount_type': specs.get('mount_type'),
-                'camera_model': specs.get('camera_model'),
+                'aperture': t.aperture,
+                'telescope_type': t.type,
+                'mount_type': None,
+                'camera_model': t.camera,
             },
         })
 
@@ -312,18 +306,31 @@ def set_booking_decision(actor_user_id, booking_id, decision, is_admin=False):
 
     before = _serialize_booking(booking)
 
-    if booking.status != 'pending':
-        return None, 'Booking is not pending.'
+    action_type = None
 
     if decision == 'approve':
+        if booking.status != 'pending':
+            return None, 'Only pending bookings can be approved.'
         booking.status = 'reserved'
+        booking.approved_by_user_id = actor_user_id
+        booking.decided_at = _utc_now()
+        action_type = 'booking_approved'
     elif decision == 'reject':
+        if booking.status != 'pending':
+            return None, 'Only pending bookings can be rejected.'
         booking.status = 'rejected'
+        booking.approved_by_user_id = actor_user_id
+        booking.decided_at = _utc_now()
+        action_type = 'booking_rejected'
+    elif decision == 'cancel':
+        if booking.status not in {'pending', 'reserved'}:
+            return None, 'Only pending or reserved bookings can be cancelled.'
+        booking.status = 'cancelled'
+        booking.approved_by_user_id = actor_user_id
+        booking.decided_at = _utc_now()
+        action_type = 'booking_cancelled_by_owner'
     else:
         return None, 'Invalid decision.'
-
-    booking.approved_by_user_id = actor_user_id
-    booking.decided_at = _utc_now()
 
     # Release lock(s) for this booking window after decision
     TelescopeBookingLock.query.filter(
@@ -334,7 +341,7 @@ def set_booking_decision(actor_user_id, booking_id, decision, is_admin=False):
 
     BookingAuditEvent.log(
         actor_user_id=actor_user_id,
-        action_type='booking_approved' if decision == 'approve' else 'booking_rejected',
+        action_type=action_type,
         entity_type='booking',
         entity_id=booking.id,
         before_state=before,
@@ -377,39 +384,24 @@ def admin_override_booking(admin_user_id, booking_id, new_status):
 def save_telescope_metadata(actor_user_id, telescope, payload, is_admin=False):
     before = {
         'description': telescope.description,
-        'location_text': telescope.location_text,
         'latitude': telescope.latitude,
         'longitude': telescope.longitude,
-        'timezone': telescope.timezone,
-        'specs_json': telescope.specs_json,
-        'extra_fields_json': telescope.extra_fields_json,
+        'aperture': telescope.aperture,
+        'camera': telescope.camera,
         'min_booking_minutes': telescope.min_booking_minutes,
         'max_booking_minutes': telescope.max_booking_minutes,
         'allowed_windows_json': telescope.allowed_windows_json,
     }
 
     telescope.description = (payload.get('description') or '').strip() or None
-    telescope.location_text = (payload.get('location_text') or '').strip() or None
-    telescope.timezone = (payload.get('timezone') or 'UTC').strip() or 'UTC'
 
     lat = payload.get('latitude')
     lon = payload.get('longitude')
     telescope.latitude = float(lat) if str(lat).strip() else None
     telescope.longitude = float(lon) if str(lon).strip() else None
 
-    specs = payload.get('specifications') or {}
-    if not isinstance(specs, dict):
-        specs = {}
-    if not is_admin:
-        # Only admin may change telescope type in specifications
-        specs.pop('telescope_type', None)
-
-    telescope.specs_json = json.dumps(specs) if specs else None
-
-    extra = payload.get('extra_fields') or {}
-    if not isinstance(extra, dict):
-        extra = {}
-    telescope.extra_fields_json = json.dumps(extra) if extra else None
+    telescope.aperture = (payload.get('aperture') or '').strip() or None
+    telescope.camera = (payload.get('camera') or '').strip() or None
 
     min_minutes = payload.get('min_booking_minutes')
     max_minutes = payload.get('max_booking_minutes')
@@ -422,6 +414,8 @@ def save_telescope_metadata(actor_user_id, telescope, payload, is_admin=False):
             allowed_windows = json.loads(allowed_windows)
         except Exception:
             allowed_windows = None
+    elif isinstance(allowed_windows, str):
+        telescope.allowed_windows_json = None
 
     if isinstance(allowed_windows, list):
         telescope.allowed_windows_json = json.dumps(allowed_windows)
@@ -434,12 +428,10 @@ def save_telescope_metadata(actor_user_id, telescope, payload, is_admin=False):
         before_state=before,
         after_state={
             'description': telescope.description,
-            'location_text': telescope.location_text,
             'latitude': telescope.latitude,
             'longitude': telescope.longitude,
-            'timezone': telescope.timezone,
-            'specs_json': telescope.specs_json,
-            'extra_fields_json': telescope.extra_fields_json,
+            'aperture': telescope.aperture,
+            'camera': telescope.camera,
             'min_booking_minutes': telescope.min_booking_minutes,
             'max_booking_minutes': telescope.max_booking_minutes,
             'allowed_windows_json': telescope.allowed_windows_json,

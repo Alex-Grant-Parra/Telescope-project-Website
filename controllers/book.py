@@ -152,13 +152,18 @@ def owner_booking_decision(booking_id):
     requester = get_user(updated.requester_user_id)
     if requester:
         try:
+            verb = {
+                'reserved': 'approved',
+                'rejected': 'rejected',
+                'cancelled': 'cancelled by the owner',
+            }.get(updated.status, updated.status)
             send_email(
                 current_app,
                 'support',
                 [requester.get_email()],
                 f"ASTRA Booking {updated.status.title()}",
                 (
-                    f"Your booking #{updated.id} has been {updated.status}.\n"
+                    f"Your booking #{updated.id} has been {verb}.\n"
                     f"Telescope ID: {updated.telescope_id}\n"
                     f"UTC window: {updated.start_utc.isoformat()} to {updated.end_utc.isoformat()}\n"
                     f"Details: {url_for('book.my_bookings_page', _external=True)}"

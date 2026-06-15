@@ -33,8 +33,10 @@
                     <td><span class="badge bg-{{ 'warning text-dark' if b.status == 'pending' else ('success' if b.status == 'reserved' else 'secondary') }}">{{ b.status }}</span></td>
                     <td>
                         {% if b.status == 'pending' %}
-                        <button class="btn btn-sm btn-success" onclick="decide({{ b.id }}, 'approve')">Approve</button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="decide({{ b.id }}, 'reject')">Reject</button>
+                        <button class="btn btn-sm btn-success" data-booking-id="{{ b.id }}" data-decision="approve" onclick="decide(this)">Approve</button>
+                        <button class="btn btn-sm btn-outline-danger" data-booking-id="{{ b.id }}" data-decision="reject" onclick="decide(this)">Reject</button>
+                        {% elif b.status == 'reserved' %}
+                        <button class="btn btn-sm btn-outline-danger" data-booking-id="{{ b.id }}" data-decision="cancel" onclick="decide(this)">Cancel Reservation</button>
                         {% else %}
                         <span class="text-muted">—</span>
                         {% endif %}
@@ -50,9 +52,12 @@
 </div>
 
 <script>
-async function decide(bookingId, decision) {
+async function decide(btn) {
+    const bookingId = btn.dataset.bookingId;
+    const decision = btn.dataset.decision;
     const csrf = document.getElementById('csrfToken').value;
-    const resp = await fetch(`{{ url_for('book.owner_booking_decision', booking_id=0) }}`.replace('/0/', `/${bookingId}/`), {
+    const url = `{{ url_for('book.owner_booking_decision', booking_id=999999) }}`.replace('999999', bookingId);
+    const resp = await fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

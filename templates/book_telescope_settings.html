@@ -18,8 +18,8 @@
                         <textarea name="description" class="form-control" rows="2">{{ telescope.description or '' }}</textarea>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Location</label>
-                        <input name="location_text" class="form-control" value="{{ telescope.location_text or '' }}" />
+                        <label class="form-label">Aperture</label>
+                        <input name="aperture" class="form-control" value="{{ telescope.aperture or '' }}" placeholder="e.g. 200mm" />
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Latitude</label>
@@ -29,9 +29,9 @@
                         <label class="form-label">Longitude</label>
                         <input name="longitude" class="form-control" value="{{ telescope.longitude or '' }}" />
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Timezone</label>
-                        <input name="timezone" class="form-control" value="{{ telescope.timezone or 'UTC' }}" />
+                    <div class="col-md-6">
+                        <label class="form-label">Camera</label>
+                        <input name="camera" class="form-control" value="{{ telescope.camera or '' }}" placeholder="e.g. ASI2600MC" />
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Min Minutes</label>
@@ -42,8 +42,8 @@
                         <input type="number" name="max_booking_minutes" class="form-control" value="{{ telescope.max_booking_minutes or 720 }}" />
                     </div>
                     <div class="col-md-9">
-                        <label class="form-label">Allowed Windows JSON (optional)</label>
-                        <input name="allowed_windows" class="form-control" placeholder='[{"start":"20:00","end":"05:00"}]' />
+                        <label class="form-label">Allowed Windows JSON (UTC, optional)</label>
+                        <input name="allowed_windows" class="form-control" value="{{ telescope.allowed_windows_json or '' }}" placeholder='[{"start":"20:00","end":"05:00"}]' />
                     </div>
                 </div>
                 <button class="btn btn-primary mt-3" type="submit">Save Settings</button>

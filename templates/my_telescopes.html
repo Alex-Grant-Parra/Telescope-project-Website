@@ -4,7 +4,10 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2>My Telescopes</h2>
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="mb-0">My Telescopes</h2>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('book.owner_bookings_page') }}">Owner Booking Queue</a>
+    </div>
     <p class="text-muted">Register a telescope to connect it to the server. Each new telescope requires admin approval before it can connect.</p>
 
     {% if generated_token %}
@@ -71,10 +74,13 @@
                             <td><code>{{ t.token_prefix }}...</code></td>
                             <td><small>{{ t.token_created_at.strftime('%Y-%m-%d %H:%M') if t.token_created_at else '—' }}</small></td>
                             <td>
-                                <form method="post" action="{{ url_for('telescopes.revoke_my_telescope', telescope_id=t.id) }}" onsubmit="return confirm('Remove telescope &quot;{{ t.telescope_id }}&quot;? This cannot be undone.');">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                                    <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
-                                </form>
+                                <div class="d-flex gap-2">
+                                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('book.telescope_booking_settings', telescope_id=t.id) }}">Settings</a>
+                                    <form method="post" action="{{ url_for('telescopes.revoke_my_telescope', telescope_id=t.id) }}" onsubmit="return confirm('Remove telescope &quot;{{ t.telescope_id }}&quot;? This cannot be undone.');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
