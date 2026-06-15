@@ -213,11 +213,17 @@ async def send_frames():
 
     last_process_check_time = 0
     process_check_interval = 1.0  # Check process health every 1 second
-    # Buffer and memory safeguards to protect low-RAM devices
-    MAX_BUFFER_SIZE = int(os.environ.get("LIVEVIEW_MAX_BUFFER", 4 * 1024 * 1024))  # 4MB default
-    MEMORY_THRESHOLD = int(os.environ.get("LIVEVIEW_MEM_THRESHOLD", 50 * 1024 * 1024))  # 50MB default
+    # Buffer and memory safeguards to protect low-RAM devices.
+    # Keep memory bounded by retaining only the newest candidate frame data.
+    MAX_BUFFER_SIZE = int(os.environ.get("LIVEVIEW_MAX_BUFFER", 4 * 1024 * 1024))
+    MAX_FRAME_SIZE = int(os.environ.get("LIVEVIEW_MAX_FRAME", 2 * 1024 * 1024))
+    DROP_MEMORY_THRESHOLD = int(os.environ.get("LIVEVIEW_MEM_DROP", 120 * 1024 * 1024))
+    PAUSE_MEMORY_THRESHOLD = int(os.environ.get("LIVEVIEW_MEM_PAUSE", 80 * 1024 * 1024))
+    RESTART_MEMORY_THRESHOLD = int(os.environ.get("LIVEVIEW_MEM_RESTART", 50 * 1024 * 1024))
     consecutive_failures = 0  # Track consecutive camera start failures
     process_start_time = 0  # Track when process was started
+    pending_frame = None
+    low_memory_drop_toggle = False
 
     def _read_proc_stderr_text(p):
         # Best-effort stderr extraction for terminated gphoto2 processes.
@@ -240,6 +246,53 @@ async def send_frames():
     except Exception:
         psutil = None
         _psutil_available = False
+
+    def _available_memory():
+        if not _psutil_available:
+            return None
+        try:
+            return psutil.virtual_memory().available
+        except Exception:
+            return None
+
+    def _trim_buffer(buffer: bytes) -> bytes:
+        if len(buffer) <= MAX_BUFFER_SIZE:
+            return buffer
+
+        latest_start = buffer.rfind(JPEG_START)
+        if latest_start != -1:
+            trimmed = buffer[latest_start:]
+            if len(trimmed) <= MAX_BUFFER_SIZE:
+                print(f"[send_frames] Buffer exceeded {MAX_BUFFER_SIZE} bytes; trimming to latest frame candidate")
+                return trimmed
+
+        print(f"[send_frames] Buffer exceeded {MAX_BUFFER_SIZE} bytes; keeping newest tail")
+        return buffer[-MAX_BUFFER_SIZE:]
+
+    def _extract_latest_frame(buffer: bytes):
+        latest_frame = None
+
+        while True:
+            start = buffer.find(JPEG_START)
+            if start == -1:
+                return latest_frame, buffer[-MAX_BUFFER_SIZE:]
+
+            if start > 0:
+                buffer = buffer[start:]
+                start = 0
+
+            end = buffer.find(JPEG_END, start + 2)
+            if end == -1:
+                return latest_frame, _trim_buffer(buffer)
+
+            jpeg = buffer[start:end + 2]
+            buffer = buffer[end + 2:]
+
+            if len(jpeg) > MAX_FRAME_SIZE:
+                print(f"[send_frames] Dropping oversized frame ({len(jpeg)} bytes > {MAX_FRAME_SIZE})")
+                continue
+
+            latest_frame = jpeg
 
     def _cleanup_usb_camera_lockers() -> None:
         # Best-effort cleanup of processes that commonly lock camera USB endpoints.
@@ -355,9 +408,49 @@ async def send_frames():
                         continue
                 
                 buffer = b''
+                pending_frame = None
                 try:
                     while is_liveview_enabled() and ws.close_code is None:
                         try:
+                            if pending_frame is not None and time.time() - last_frame_time >= frame_interval:
+                                available_memory = _available_memory()
+
+                                if available_memory is not None:
+                                    if available_memory < RESTART_MEMORY_THRESHOLD:
+                                        print(f"[send_frames] Critical low memory ({available_memory} bytes); restarting camera process")
+                                        pending_frame = None
+                                        break
+                                    if available_memory < PAUSE_MEMORY_THRESHOLD:
+                                        print(f"[send_frames] Low memory pause ({available_memory} bytes); delaying send")
+                                        await asyncio.sleep(0.05)
+                                        continue
+                                    if available_memory < DROP_MEMORY_THRESHOLD:
+                                        low_memory_drop_toggle = not low_memory_drop_toggle
+                                        if low_memory_drop_toggle:
+                                            print(f"[send_frames] Low memory drop ({available_memory} bytes); skipping latest frame")
+                                            pending_frame = None
+                                            continue
+
+                                frame_size = len(pending_frame)
+                                send_start = time.time()
+                                try:
+                                    await asyncio.wait_for(ws.send(pending_frame), timeout=2.0)
+                                    send_duration = time.time() - send_start
+                                    last_frame_time = time.time()
+                                    if send_duration > 0.5:
+                                        print(f"[send_frames] ws.send took {send_duration:.2f}s for {frame_size} bytes")
+                                    pending_frame = None
+                                except (websockets.exceptions.ConnectionClosed,
+                                       websockets.exceptions.ConnectionClosedError,
+                                       asyncio.TimeoutError) as send_error:
+                                    print(f"[send_frames] WebSocket send failed: {type(send_error).__name__}")
+                                    raise send_error
+                                except Exception as send_error:
+                                    error_type = type(send_error).__name__
+                                    error_msg = str(send_error)
+                                    print(f"[send_frames] WebSocket send failed: {error_type} - {error_msg}")
+                                    raise send_error
+
                             # Check if process is still running periodically
                             current_time = time.time()
                             if current_time - last_process_check_time >= process_check_interval:
@@ -394,55 +487,9 @@ async def send_frames():
                                     
                                 buffer += chunk
 
-                                # Cap buffer growth to avoid OOM on low-RAM devices
-                                if len(buffer) > MAX_BUFFER_SIZE:
-                                    # Keep the newest half of the max buffer
-                                    print(f"[send_frames] Buffer exceeded {MAX_BUFFER_SIZE} bytes; trimming")
-                                    buffer = buffer[-(MAX_BUFFER_SIZE // 2):]
-                                
-                                while True:
-                                    start = buffer.find(JPEG_START)
-                                    end = buffer.find(JPEG_END, start)
-                                        if start != -1 and end != -1 and end > start:
-                                            now = time.time()
-                                            if now - last_frame_time >= frame_interval:
-                                                jpeg = buffer[start:end+2]
-
-                                                # If psutil is available, check available memory and skip
-                                                if _psutil_available:
-                                                    try:
-                                                        avail = psutil.virtual_memory().available
-                                                        if avail < MEMORY_THRESHOLD:
-                                                            print(f"[send_frames] Low memory (available={avail}), dropping frame")
-                                                            # Drop this frame to relieve memory pressure
-                                                            buffer = buffer[end+2:]
-                                                            continue
-                                                    except Exception:
-                                                        # If psutil fails, proceed to send
-                                                        pass
-
-                                                # Log frame size and measure send duration
-                                                frame_size = len(jpeg)
-                                                send_start = time.time()
-                                                try:
-                                                    await asyncio.wait_for(ws.send(jpeg), timeout=2.0)
-                                                    send_duration = time.time() - send_start
-                                                    last_frame_time = now
-                                                    if send_duration > 0.5:
-                                                        print(f"[send_frames] ws.send took {send_duration:.2f}s for {frame_size} bytes")
-                                                except (websockets.exceptions.ConnectionClosed, 
-                                                       websockets.exceptions.ConnectionClosedError,
-                                                       asyncio.TimeoutError) as send_error:
-                                                    print(f"[send_frames] WebSocket send failed: {type(send_error).__name__}")
-                                                    raise send_error
-                                                except Exception as send_error:
-                                                    error_type = type(send_error).__name__
-                                                    error_msg = str(send_error)
-                                                    print(f"[send_frames] WebSocket send failed: {error_type} - {error_msg}")
-                                                    raise send_error
-                                            buffer = buffer[end+2:]
-                                    else:
-                                        break
+                                latest_frame, buffer = _extract_latest_frame(buffer)
+                                if latest_frame is not None:
+                                    pending_frame = latest_frame
                             except BlockingIOError:
                                 # Non-blocking read returned no data, that's OK
                                 await asyncio.sleep(0.01)
