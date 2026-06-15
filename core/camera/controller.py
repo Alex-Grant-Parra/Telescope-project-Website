@@ -52,7 +52,7 @@ class Camera:
 
     @staticmethod
     def releaseViewfinder():
-        """Release the camera viewfinder to free up the camera"""
+        # Release the camera viewfinder to free up the camera
         try:
             # First, kill all existing gphoto2 processes
             print("[camera] Stopping all gphoto2 processes...")

@@ -6,11 +6,13 @@ from core.networking.websocket import websocketClient, cleanup_camera
 from core.camera.controller import Camera
 from utils.location import update_location_config
 from utils.camera_state import camera_state
+from utils.esp32_state import esp32_state
 from utils.config_state import (
     get_client_config,
     ensure_state_files,
     get_missing_required_client_fields,
 )
+from utils.LEDmanager import get_led_manager
 
 
 def _validate_required_client_config() -> None:
@@ -32,6 +34,37 @@ def load_local_config():
     except Exception as e:
         print(f"Failed to read configuration files: {e}")
         raise SystemExit(1)
+
+
+def _connect_and_sync_esp32() -> None:
+    """Attempt initial ESP32 connection and asset sync on startup.
+    
+    This runs before the websocket client starts, ensuring ESP32 is
+    available and assets are synced during the startup flow.
+    """
+    try:
+        print("[startup] Attempting to connect to ESP32...")
+        
+        # Get or establish connection using centralized singleton
+        try:
+            conn = esp32_state.ensure_connection()
+            if conn:
+                print(f"[startup] ESP32 connected successfully on {conn.cfg.port}")
+            
+            # Now sync assets using the established connection (runs in background)
+            try:
+                from graphics.assets_player import sync_assets_on_connect
+                print("[startup] Starting asset sync to ESP32...")
+                sync_assets_on_connect(conn)
+            except Exception as e:
+                print(f"[startup] Asset sync error: {e}")
+        except Exception as conn_error:
+            print(f"[startup] ESP32 connection failed: {conn_error}")
+            print("[startup] ESP32 not available - will scan continuously in background")
+            esp32_state.set_available(False)
+    except Exception as e:
+        print(f"[startup] Unexpected error during ESP32 connection: {e}")
+        esp32_state.set_available(False)
 
 
 if __name__ == "__main__":
@@ -59,10 +92,17 @@ if __name__ == "__main__":
         # Update GPS location on startup
         update_location_config()
         
+        # Attempt initial ESP32 connection and asset sync
+        _connect_and_sync_esp32()
+        
         cfg = load_local_config()
         
-        # Run the main websocket client (camera scanner runs as background task)
+        # Run the main websocket client (camera scanner and ESP32 scanner run as background tasks)
         run(websocketClient(cfg))
     except KeyboardInterrupt:
         print("[global] KeyboardInterrupt received, exiting and releasing camera...")
+        try:
+            get_led_manager().shutdown()
+        except Exception:
+            pass
         cleanup_camera()

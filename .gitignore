@@ -4,3 +4,6 @@ __pycache__
 config
 packager.py
 versions.txt
+test.gif
+*.json
+test.png

@@ -1,75 +1,121 @@
 from __future__ import annotations
 
+import glob
 import json
+import re
 import threading
 import time
+import zlib
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import serial  # pyserial
+from esp32.pins import get_display_config, get_led_channels
+
+
+_DISPLAY_CONFIG = get_display_config()
+_DISPLAY_WIDTH = int(_DISPLAY_CONFIG["width"])
+_DISPLAY_HEIGHT = int(_DISPLAY_CONFIG["height"])
 
 
 @dataclass
 class ESP32SerialConfig:
 	port: str = "/dev/ttyUSB0"
-	baudrate: int = 115200
+	baudrate: int = 921600
 	timeout: float = 0.5
 
 
 class ESP32Connection:
-	def __init__(self, cfg: ESP32SerialConfig | None = None) -> None:
+	def __init__(self, cfg: ESP32SerialConfig | None = None, *, scan_all_ports: bool = True) -> None:
 		self.cfg = cfg or ESP32SerialConfig()
 		self.ser = None
 		
-		# Try to connect to the configured port first
-		try:
-			self.ser = serial.Serial(self.cfg.port, self.cfg.baudrate, timeout=self.cfg.timeout)
-			print(f"[ESP32] Connected to {self.cfg.port}")
-		except serial.SerialException as e:
-			print(f"[ESP32] Cannot open {self.cfg.port}: {e}")
-			
-			# Auto-detect available USB ports
-			import glob
-			available = glob.glob('/dev/tty*') + glob.glob('/dev/cu*')
-			usb_ports = sorted([p for p in available if 'USB' in p or 'ACM' in p])
-			
-			if not usb_ports:
-				raise RuntimeError(
-					f"Cannot open {self.cfg.port}: {e}\n"
-					f"No USB ports found.\n"
-					f"Try: ls /dev/tty* | grep -E '(USB|ACM)'"
-				) from e
-			
-			print(f"[ESP32] Available USB ports: {usb_ports}")
-			print(f"[ESP32] Attempting auto-detection...")
-			
-			# Try each available port
-			for port in usb_ports:
-				try:
-					print(f"[ESP32] Trying {port}...")
-					self.ser = serial.Serial(port, self.cfg.baudrate, timeout=self.cfg.timeout)
-					print(f"[ESP32] Successfully connected to {port}")
-					self.cfg.port = port  # Update the config with the working port
-					break
-				except serial.SerialException:
+		candidate_ports = self._candidate_ports(self.cfg.port if scan_all_ports else None)
+		last_error: Exception | None = None
+		for port in candidate_ports:
+			try:
+				self.ser = serial.Serial(port, self.cfg.baudrate, timeout=self.cfg.timeout)
+				self.cfg.port = port
+				if not self._probe_identity():
+					self.close()
 					continue
-			
-			if self.ser is None:
-				raise RuntimeError(
-					f"Cannot open {self.cfg.port}: {e}\n"
-					f"Tried all available USB ports: {usb_ports}\n"
-					f"None responded. Check connections and permissions."
-				) from e
+				print(f"[ESP32] Connected to {port}")
+				break
+			except (serial.SerialException, OSError, RuntimeError) as e:
+				last_error = e
+				self.close()
+				continue
+
+		if self.ser is None:
+			ports_text = ", ".join(candidate_ports) if candidate_ports else self.cfg.port
+			raise RuntimeError(
+				f"Unable to connect to ESP32 on available USB serial ports: {ports_text}"
+			) from last_error
 		
 		self._lock = threading.Lock()
 		time.sleep(0.2)
 		self._drain()
+		try:
+			ESP32LED.attach(self)
+		except NameError:
+			pass
+
+	@staticmethod
+	def _candidate_ports(preferred_port: Optional[str] = None) -> list[str]:
+		ports: list[str] = []
+		seen: set[str] = set()
+
+		def add_port(port: str) -> None:
+			if port and port not in seen:
+				seen.add(port)
+				ports.append(port)
+
+		add_port(preferred_port or "")
+		for pattern in ("/dev/serial/by-id/*", "/dev/ttyUSB*", "/dev/ttyACM*"):
+			for port in sorted(glob.glob(pattern)):
+				add_port(port)
+		return ports
+
+	def _probe_identity(self) -> bool:
+		try:
+			self._drain()
+			# Send a newline to clear any stuck blit state on the ESP32
+			self.ser.write(b"\n")
+			self.ser.flush()
+			time.sleep(0.1)
+			self._drain()
+			
+			line = json.dumps({"cmd": "list_motors"}, separators=(",", ":")) + "\n"
+			self.ser.write(line.encode("utf-8"))
+			self.ser.flush()
+			# Increase timeout for initial probe
+			prev_timeout = self.ser.timeout
+			self.ser.timeout = 2.0
+			try:
+				resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
+			finally:
+				self.ser.timeout = prev_timeout
+			if not resp:
+				return False
+			try:
+				data = json.loads(resp)
+			except json.JSONDecodeError:
+				# Serial noise/partial boot logs are expected during scans.
+				return False
+			return data.get("status") == "ok"
+		except Exception as e:
+			# Keep logging for unexpected probe transport/runtime failures.
+			print(f"[ESP32] Probe error: {e}")
+			return False
 
 	def close(self) -> None:
 		try:
-			self.ser.close()
+			if self.ser is not None:
+				self.ser.close()
 		except Exception:
 			pass
+		finally:
+			self.ser = None
 
 	def _drain(self) -> None:
 		try:
@@ -77,51 +123,321 @@ class ESP32Connection:
 		except Exception:
 			pass
 
-	def send(self, payload: Dict[str, Any], timeout: Optional[float] = None) -> Dict[str, Any]:
-		line = json.dumps(payload, separators=(",", ":")) + "\n"
-		with self._lock:
-			if timeout is not None:
-				prev_timeout = self.ser.timeout
-				self.ser.timeout = timeout
-			try:
-				self.ser.write(line.encode("utf-8"))
-				self.ser.flush()
-				resp = self.ser.readline().decode("utf-8", errors="ignore").strip()
-			finally:
-				if timeout is not None:
-					self.ser.timeout = prev_timeout
-		if not resp:
-			raise TimeoutError("No response from ESP32")
+	def _read_response_line(self, timeout: float) -> str:
+		deadline = time.monotonic() + max(0.1, float(timeout))
+		parts: list[str] = []
+		while time.monotonic() < deadline:
+			chunk = self.ser.readline().decode("utf-8", errors="ignore")
+			if chunk:
+				parts.append(chunk)
+				joined = "".join(parts).strip()
+				if joined.endswith("}"):
+					return joined
+				continue
+			time.sleep(0.01)
+		return "".join(parts).strip()
+
+	def _read_json_response(self, timeout: float) -> str:
+		deadline = time.monotonic() + max(0.1, float(timeout))
+		buffer = ""
+		while time.monotonic() < deadline:
+			chunk = self.ser.readline().decode("utf-8", errors="ignore")
+			if not chunk:
+				time.sleep(0.01)
+				continue
+
+			buffer += chunk
+			candidate = buffer.strip()
+			if not candidate:
+				continue
+
+			# If there is serial noise before JSON, keep only the JSON tail.
+			start = candidate.find("{")
+			if start == -1:
+				# No JSON object start yet; keep waiting for more bytes.
+				continue
+			if start > 0:
+				candidate = candidate[start:]
+				buffer = candidate
+
+			# Find the first balanced JSON object (handle concatenated JSONs)
+			depth = 0
+			end_idx = -1
+			for i, ch in enumerate(candidate):
+				if ch == '{':
+					depth += 1
+				elif ch == '}':
+					depth -= 1
+					if depth == 0:
+						end_idx = i
+						break
+			if end_idx != -1:
+				return candidate[: end_idx + 1]
+
+		return buffer.strip()
+
+	@staticmethod
+	def _repair_json_response(resp: str) -> str:
+		# Host-side repair disabled now that the firmware emits deterministic
+		# JSON for LED status responses.
+		return resp
+
+	def _parse_response(self, resp: str) -> Dict[str, Any]:
+		# Try direct JSON parse first
 		try:
 			data = json.loads(resp)
-		except json.JSONDecodeError as exc:
-			raise RuntimeError(f"Invalid JSON from ESP32: {resp}") from exc
+		except json.JSONDecodeError:
+			# Attempt to extract a balanced JSON object from possibly-garbage input
+			start = resp.find("{")
+			if start != -1:
+				depth = 0
+				end = -1
+				for i in range(start, len(resp)):
+					if resp[i] == '{':
+						depth += 1
+					elif resp[i] == '}':
+						depth -= 1
+						if depth == 0:
+							end = i + 1
+							break
+				if end != -1:
+					candidate = resp[start:end]
+					try:
+						data = json.loads(candidate)
+					except json.JSONDecodeError:
+						data = None
+				else:
+					data = None
+			else:
+				data = None
+			if data is None:
+				raise RuntimeError(f"Failed to parse JSON response from ESP32: {resp!r}")
 		if data.get("status") != "ok":
 			error_msg = data.get("message", "ESP32 error")
 			raise RuntimeError(f"ESP32 error: {error_msg} | Full response: {data}")
 		return data.get("data", {})
 
+	def send(self, payload: Dict[str, Any], timeout: Optional[float] = None) -> Dict[str, Any]:
+		line = json.dumps(payload, separators=(",", ":")) + "\n"
+		last_resp = ""
+		with self._lock:
+			for attempt in range(2):
+				if timeout is not None:
+					prev_timeout = self.ser.timeout
+					self.ser.timeout = timeout
+				try:
+					self.ser.write(line.encode("utf-8"))
+					self.ser.flush()
+					last_resp = self._read_json_response(timeout or self.ser.timeout)
+				finally:
+					if timeout is not None:
+						self.ser.timeout = prev_timeout
+				if last_resp:
+					try:
+						return self._parse_response(last_resp)
+					except (json.JSONDecodeError, RuntimeError):
+						if attempt == 0:
+							self._drain()
+							continue
+						raise
+			self._drain()
+		raise TimeoutError(f"No valid response from ESP32: {last_resp!r}")
+
+	def send_binary(
+		self,
+		payload: Dict[str, Any],
+		binary_data: bytes | bytearray | memoryview,
+		timeout: Optional[float] = None,
+	) -> Dict[str, Any]:
+		data_bytes = memoryview(binary_data).tobytes()
+		line = json.dumps(payload, separators=(",", ":")) + "\n"
+		baudrate = max(1, int(self.ser.baudrate))
+		estimated_transfer_s = (len(data_bytes) * 10.0 / baudrate) + 5.0
+		transfer_timeout = max(self.ser.timeout, estimated_transfer_s)
+		if timeout is not None:
+			transfer_timeout = max(float(timeout), transfer_timeout)
+
+		with self._lock:
+			resp = ""
+			prev_timeout = self.ser.timeout
+			try:
+				for attempt in range(2):
+					self.ser.timeout = transfer_timeout * (1.0 + 0.25 * attempt)
+					# Send JSON header and give the ESP32 a short moment to parse it
+					self.ser.write(line.encode("utf-8"))
+					self.ser.flush()
+					time.sleep(0.02)
+					# Send binary payload
+					self.ser.write(data_bytes)
+					self.ser.flush()
+					resp = self._read_json_response(self.ser.timeout)
+					if resp:
+						break
+					self._drain()
+			finally:
+				self.ser.timeout = prev_timeout
+		if not resp:
+			raise TimeoutError("No response from ESP32")
+		return self._parse_response(resp)
+
 	def list_motors(self) -> Dict[str, Any]:
 		return self.send({"cmd": "list_motors"})
+
+	def upload_display_file(self, name: str, data: bytes, timeout: Optional[float] = None) -> Dict[str, Any]:
+		"""Upload a binary file to the ESP32 LittleFS storage for later playback.
+
+		The ESP32 will store the exact bytes under `name`. Use `play` to display it.
+		"""
+		payload = {"cmd": "display", "action": "store_begin", "name": name, "length": len(data)}
+		transfer_timeout = timeout
+		if transfer_timeout is None:
+			baudrate = max(1, int(self.ser.baudrate))
+			transfer_timeout = max(self.ser.timeout, (len(data) * 10.0 / baudrate) + 20.0, 25.0)
+
+		# First send the JSON control command and wait for the ESP32 to enter
+		# file-upload mode.
+		self.send(payload, timeout=timeout)
+
+		# Then stream the raw bytes. The firmware will emit the final OK after
+		# all bytes are written to LittleFS.
+		with self._lock:
+			prev_timeout = self.ser.timeout
+			try:
+				self.ser.timeout = transfer_timeout
+				data_view = memoryview(data)
+				chunk_size = 512
+				for start in range(0, len(data_view), chunk_size):
+					self.ser.write(data_view[start : start + chunk_size])
+					# Pace upload slightly to avoid overflowing UART RX while the ESP32
+					# services other tasks.
+					time.sleep(0.001)
+				self.ser.flush()
+				resp = self._read_json_response(transfer_timeout)
+			finally:
+				self.ser.timeout = prev_timeout
+
+		if not resp:
+			raise TimeoutError("No response from ESP32")
+		return self._parse_response(resp)
+
+	def play_display_file(self, name: str, x: int = 0, y: int = 0, w: int | None = None, h: int | None = None) -> Dict[str, Any]:
+		"""Play a stored display file previously uploaded with `upload_display_file`.
+
+		Currently supports raw RGB565 frames sized exactly w*h*2 bytes.
+		"""
+		if w is None:
+			w = _DISPLAY_WIDTH
+		if h is None:
+			h = _DISPLAY_HEIGHT
+		payload = {"cmd": "display", "action": "play", "name": name, "x": int(x), "y": int(y), "w": int(w), "h": int(h)}
+		return self.send(payload)
+
+	def play_sequence(self, files: list[str], durations_ms: list[int] | None = None, x: int = 0, y: int = 0, w: int | None = None, h: int | None = None, timeout: float | None = None) -> Dict[str, Any]:
+		"""Play a stored sequence of files on the ESP32 for smooth animation.
+		files: list of filenames stored on the device (LittleFS)
+		durations_ms: optional list of per-frame durations in milliseconds
+		"""
+		if w is None:
+			w = _DISPLAY_WIDTH
+		if h is None:
+			h = _DISPLAY_HEIGHT
+		# Use CSV strings for compatibility with firmware JSON parser.
+		# Fallback-style sequence: send a CSV of filenames (existing method).
+		payload: Dict[str, Any] = {"cmd": "display", "action": "play_sequence", "files_csv": ",".join(files), "x": int(x), "y": int(y), "w": int(w), "h": int(h)}
+		if durations_ms:
+			payload["durations_csv"] = ",".join(str(int(d)) for d in durations_ms)
+		return self.send(payload, timeout=timeout)
+
+	def play_sequence_prefix(self, prefix: str, count: int, start: int = 0, pad: int = 4, durations_ms: list[int] | None = None, x: int = 0, y: int = 0, w: int | None = None, h: int | None = None, timeout: float | None = None) -> Dict[str, Any]:
+		"""Request device-side playback by filename prefix and count.
+		prefix: filename prefix including any trailing underscore, e.g. 'test_abcd1234_'
+		count: number of frames to play
+		pad: zero padding width for frame indices (default 4)
+		"""
+		if w is None:
+			w = _DISPLAY_WIDTH
+		if h is None:
+			h = _DISPLAY_HEIGHT
+		payload: Dict[str, Any] = {"cmd": "display", "action": "play_sequence_prefix", "prefix": prefix, "count": int(count), "start": int(start), "pad": int(pad), "x": int(x), "y": int(y), "w": int(w), "h": int(h)}
+		if durations_ms:
+			payload["durations_csv"] = ",".join(str(int(d)) for d in durations_ms)
+		return self.send(payload, timeout=timeout)
 
 	def delete_motor(self, motor_id: str) -> Dict[str, Any]:
 		return self.send({"cmd": "delete_motor", "motor": motor_id})
 
 	def led_on(self) -> Dict[str, Any]:
-		return self.send({"cmd": "led", "mode": "on"})
+		return self.send({"cmd": "led", "led": "board", "mode": "on"})
 
 	def led_off(self) -> Dict[str, Any]:
-		return self.send({"cmd": "led", "mode": "off"})
+		return self.send({"cmd": "led", "led": "board", "mode": "off"})
 
 	def led_blink(self, interval_ms: int = 500, auto_off_ms: Optional[int] = None) -> Dict[str, Any]:
 		payload: Dict[str, Any] = {
 			"cmd": "led",
+			"led": "board",
 			"mode": "blink",
 			"interval_ms": int(interval_ms),
 		}
 		if auto_off_ms is not None:
 			payload["auto_off_ms"] = int(auto_off_ms)
 		return self.send(payload)
+
+
+class ESP32LED:
+	class Channel:
+		def __init__(self, conn: ESP32Connection, name: str, pin: int) -> None:
+			self.conn = conn
+			self.name = name
+			self.pin = pin
+
+		def action(
+			self,
+			mode: Optional[str] = None,
+			on: Optional[bool] = None,
+			interval_ms: int = 500,
+			auto_off_ms: Optional[int] = None,
+		) -> Dict[str, Any]:
+			payload: Dict[str, Any] = {"cmd": "led", "led": self.name}
+			if mode is not None:
+				payload["mode"] = mode
+			elif on is not None:
+				payload["on"] = bool(on)
+			else:
+				payload["mode"] = "on"
+			if payload.get("mode") == "blink":
+				payload["interval_ms"] = int(interval_ms)
+				if auto_off_ms is not None:
+					payload["auto_off_ms"] = int(auto_off_ms)
+			return self.conn.send(payload)
+
+		def on(self) -> Dict[str, Any]:
+			return self.action(mode="on")
+
+		def off(self) -> Dict[str, Any]:
+			return self.action(mode="off")
+
+		def blink(self, interval_ms: int = 500, auto_off_ms: Optional[int] = None) -> Dict[str, Any]:
+			return self.action(mode="blink", interval_ms=interval_ms, auto_off_ms=auto_off_ms)
+
+	def __init__(self, conn: ESP32Connection) -> None:
+		self.conn = conn
+		leds = get_led_channels()
+		for led_name, led_cfg in leds.items():
+			channel_name = str(led_cfg.get("channel", led_name))
+			setattr(self, led_name, self.Channel(conn, channel_name, int(led_cfg["pin"])))
+
+		self.board = getattr(self, "board")
+		self.boardLED = self.board
+
+	@classmethod
+	def attach(cls, conn: ESP32Connection) -> "ESP32LED":
+		instance = cls(conn)
+		for led_name in get_led_channels().keys():
+			setattr(cls, led_name, getattr(instance, led_name))
+		cls.board = instance.board
+		cls.boardLED = instance.board
+		return instance
 
 
 class ESP32Motor:
@@ -144,11 +460,10 @@ class ESP32Motor:
 		engage: bool = False,
 		replace: bool = False,
 	) -> "ESP32Motor":
-		"""Create a new motor instance on the ESP32.
-		
-		Args:
-			replace: If True, delete existing motor with same ID before creating
-		"""
+		# Create a new motor instance on the ESP32.
+		# 
+		# Args:
+		#	replace: If True, delete existing motor with same ID before creating
 		if replace:
 			try:
 				conn.delete_motor(motor_id)
@@ -254,33 +569,351 @@ class ESP32Motor:
 		return self.conn.send({"cmd": "status", "motor": self.motor_id})
 
 	def get_position(self) -> int:
-		"""Get the current position of the motor in steps (signed integer)."""
+		# Get the current position of the motor in steps (signed integer).
 		result = self.conn.send({"cmd": "get_position", "motor": self.motor_id})
 		return result.get("position", 0)
 
 	def get_position_degrees(self, gear_ratio: float = 360.0) -> float:
-		"""Get the current position in degrees (polar alignment deviation).
-		
-		Args:
-			gear_ratio: Sky degrees per motor revolution (default: 360 for RA, 144 for DEC)
-		
-		Returns:
-			Angular deviation in degrees
-		"""
+		# Get the current position in degrees (polar alignment deviation).
+		# 
+		# Args:
+		#	gear_ratio: Sky degrees per motor revolution (default: 360 for RA, 144 for DEC)
+		# 
+		# Returns:
+		#	Angular deviation in degrees
 		steps = self.get_position()
 		return (steps * gear_ratio) / self._steps_per_rev
 
 	def get_position_arcmin(self, gear_ratio: float = 360.0) -> float:
-		"""Get the current position in arcminutes (fine alignment precision)."""
+		# Get the current position in arcminutes (fine alignment precision).
 		degrees = self.get_position_degrees(gear_ratio)
 		return degrees * 60
 
 	def get_position_arcsec(self, gear_ratio: float = 360.0) -> float:
-		"""Get the current position in arcseconds (highest precision)."""
+		# Get the current position in arcseconds (highest precision).
 		arcmin = self.get_position_arcmin(gear_ratio)
 		return arcmin * 60
 
 	def reset_position(self) -> Dict[str, Any]:
-		"""Reset the motor position counter to zero."""
+		# Reset the motor position counter to zero.
 		return self.conn.send({"cmd": "reset_position", "motor": self.motor_id})
+
+
+class ESP32Display:
+	# Control the ST7735S TFT LCD display connected to ESP32.
+
+	# Display constants from centralized hardware map
+	_WIDTH_HEIGHT = get_display_config()
+	WIDTH = int(_WIDTH_HEIGHT["width"])
+	HEIGHT = int(_WIDTH_HEIGHT["height"])
+
+	# Standard colors (RGB565)
+	COLORS = {
+		"black": "000000",
+		"red": "FF0000",
+		"green": "00FF00",
+		"blue": "0000FF",
+		"white": "FFFFFF",
+		"yellow": "FFFF00",
+		"cyan": "00FFFF",
+		"magenta": "FF00FF",
+	}
+
+	def __init__(self, conn: ESP32Connection) -> None:
+		self.conn = conn
+		self._initialized = False
+		self._brightness = 255
+		self._text_color = "FFFFFF"
+		self._bg_color = "000000"
+		self._cursor_x = 0
+		self._cursor_y = 0
+
+	def initialize(self) -> Dict[str, Any]:
+		# Initialize the display hardware.
+		result = self.conn.send({"cmd": "display", "action": "init"}, timeout=5.0)
+		self._initialized = True
+		return result
+
+	def cleanup(self) -> None:
+		# Clean up display resources.
+		if self._initialized:
+			self.power(False)
+			self._initialized = False
+
+	def power(self, on: bool) -> Dict[str, Any]:
+		# Turn display power on/off.
+		return self.conn.send({"cmd": "display", "action": "power", "on": bool(on)})
+
+	def set_backlight(self, brightness: int) -> Dict[str, Any]:
+		# Set backlight brightness (0-255).
+		# 
+		# Args:
+		#	brightness: PWM value 0-255 where 0 is off and 255 is full brightness
+		brightness = max(0, min(255, int(brightness)))
+		self._brightness = brightness
+		return self.conn.send({"cmd": "display", "action": "backlight", "brightness": brightness})
+
+	def get_status(self) -> Dict[str, Any]:
+		# Get current display status.
+		return self.conn.send({"cmd": "display", "action": "status"})
+
+	def format_storage(self) -> Dict[str, Any]:
+		# Format persistent display storage on the ESP32 (LittleFS).
+		return self.conn.send({"cmd": "display", "action": "format_storage"}, timeout=10.0)
+
+	def storage_info(self) -> Dict[str, Any]:
+		"""Return storage total/used/free bytes from the ESP32."""
+		return self.conn.send({"cmd": "display", "action": "storage_info"}, timeout=5.0)
+
+	def list_files(self) -> Dict[str, Any]:
+		"""Return a list of files stored on the ESP32 LittleFS."""
+		return self.conn.send({"cmd": "display", "action": "list_files"}, timeout=5.0)
+
+	def delete_file(self, name: str) -> Dict[str, Any]:
+		"""Delete a file on the ESP32 LittleFS by name."""
+		return self.conn.send({"cmd": "display", "action": "delete_file", "name": name}, timeout=5.0)
+
+	def blit_rgb565(self, x: int, y: int, width: int, height: int, data: bytes | bytearray | memoryview) -> Dict[str, Any]:
+		# Upload a full RGB565 frame or sub-frame in one binary transfer.
+		payload = {
+			"cmd": "display",
+			"action": "blit",
+			"x": int(x),
+			"y": int(y),
+			"w": int(width),
+			"h": int(height),
+			"format": "RGB565",
+			"length": int(len(memoryview(data))),
+		}
+		return self.conn.send_binary(payload, data)
+
+	def blit_rgb565_compressed(self, x: int, y: int, width: int, height: int, data: bytes | bytearray | memoryview, compress_level: int = 6) -> Dict[str, Any]:
+		# Upload an RGB565 frame with optional zlib compression.
+		# The firmware decompresses on receive if the frame was compressed.
+		data_bytes = bytes(memoryview(data).tobytes())
+		compressed = zlib.compress(data_bytes, level=compress_level)
+		
+		# Only use compression if it saves space (avoid overhead for random data)
+		if len(compressed) < len(data_bytes) * 0.95:  # 5% savings threshold
+			payload = {
+				"cmd": "display",
+				"action": "blit",
+				"x": int(x),
+				"y": int(y),
+				"w": int(width),
+				"h": int(height),
+				"format": "RGB565",
+				"compress": "zlib",
+				"length": int(len(compressed)),
+				"uncompressed_length": int(len(data_bytes)),
+			}
+			return self.conn.send_binary(payload, compressed, timeout=15.0)
+		else:
+			# Fallback to uncompressed if compression didn't help
+			return self.blit_rgb565(x, y, width, height, data)
+
+	def clear(self, color: Optional[str] = None) -> Dict[str, Any]:
+		# Clear the display with a background color.
+		# 
+		# Args:
+		#	color: Hex color string (e.g., "000000" for black) or color name
+		if color is None:
+			color = self._bg_color
+		else:
+			color = self._normalize_color(color)
+			self._bg_color = color
+
+		return self.conn.send({"cmd": "display", "action": "clear", "color": color}, timeout=3.0)
+
+	def fill_screen(self, color: Optional[str] = None) -> Dict[str, Any]:
+		# Fill entire screen with color (alias for clear).
+		return self.clear(color)
+
+	# Drawing functions
+	def draw_pixel(self, x: int, y: int, color: Optional[str] = None) -> Dict[str, Any]:
+		# Draw a single pixel.
+		if color is None:
+			color = self._text_color
+		else:
+			color = self._normalize_color(color)
+
+		if not self._validate_coords(x, y):
+			raise ValueError(f"Coordinates ({x}, {y}) out of display bounds")
+
+		return self.conn.send(
+			{"cmd": "display", "action": "draw_pixel", "x": x, "y": y, "color": color}
+		)
+
+	def draw_rectangle(
+		self,
+		x: int,
+		y: int,
+		width: int,
+		height: int,
+		color: Optional[str] = None,
+		fill: bool = False,
+	) -> Dict[str, Any]:
+		# Draw a rectangle.
+		# 
+		# Args:
+		#	x, y: Top-left corner coordinates
+		#	width, height: Rectangle dimensions
+		#	color: Border/fill color
+		#	fill: If True, fill the rectangle; if False, draw outline only
+		if color is None:
+			color = self._text_color
+		else:
+			color = self._normalize_color(color)
+
+		action = "fill_rect" if fill else "draw_rect"
+		# Use longer timeout for filled rectangles (more SPI data)
+		timeout = 3.0 if fill else 1.0
+		return self.conn.send(
+			{
+				"cmd": "display",
+				"action": action,
+				"x": int(x),
+				"y": int(y),
+				"w": int(width),
+				"h": int(height),
+				"color": color,
+			},
+			timeout=timeout,
+		)
+
+	def fill_rectangle(
+		self, x: int, y: int, width: int, height: int, color: Optional[str] = None
+	) -> Dict[str, Any]:
+		# Fill a rectangle with color.
+		return self.draw_rectangle(x, y, width, height, color, fill=True)
+
+	def draw_line(
+		self, x0: int, y0: int, x1: int, y1: int, color: Optional[str] = None
+	) -> Dict[str, Any]:
+		# Draw a line from (x0, y0) to (x1, y1).
+		if color is None:
+			color = self._text_color
+		else:
+			color = self._normalize_color(color)
+
+		return self.conn.send(
+			{
+				"cmd": "display",
+				"action": "draw_line",
+				"x0": int(x0),
+				"y0": int(y0),
+				"x1": int(x1),
+				"y1": int(y1),
+				"color": color,
+			}
+		)
+
+	def draw_circle(
+		self,
+		x: int,
+		y: int,
+		radius: int,
+		color: Optional[str] = None,
+		fill: bool = False,
+	) -> Dict[str, Any]:
+		# Draw a circle.
+		# 
+		# Args:
+		#	x, y: Center coordinates
+		#	radius: Circle radius in pixels
+		#	color: Circle color
+		#	fill: If True, fill the circle; if False, draw outline only
+		if color is None:
+			color = self._text_color
+		else:
+			color = self._normalize_color(color)
+
+		action = "fill_circle" if fill else "draw_circle"
+		# Use longer timeout for filled circles (more SPI data)
+		timeout = 3.0 if fill else 1.0
+		return self.conn.send(
+			{
+				"cmd": "display",
+				"action": action,
+				"x": int(x),
+				"y": int(y),
+				"r": int(radius),
+				"color": color,
+			},
+			timeout=timeout,
+		)
+
+	def fill_circle(
+		self, x: int, y: int, radius: int, color: Optional[str] = None
+	) -> Dict[str, Any]:
+		# Fill a circle with color.
+		return self.draw_circle(x, y, radius, color, fill=True)
+
+	# Text functions
+	def set_cursor(self, x: int, y: int) -> Dict[str, Any]:
+		# Set cursor position for text rendering.
+		self._cursor_x = int(x)
+		self._cursor_y = int(y)
+		return self.conn.send(
+			{"cmd": "display", "action": "set_cursor", "x": self._cursor_x, "y": self._cursor_y}
+		)
+
+	def set_text_color(self, color: str) -> Dict[str, Any]:
+		# Set text color.
+		color = self._normalize_color(color)
+		self._text_color = color
+		return self.conn.send({"cmd": "display", "action": "set_text_color", "color": color})
+
+	def set_background_color(self, color: str) -> Dict[str, Any]:
+		# Set background color.
+		color = self._normalize_color(color)
+		self._bg_color = color
+		return self.conn.send({"cmd": "display", "action": "set_bg_color", "color": color})
+
+	# Utility methods
+	@staticmethod
+	def _normalize_color(color: str) -> str:
+		# Normalize color to hex format.
+		# 
+		# Args:
+		#	color: Can be a color name from COLORS dict or hex string
+		# 
+		# Returns:
+		#	Hex color string (6 characters)
+		if color.lower() in ESP32Display.COLORS:
+			return ESP32Display.COLORS[color.lower()]
+		
+		# Clean up hex format
+		color = color.lstrip("#").upper()
+		if len(color) == 6 and all(c in "0123456789ABCDEF" for c in color):
+			return color
+		
+		raise ValueError(f"Invalid color format: {color}")
+
+	@staticmethod
+	def _validate_coords(x: int, y: int) -> bool:
+		# Check if coordinates are within display bounds.
+		return 0 <= x < ESP32Display.WIDTH and 0 <= y < ESP32Display.HEIGHT
+
+	def draw_test_pattern(self) -> Dict[str, Any]:
+		# Draw a test pattern (colors, rectangles, text areas) for debugging.
+		# Clear with black
+		self.clear("black")
+		
+		# Draw colored rectangles
+		self.fill_rectangle(0, 0, 32, 40, "red")
+		self.fill_rectangle(32, 0, 32, 40, "green")
+		self.fill_rectangle(64, 0, 32, 40, "blue")
+		self.fill_rectangle(96, 0, 32, 40, "yellow")
+		
+		# Draw circles
+		self.fill_circle(32, 80, 15, "cyan")
+		self.fill_circle(96, 80, 15, "magenta")
+		
+		# Draw lines
+		self.draw_line(0, 100, 128, 100, "white")
+		self.draw_line(64, 60, 64, 160, "white")
+		
+		return self.get_status()
+
 

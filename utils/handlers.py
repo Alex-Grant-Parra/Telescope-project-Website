@@ -9,7 +9,8 @@ from core.networking.csrf import get_csrf_token, SESSION
 from utils.liveview_state import load_liveview_state, save_liveview_state
 from utils.camera_state import camera_state
 from utils.config_state import get_client_config, build_service_urls, load_static_state
-from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig
+from utils.LEDmanager import get_led_manager
+from utils.esp32_state import esp32_state
 from core.hardware.tracking import trackCoordinates, stop_tracking
 from utils.telescope_state import get_telescope_coords
 
@@ -17,14 +18,13 @@ CONFIG_FILE = "config/client_config.json"
 
 # Decorator for camera operations
 def requires_camera(operation_name: str = "operation"):
-    """Decorator that checks camera availability and handles errors for camera operations.
-    
-    Args:
-        operation_name: Name of the operation for error messages (e.g., "capture photo", "get settings")
-    
-    Returns:
-        Decorated function that returns error dict if camera unavailable or operation fails
-    """
+    # Decorator that checks camera availability and handles errors for camera operations.
+    # 
+    # Args:
+    #     operation_name: Name of the operation for error messages (e.g., "capture photo", "get settings")
+    # 
+    # Returns:
+    #     Decorated function that returns error dict if camera unavailable or operation fails
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -99,99 +99,113 @@ def setCameraSetting(label, value):
 @requires_camera("capture photo")
 def capturePhoto(currentid):
     # Use camera lock to prevent conflicts with live view
-    with camera_state.get_command_lock():
-        # Check if live view is enabled and pause it
-        if load_liveview_state():
-            camera_state.pause_liveview_for_command()
-        
-        files = Camera.capturePhoto(currentid=currentid) # Returns a list of two file names, one raw, one jpeg
-
-    print(files)
-
-    if not isinstance(files, list) or len(files) < 2:
-        print("[ERROR] Camera.capturePhoto() did not return two valid files")
-        return {"error": "Camera did not return valid files"}
-
-    current_dir = os.getcwd()
-    photos_dir = os.path.join(current_dir, "photos/default")
-
-    # Ensure directory exists
-    if not os.path.exists(photos_dir):
-        print(f"[ERROR] Directory '{photos_dir}' does not exist.")
-        return
-
-    # Prepare file paths
-    files = [os.path.join(photos_dir, file) for file in files]
-
-    # Verify files exist
-    missing_files = [file for file in files if not os.path.exists(file)]
-    if missing_files:
-        print(f"[ERROR] The following files are missing: {missing_files}")
-        return
-    
-    server_url = f"{SERVER_URL}/upload"
-
-    # Prepare file tuples with filenames and basic content-types
-    def _guess_mime(path: str) -> str:
-        ext = os.path.splitext(path)[1].lower().lstrip(".")
-        if ext in {"jpg", "jpeg"}:
-            return "image/jpeg"
-        if ext in {"png"}:
-            return "image/png"
-        if ext in {"gif"}:
-            return "image/gif"
-        if ext in {"bmp"}:
-            return "image/bmp"
-        if ext in {"tiff", "tif"}:
-            return "image/tiff"
-        if ext in {"webp"}:
-            return "image/webp"
-        # RAW/other
-        return "application/octet-stream"
-
-    file_data = {
-        f"file{index}": (os.path.basename(file), open(file, "rb"), _guess_mime(file))
-        for index, file in enumerate(files)
-    }
-
-    # Prepare headers, attach CSRF if available
-    headers = {}
-    data = None
-    token = get_csrf_token(SERVER_URL)
-    if token:
-        # Send both common header variations to be safe
-        headers["X-CSRF-Token"] = token
-        headers["X-CSRFToken"] = token
-        # Also include token as form field to support Flask-WTF style
-        data = {"csrf_token": token}
+    leds = get_led_manager()
+    leds.set_command_busy(True)
+    leds.flash_capture_started()
 
     try:
-        print("[DEBUG] Sending files to server...")
-        response = SESSION.post(
-            server_url,
-            files=file_data,
-            headers=headers,
-            data=data,
-            timeout=60,
-        )
-        # Try to print JSON if available, else status/text
+        with camera_state.get_command_lock():
+            # Check if live view is enabled and pause it
+            if load_liveview_state():
+                camera_state.pause_liveview_for_command()
+            
+            files = Camera.capturePhoto(currentid=currentid) # Returns a list of two file names, one raw, one jpeg
+
+        print(files)
+
+        if not isinstance(files, list) or len(files) < 2:
+            print("[ERROR] Camera.capturePhoto() did not return two valid files")
+            leds.set_error(True, critical=False)
+            return {"error": "Camera did not return valid files"}
+
+        current_dir = os.getcwd()
+        photos_dir = os.path.join(current_dir, "photos/default")
+
+        # Ensure directory exists
+        if not os.path.exists(photos_dir):
+            print(f"[ERROR] Directory '{photos_dir}' does not exist.")
+            leds.set_error(True, critical=False)
+            return
+
+        # Prepare file paths
+        files = [os.path.join(photos_dir, file) for file in files]
+
+        # Verify files exist
+        missing_files = [file for file in files if not os.path.exists(file)]
+        if missing_files:
+            print(f"[ERROR] The following files are missing: {missing_files}")
+            leds.set_error(True, critical=False)
+            return
+        
+        server_url = f"{SERVER_URL}/upload"
+
+        # Prepare file tuples with filenames and basic content-types
+        def _guess_mime(path: str) -> str:
+            ext = os.path.splitext(path)[1].lower().lstrip(".")
+            if ext in {"jpg", "jpeg"}:
+                return "image/jpeg"
+            if ext in {"png"}:
+                return "image/png"
+            if ext in {"gif"}:
+                return "image/gif"
+            if ext in {"bmp"}:
+                return "image/bmp"
+            if ext in {"tiff", "tif"}:
+                return "image/tiff"
+            if ext in {"webp"}:
+                return "image/webp"
+            # RAW/other
+            return "application/octet-stream"
+
+        file_data = {
+            f"file{index}": (os.path.basename(file), open(file, "rb"), _guess_mime(file))
+            for index, file in enumerate(files)
+        }
+
+        # Prepare headers, attach CSRF if available
+        headers = {}
+        data = None
+        token = get_csrf_token(SERVER_URL)
+        if token:
+            # Send both common header variations to be safe
+            headers["X-CSRF-Token"] = token
+            headers["X-CSRFToken"] = token
+            # Also include token as form field to support Flask-WTF style
+            data = {"csrf_token": token}
+
         try:
-            print("[DEBUG] Server response:", response.json())
-        except ValueError:
-            print(f"[DEBUG] Server response status={response.status_code}, body={response.text[:300]}")
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR] Failed to upload files: {e}")
+            print("[DEBUG] Sending files to server...")
+            response = SESSION.post(
+                server_url,
+                files=file_data,
+                headers=headers,
+                data=data,
+                timeout=60,
+            )
+            # Try to print JSON if available, else status/text
+            try:
+                print("[DEBUG] Server response:", response.json())
+            except ValueError:
+                print(f"[DEBUG] Server response status={response.status_code}, body={response.text[:300]}")
+            response.raise_for_status()
+            leds.flash_command_complete(True)
+        except requests.exceptions.RequestException as e:
+            print(f"[ERROR] Failed to upload files: {e}")
+            leds.set_error(True, critical=False)
+            leds.flash_command_complete(False)
+        finally:
+            # Ensure files are closed
+            for file_tuple in file_data.values():
+                file_tuple[1].close()
     finally:
-        # Ensure files are closed
-        for file_tuple in file_data.values():
-            file_tuple[1].close()
+        leds.set_command_busy(False)
 
 @requires_camera("start live view")
 def startLiveView():
     global liveview_enabled
     liveview_enabled = True
     save_liveview_state(True)
+    get_led_manager().apply()
     print("[liveview] Live view started.")
     return "Live view started"
 
@@ -199,6 +213,7 @@ def stopLiveView():
     global liveview_enabled
     liveview_enabled = False
     save_liveview_state(False)
+    get_led_manager().apply()
     
     # Release camera viewfinder using the Camera class (if camera available)
     if camera_state.is_available():
@@ -211,12 +226,11 @@ def stopLiveView():
     return "Live view stopped"
 
 def get_current_coordinates():
-    """Returns the current telescope coordinates (right ascension and declination).
-    
-    Returns:
-        dict: Dictionary containing 'current_right_ascension' and 'current_declination'
-              or error dict if coordinates are unavailable
-    """
+    # Returns the current telescope coordinates (right ascension and declination).
+    # 
+    # Returns:
+    #     dict: Dictionary containing 'current_right_ascension' and 'current_declination'
+    #           or error dict if coordinates are unavailable
     coords = get_telescope_coords()
     if coords is None:
         return {"error": "Telescope coordinates not available"}
@@ -228,58 +242,27 @@ def get_current_coordinates():
 
 # ESP32 motor control handlers
 
-# Global ESP32 connection instance
-_ESP32_CONN: Optional[ESP32Connection] = None
+def _get_esp32_connection():
+    # Get the current ESP32 connection, reconnecting on demand if needed.
+    return esp32_state.ensure_connection()
 
-def _load_motor_config() -> dict:
-    """Load motor configuration from config/client_config.json"""
-    try:
-        config = load_static_state()
-        esp32_config = config.get('esp32', {})
-        if esp32_config:
-            print(f"[MOTORS] Loaded ESP32 configuration from {CONFIG_FILE}")
-            return esp32_config
-    except Exception as e:
-        print(f"[MOTORS] Warning: Could not load ESP32 config: {e}")
-    
-    # Return default configuration if none found
-    print("[MOTORS] Using default ESP32 configuration")
-    return {
-        "port": "/dev/ttyUSB0",
-        "baudrate": 115200,
-        "timeout": 0.5
-    }
 
-def _get_esp32_connection() -> Optional[ESP32Connection]:
-    """Get or initialize the ESP32 connection (lazy loading)."""
-    global _ESP32_CONN
-    if _ESP32_CONN is None:
-        try:
-            config = _load_motor_config()
-            cfg = ESP32SerialConfig(
-                port=config.get("port", "/dev/ttyUSB0"),
-                baudrate=config.get("baudrate", 115200),
-                timeout=float(config.get("timeout", 0.5))
-            )
-            _ESP32_CONN = ESP32Connection(cfg)
-            print("[MOTORS] ESP32 connection established")
-        except Exception as e:
-            print(f"[MOTORS] Error connecting to ESP32: {e}")
-            _ESP32_CONN = False  # Mark as failed to avoid retry
-    return _ESP32_CONN if _ESP32_CONN else None
+def _esp32_error_response(exc: Exception) -> Dict[str, Any]:
+    esp32_state.mark_disconnected()
+    return {"error": str(exc)}
 
 def espEnable(on: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Enable/disable the stepper driver."""
+    # Enable/disable the stepper driver.
     try:
         conn = _get_esp32_connection()
         if not conn:
             return {"error": "ESP32 connection not available"}
         return conn.send({"cmd": "enable", "motor": motor_id, "value": bool(on)})
     except Exception as e:
-        return {"error": str(e)}
+        return _esp32_error_response(e)
 
 def espSetDirection(forward: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set motor direction: True=forward, False=reverse."""
+    # Set motor direction: True=forward, False=reverse.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -288,24 +271,23 @@ def espSetDirection(forward: Any, motor_id: str = "motor1") -> Dict[str, Any]:
         # Direction is controlled via the forward parameter in turn_degrees
         return {"status": "ok", "message": "Direction is controlled via forward parameter in movement commands"}
     except Exception as e:
-        return {"error": str(e)}
+        return _esp32_error_response(e)
 
 def espSetSpeed(sps: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set speed in steps/sec."""
+    # Set speed in steps/sec.
     try:
         conn = _get_esp32_connection()
         if not conn:
             return {"error": "ESP32 connection not available"}
         return conn.send({"cmd": "set_speed", "motor": motor_id, "sps": float(sps)})
     except Exception as e:
-        return {"error": str(e)}
+        return _esp32_error_response(e)
 
 def espStart(sps: Any, forward: Optional[Any] = None, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Start continuous rotation at speed with optional direction.
-    
-    Note: The new interface doesn't support true continuous motion without a target.
-    This will start indefinite motion by moving a very large number of degrees.
-    """
+    # Start continuous rotation at speed with optional direction.
+    # 
+    # Note: The new interface doesn't support true continuous motion without a target.
+    # This will start indefinite motion by moving a very large number of degrees.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -324,14 +306,13 @@ def espStart(sps: Any, forward: Optional[Any] = None, motor_id: str = "motor1") 
             "forward": bool(fwd)
         })
     except Exception as e:
-        return {"error": str(e)}
+        return _esp32_error_response(e)
 
 def espMoveSteps(steps: Any, sps: Optional[Any] = None, forward: Optional[Any] = None, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Move a finite number of steps with optional speed and direction override.
-    
-    Note: The new interface uses degrees instead of steps, so this converts steps to degrees
-    assuming STEPS_PER_DEGREE = 8.889 (typical for common stepper configs)
-    """
+    # Move a finite number of steps with optional speed and direction override.
+    # 
+    # Note: The new interface uses degrees instead of steps, so this converts steps to degrees
+    # assuming STEPS_PER_DEGREE = 8.889 (typical for common stepper configs)
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -352,68 +333,64 @@ def espMoveSteps(steps: Any, sps: Optional[Any] = None, forward: Optional[Any] =
             "forward": bool(fwd)
         })
     except Exception as e:
-        return {"error": str(e)}
+        return _esp32_error_response(e)
 
 def espStop(motor_id: str = "motor1") -> Dict[str, Any]:
-    """Stop motion."""
+    # Stop motion.
     try:
         conn = _get_esp32_connection()
         if not conn:
             return {"error": "ESP32 connection not available"}
         return conn.send({"cmd": "stop", "motor": motor_id})
     except Exception as e:
-        return {"error": str(e)}
+        return _esp32_error_response(e)
 
 def espSetMicrosteps(value: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set TMC2209 microstepping value (e.g., 16, 32).
-    
-    NOT SUPPORTED in new interface - microstepping must be configured on the ESP32 firmware.
-    """
+    # Set TMC2209 microstepping value (e.g., 16, 32).
+    # 
+    # NOT SUPPORTED in new interface - microstepping must be configured on the ESP32 firmware.
     return {"error": "Microstepping configuration is not supported in this interface. Configure on ESP32 firmware instead."}
 
 def espSetCurrent(mA: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set RMS motor current in milliamps.
-    
-    NOT SUPPORTED in new interface - motor current must be configured on the ESP32 firmware.
-    """
+    # Set RMS motor current in milliamps.
+    # 
+    # NOT SUPPORTED in new interface - motor current must be configured on the ESP32 firmware.
     return {"error": "Motor current configuration is not supported in this interface. Configure on ESP32 firmware instead."}
 
 def espSetMode(mode: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set chopper mode: 'stealth' or 'spread'.
-    
-    NOT SUPPORTED in new interface - chopper mode must be configured on the ESP32 firmware.
-    """
+    # Set chopper mode: 'stealth' or 'spread'.
+    # 
+    # NOT SUPPORTED in new interface - chopper mode must be configured on the ESP32 firmware.
     return {"error": "Chopper mode configuration is not supported in this interface. Configure on ESP32 firmware instead."}
 
 def espSetAccel(sps2: Any, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Set acceleration in steps/sec^2 for ramping.
-    
-    NOT SUPPORTED in new interface - acceleration must be configured on the ESP32 firmware.
-    """
+    # Set acceleration in steps/sec^2 for ramping.
+    # 
+    # NOT SUPPORTED in new interface - acceleration must be configured on the ESP32 firmware.
     return {"error": "Acceleration configuration is not supported in this interface. Configure on ESP32 firmware instead."}
 
 def espStatus(motor_id: str = "motor1") -> Dict[str, Any]:
-    """Query motor status."""
+    # Query motor status.
     try:
         conn = _get_esp32_connection()
         if not conn:
             return {"error": "ESP32 connection not available"}
         return conn.send({"cmd": "status", "motor": motor_id})
     except Exception as e:
-        return {"error": str(e)}
+        return _esp32_error_response(e)
 
 def espStatusAll() -> Dict[str, Any]:
-    """Query status of all motors."""
+    # Query status of all motors.
     try:
         conn = _get_esp32_connection()
         if not conn:
             return {"error": "ESP32 connection not available"}
         return conn.list_motors()
     except Exception as e:
-        return {"error": str(e)}
+        return _esp32_error_response(e)
 
 def espTurnDegrees(degrees: Any, forward: Any = True, motor_id: str = "motor1") -> Dict[str, Any]:
-    """Move motor a specified number of degrees."""
+    # Move motor a specified number of degrees.
     try:
         conn = _get_esp32_connection()
         if not conn:
@@ -425,11 +402,11 @@ def espTurnDegrees(degrees: Any, forward: Any = True, motor_id: str = "motor1") 
             "forward": bool(forward)
         })
     except Exception as e:
-        return {"error": str(e)}
+        return _esp32_error_response(e)
 
 # Enhanced functions that can unpack motor_id from JSON-style arguments
 def espEnableWithMotorId(*args, **kwargs) -> Dict[str, Any]:
-    """Enable/disable motor - can extract motor_id from JSON arguments"""
+    # Enable/disable motor - can extract motor_id from JSON arguments
     motor_id = "motor1"  # default
     on = False
     
@@ -458,7 +435,7 @@ def espEnableWithMotorId(*args, **kwargs) -> Dict[str, Any]:
     return espEnable(on, motor_id)
 
 def espStartWithMotorId(*args, **kwargs) -> Dict[str, Any]:
-    """Start motor - can extract motor_id from JSON arguments"""
+    # Start motor - can extract motor_id from JSON arguments
     motor_id = "motor1"
     sps = 0
     forward = None
@@ -493,7 +470,7 @@ def espStartWithMotorId(*args, **kwargs) -> Dict[str, Any]:
     return espStart(sps, forward, motor_id)
 
 def espMoveStepsWithMotorId(*args, **kwargs) -> Dict[str, Any]:
-    """Move steps - can extract motor_id from JSON arguments"""
+    # Move steps - can extract motor_id from JSON arguments
     motor_id = "motor1"
     steps = 0
     sps = None
@@ -539,7 +516,7 @@ def espMoveStepsWithMotorId(*args, **kwargs) -> Dict[str, Any]:
     return espMoveSteps(steps, sps, forward, motor_id)
 
 def espStopWithMotorId(*args, **kwargs) -> Dict[str, Any]:
-    """Stop motor - can extract motor_id from JSON arguments"""
+    # Stop motor - can extract motor_id from JSON arguments
     motor_id = "motor1"
     
     if args:
@@ -556,7 +533,7 @@ def espStopWithMotorId(*args, **kwargs) -> Dict[str, Any]:
 
 # Comprehensive wrappers for common ESP32 commands with flexible JSON parameter handling
 def espCommand(command_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Universal ESP32 command handler that can parse JSON command structures"""
+    # Universal ESP32 command handler that can parse JSON command structures
     try:
         cmd_type = command_data.get('command', command_data.get('cmd', ''))
         motor_id = command_data.get('motor_id', command_data.get('motor', 'motor1'))
@@ -604,7 +581,7 @@ def espCommand(command_data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             return {"error": f"Unknown command: {cmd_type}"}
     except Exception as e:
-        return {"error": str(e)}
+        return _esp32_error_response(e)
 
 # Function mapping dictionary
 function_map = {

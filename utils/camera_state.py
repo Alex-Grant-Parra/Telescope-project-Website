@@ -1,4 +1,4 @@
-"""Camera availability state management"""
+# Camera availability state management
 import asyncio
 import time
 import subprocess
@@ -6,7 +6,7 @@ from threading import Lock
 from utils.liveview_state import is_liveview_enabled
 
 class CameraState:
-    """Thread-safe camera availability state"""
+    # Thread-safe camera availability state
     _instance = None
     _lock = Lock()
     
@@ -27,12 +27,12 @@ class CameraState:
         self._initialized = True
     
     def is_available(self) -> bool:
-        """Check if camera is currently available"""
+        # Check if camera is currently available
         with self._lock:
             return self._available
     
     def set_available(self, available: bool):
-        """Set camera availability status"""
+        # Set camera availability status
         with self._lock:
             changed = self._available != available
             self._available = available
@@ -42,16 +42,15 @@ class CameraState:
                 print(f"[camera_state] Camera is now {status}")
     
     def get_last_check_time(self) -> float:
-        """Get timestamp of last availability check"""
+        # Get timestamp of last availability check
         with self._lock:
             return self._last_check_time
     
     def pause_liveview_for_command(self):
-        """Temporarily pause live view to execute a camera command.
-        
-        This kills any running gphoto2 processes and waits for them to fully terminate.
-        Live view will automatically restart after the command completes.
-        """
+        # Temporarily pause live view to execute a camera command.
+        # 
+        # This kills any running gphoto2 processes and waits for them to fully terminate.
+        # Live view will automatically restart after the command completes.
         try:
             # Kill any running gphoto2 processes
             print("[camera_state] Pausing live view for camera command...")
@@ -62,7 +61,7 @@ class CameraState:
             print(f"[camera_state] Error pausing live view: {e}")
     
     def get_command_lock(self):
-        """Get the lock for executing camera commands"""
+        # Get the lock for executing camera commands
         return self._command_lock
 
 
@@ -71,11 +70,10 @@ camera_state = CameraState()
 
 
 async def camera_scanner_task(check_interval: float = 2.0):
-    """Background task that continuously scans for camera availability
-    
-    Args:
-        check_interval: Time in seconds between camera checks
-    """
+    # Background task that continuously scans for camera availability
+    # 
+    # Args:
+    #     check_interval: Time in seconds between camera checks
     from core.camera.controller import Camera
     
     print(f"[camera_scanner] Started camera scanner (checking every {check_interval}s)")

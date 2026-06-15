@@ -1,4 +1,5 @@
 import asyncio
+import os
 import websockets
 import ujson as json  # Using ujson for faster serialization
 import time
@@ -9,7 +10,18 @@ from datetime import datetime
 from utils.handlers import function_map
 from utils.liveview_state import is_liveview_enabled, save_liveview_state
 from utils.camera_state import camera_state, camera_scanner_task
+from utils.esp32_state import esp32_state, esp32_scanner_task
+
+
+async def peripheral_refresh_task(led_manager, refresh_interval: float = 1.0):
+    # Keep the task alive without polling the ESP32 on a fixed interval.
+    # The scanner tasks already manage reconnection, and repeated refresh
+    # probes were creating serial contention with the LED commands.
+    print(f"[peripheral_refresh] Started peripheral refresh task (no polling, interval {refresh_interval}s)")
+    while True:
+        await asyncio.sleep(refresh_interval)
 from utils.config_state import get_client_config, save_client_config, build_service_urls
+from utils.LEDmanager import get_led_manager
 
 
 # Configuration values are provided via `config/client_profile.json` at runtime.
@@ -22,7 +34,7 @@ LIVEVIEW_URI = None
 SERVER_HTTP_URL = None
 
 def load_config(allow_missing: bool = False):
-    """Load client configuration from static state."""
+    # Load client configuration from static state.
     try:
         return get_client_config()
     except Exception:
@@ -31,7 +43,7 @@ def load_config(allow_missing: bool = False):
         raise
 
 def save_config(config):
-    """Save client configuration to static state."""
+    # Save client configuration to static state.
     try:
         save_client_config(config)
         print(f"[config] Configuration saved to config/client_profile.json")
@@ -45,7 +57,7 @@ def save_config(config):
 API_TOKEN = None
 
 async def authenticate_with_server(ws):
-    """Send authentication message to server"""
+    # Send authentication message to server
     if not API_TOKEN:
         print("[auth] ERROR: No API token configured!")
         print("[auth] Please set your API token in config/client_profile.json")
@@ -66,7 +78,7 @@ async def authenticate_with_server(ws):
     print(f"[auth] Sent authentication for client: {CLIENT_ID}")
 
 async def handle_server(ws):
-    """Handle incoming WebSocket messages and execute mapped functions"""
+    # Handle incoming WebSocket messages and execute mapped functions
     # Send authentication as first message
     await authenticate_with_server(ws)
     
@@ -123,7 +135,7 @@ async def handle_server(ws):
         raise
 
 async def run_client():
-    """Run the main WebSocket client with automatic reconnection"""
+    # Run the main WebSocket client with automatic reconnection
     
     while True:  # Outer reconnection loop
         connection_start_time = time.time()
@@ -170,7 +182,7 @@ async def run_client():
         await asyncio.sleep(5)
 
 async def authenticate_liveview(ws):
-    """Send authentication message to liveview server"""
+    # Send authentication message to liveview server
     if not API_TOKEN:
         raise Exception("No API token configured for liveview")
     
@@ -183,7 +195,7 @@ async def authenticate_liveview(ws):
     print(f"[liveview] Sent authentication for client: {CLIENT_ID}")
 
 async def send_frames():
-    """Send live camera frames via WebSocket with automatic reconnection"""
+    # Send live camera frames via WebSocket with automatic reconnection
     import fcntl
     import os as os_module
     from core.camera.controller import Camera
@@ -192,14 +204,29 @@ async def send_frames():
     JPEG_END = b'\xff\xd9'
     proc = None
     last_frame_time = 0
-    frame_interval = 1 / 10  # 10 FPS
+    # Allow overriding FPS via env var LIVEVIEW_FPS, but default to 10 (unchanged)
+    try:
+        fps_env = int(os.environ.get("LIVEVIEW_FPS", "10"))
+        frame_interval = 1.0 / fps_env if fps_env > 0 else 1.0 / 10
+    except Exception:
+        frame_interval = 1 / 10  # 10 FPS
+
     last_process_check_time = 0
     process_check_interval = 1.0  # Check process health every 1 second
+    # Buffer and memory safeguards to protect low-RAM devices.
+    # Keep memory bounded by retaining only the newest candidate frame data.
+    MAX_BUFFER_SIZE = int(os.environ.get("LIVEVIEW_MAX_BUFFER", 4 * 1024 * 1024))
+    MAX_FRAME_SIZE = int(os.environ.get("LIVEVIEW_MAX_FRAME", 2 * 1024 * 1024))
+    DROP_MEMORY_THRESHOLD = int(os.environ.get("LIVEVIEW_MEM_DROP", 120 * 1024 * 1024))
+    PAUSE_MEMORY_THRESHOLD = int(os.environ.get("LIVEVIEW_MEM_PAUSE", 80 * 1024 * 1024))
+    RESTART_MEMORY_THRESHOLD = int(os.environ.get("LIVEVIEW_MEM_RESTART", 50 * 1024 * 1024))
     consecutive_failures = 0  # Track consecutive camera start failures
     process_start_time = 0  # Track when process was started
+    pending_frame = None
+    low_memory_drop_toggle = False
 
     def _read_proc_stderr_text(p):
-        """Best-effort stderr extraction for terminated gphoto2 processes."""
+        # Best-effort stderr extraction for terminated gphoto2 processes.
         if not p or p.stderr is None:
             return ""
         try:
@@ -212,8 +239,63 @@ async def send_frames():
         except Exception:
             return ""
 
+    # Try to import psutil locally (optional dependency) for memory checks
+    try:
+        import psutil
+        _psutil_available = True
+    except Exception:
+        psutil = None
+        _psutil_available = False
+
+    def _available_memory():
+        if not _psutil_available:
+            return None
+        try:
+            return psutil.virtual_memory().available
+        except Exception:
+            return None
+
+    def _trim_buffer(buffer: bytes) -> bytes:
+        if len(buffer) <= MAX_BUFFER_SIZE:
+            return buffer
+
+        latest_start = buffer.rfind(JPEG_START)
+        if latest_start != -1:
+            trimmed = buffer[latest_start:]
+            if len(trimmed) <= MAX_BUFFER_SIZE:
+                print(f"[send_frames] Buffer exceeded {MAX_BUFFER_SIZE} bytes; trimming to latest frame candidate")
+                return trimmed
+
+        print(f"[send_frames] Buffer exceeded {MAX_BUFFER_SIZE} bytes; keeping newest tail")
+        return buffer[-MAX_BUFFER_SIZE:]
+
+    def _extract_latest_frame(buffer: bytes):
+        latest_frame = None
+
+        while True:
+            start = buffer.find(JPEG_START)
+            if start == -1:
+                return latest_frame, buffer[-MAX_BUFFER_SIZE:]
+
+            if start > 0:
+                buffer = buffer[start:]
+                start = 0
+
+            end = buffer.find(JPEG_END, start + 2)
+            if end == -1:
+                return latest_frame, _trim_buffer(buffer)
+
+            jpeg = buffer[start:end + 2]
+            buffer = buffer[end + 2:]
+
+            if len(jpeg) > MAX_FRAME_SIZE:
+                print(f"[send_frames] Dropping oversized frame ({len(jpeg)} bytes > {MAX_FRAME_SIZE})")
+                continue
+
+            latest_frame = jpeg
+
     def _cleanup_usb_camera_lockers() -> None:
-        """Best-effort cleanup of processes that commonly lock camera USB endpoints."""
+        # Best-effort cleanup of processes that commonly lock camera USB endpoints.
         locker_patterns = [
             "gvfs-gphoto2-volume-monitor",
             "gvfsd-gphoto2",
@@ -326,9 +408,49 @@ async def send_frames():
                         continue
                 
                 buffer = b''
+                pending_frame = None
                 try:
                     while is_liveview_enabled() and ws.close_code is None:
                         try:
+                            if pending_frame is not None and time.time() - last_frame_time >= frame_interval:
+                                available_memory = _available_memory()
+
+                                if available_memory is not None:
+                                    if available_memory < RESTART_MEMORY_THRESHOLD:
+                                        print(f"[send_frames] Critical low memory ({available_memory} bytes); restarting camera process")
+                                        pending_frame = None
+                                        break
+                                    if available_memory < PAUSE_MEMORY_THRESHOLD:
+                                        print(f"[send_frames] Low memory pause ({available_memory} bytes); delaying send")
+                                        await asyncio.sleep(0.05)
+                                        continue
+                                    if available_memory < DROP_MEMORY_THRESHOLD:
+                                        low_memory_drop_toggle = not low_memory_drop_toggle
+                                        if low_memory_drop_toggle:
+                                            print(f"[send_frames] Low memory drop ({available_memory} bytes); skipping latest frame")
+                                            pending_frame = None
+                                            continue
+
+                                frame_size = len(pending_frame)
+                                send_start = time.time()
+                                try:
+                                    await asyncio.wait_for(ws.send(pending_frame), timeout=2.0)
+                                    send_duration = time.time() - send_start
+                                    last_frame_time = time.time()
+                                    if send_duration > 0.5:
+                                        print(f"[send_frames] ws.send took {send_duration:.2f}s for {frame_size} bytes")
+                                    pending_frame = None
+                                except (websockets.exceptions.ConnectionClosed,
+                                       websockets.exceptions.ConnectionClosedError,
+                                       asyncio.TimeoutError) as send_error:
+                                    print(f"[send_frames] WebSocket send failed: {type(send_error).__name__}")
+                                    raise send_error
+                                except Exception as send_error:
+                                    error_type = type(send_error).__name__
+                                    error_msg = str(send_error)
+                                    print(f"[send_frames] WebSocket send failed: {error_type} - {error_msg}")
+                                    raise send_error
+
                             # Check if process is still running periodically
                             current_time = time.time()
                             if current_time - last_process_check_time >= process_check_interval:
@@ -364,30 +486,10 @@ async def send_frames():
                                     continue
                                     
                                 buffer += chunk
-                                
-                                while True:
-                                    start = buffer.find(JPEG_START)
-                                    end = buffer.find(JPEG_END, start)
-                                    if start != -1 and end != -1 and end > start:
-                                        now = time.time()
-                                        if now - last_frame_time >= frame_interval:
-                                            jpeg = buffer[start:end+2]
-                                            try:
-                                                await asyncio.wait_for(ws.send(jpeg), timeout=2.0)
-                                                last_frame_time = now
-                                            except (websockets.exceptions.ConnectionClosed, 
-                                                   websockets.exceptions.ConnectionClosedError,
-                                                   asyncio.TimeoutError) as send_error:
-                                                print(f"[send_frames] WebSocket send failed: {type(send_error).__name__}")
-                                                raise send_error
-                                            except Exception as send_error:
-                                                error_type = type(send_error).__name__
-                                                error_msg = str(send_error)
-                                                print(f"[send_frames] WebSocket send failed: {error_type} - {error_msg}")
-                                                raise send_error
-                                        buffer = buffer[end+2:]
-                                    else:
-                                        break
+
+                                latest_frame, buffer = _extract_latest_frame(buffer)
+                                if latest_frame is not None:
+                                    pending_frame = latest_frame
                             except BlockingIOError:
                                 # Non-blocking read returned no data, that's OK
                                 await asyncio.sleep(0.01)
@@ -468,7 +570,7 @@ async def send_frames():
         await asyncio.sleep(5)
 
 def cleanup_camera():
-    """Clean up camera processes"""
+    # Clean up camera processes
     print("[cleanup] Releasing camera and killing all gphoto2 processes...")
     print("[cleanup] Setting liveview state to false...")
     save_liveview_state(False)
@@ -478,13 +580,18 @@ def cleanup_camera():
         print(f"[cleanup] Error killing gphoto2: {e}")
 
 def handle_exit(signum, frame):
-    """Handle exit signals"""
+    # Handle exit signals
     print(f"[signal] Received signal {signum}, exiting and releasing camera...")
+    try:
+        leds = get_led_manager()
+        leds.shutdown()
+    except Exception:
+        pass
     cleanup_camera()
-    sys.exit(0)
+    os._exit(0)
 
 def setup_client_config():
-    """Interactive setup for client configuration"""
+    # Interactive setup for client configuration
     print("=== Telescope Client Configuration Setup ===")
     print()
     
@@ -511,7 +618,7 @@ def setup_client_config():
     return current_config
 
 async def websocketClient(cfg: dict = None):
-    """Main async function that runs both WebSocket client and frame sender"""
+    # Main async function that runs both WebSocket client and frame sender
     # Check if we need to run setup
     if len(sys.argv) > 1 and sys.argv[1] == "setup":
         setup_client_config()
@@ -535,6 +642,8 @@ async def websocketClient(cfg: dict = None):
     SERVER_HTTP_URL = urls["http_url"]
     SERVER_URI = urls["server_uri"]
     LIVEVIEW_URI = urls["liveview_uri"]
+    leds = get_led_manager()
+    leds.set_ui_connected(True)
     
     
     
@@ -547,13 +656,19 @@ async def websocketClient(cfg: dict = None):
         task1 = asyncio.create_task(run_client())
         task2 = asyncio.create_task(send_frames())
         task3 = asyncio.create_task(camera_scanner_task(check_interval=2.0))
+        task4 = asyncio.create_task(esp32_scanner_task(check_interval=2.0))
+        task5 = asyncio.create_task(peripheral_refresh_task(leds, refresh_interval=1.0))
         
         # Wait for all tasks to complete (which should be never, unless interrupted)
-        await asyncio.gather(task1, task2, task3)
+        await asyncio.gather(task1, task2, task3, task4, task5)
         
     except KeyboardInterrupt:
         print("[main] KeyboardInterrupt received, exiting and releasing camera...")
     except Exception as e:
         print(f"[main] Unexpected exception: {e}")
     finally:
+        try:
+            leds.shutdown()
+        except Exception:
+            pass
         cleanup_camera()
