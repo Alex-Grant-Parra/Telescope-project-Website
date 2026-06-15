@@ -761,7 +761,7 @@ def admin_security_tokens_legacy():
 @admin_bp.route('/admin/telescopes')
 @login_required
 def admin_manage_telescopes():
-    # Display telescope tokens and related telescope info
+    # Display telescope tokens and pending approvals
     guard = _admin_guard()
     if guard:
         return guard
@@ -778,7 +778,10 @@ def admin_manage_telescopes():
             'name': rec.name,
             'client_type': rec.client_type,
             'created': rec.created_at.isoformat() if rec.created_at else 'Unknown',
-            'db_info': None
+            'db_info': None,
+            'is_approved': getattr(rec, 'is_approved', True),
+            'is_disabled': getattr(rec, 'is_disabled', False),
+            'user_id': getattr(rec, 'user_id', None),
         }
 
         try:
@@ -796,6 +799,18 @@ def admin_manage_telescopes():
         
         view_tokens.append(token_data)
 
+    # Pending approvals: user-registered telescopes awaiting admin approval
+    pending_approvals = Telescope.query.filter_by(is_approved=False).order_by(Telescope.token_created_at.asc()).all()
+    pending_list = []
+    for rec in pending_approvals:
+        pending_list.append({
+            'id': rec.id,
+            'name': rec.telescope_id,
+            'type': rec.type,
+            'user_id': rec.user_id,
+            'created': rec.token_created_at.isoformat() if rec.token_created_at else 'Unknown',
+        })
+
     generated_token = session.pop('new_telescope_token', None)
     generated_token_name = session.pop('new_telescope_token_name', None)
 
@@ -804,6 +819,7 @@ def admin_manage_telescopes():
         tokens=view_tokens,
         generated_token=generated_token,
         generated_token_name=generated_token_name,
+        pending_approvals=pending_list,
     )
 
 
@@ -846,6 +862,60 @@ def admin_generate_telescope_token():
     return redirect(url_for('admin.admin_manage_telescopes'))
 
 
+@admin_bp.route('/admin/telescopes/<int:telescope_id>/approve', methods=['POST'])
+@login_required
+def admin_approve_telescope(telescope_id):
+    # Approve a user-registered telescope, making it active
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    from models.tables import Telescope
+    rec = db.session.get(Telescope, telescope_id)
+    if not rec:
+        flash('Telescope not found.', 'danger')
+        return redirect(url_for('admin.admin_manage_telescopes'))
+
+    rec.is_approved = True
+    db.session.commit()
+    sec_logger.info(f"telescope_approved: id={rec.id}, name={rec.telescope_id}, by={current_user.id}")
+    flash(f'Telescope "{rec.telescope_id}" approved.', 'success')
+    return redirect(url_for('admin.admin_manage_telescopes'))
+
+
+@admin_bp.route('/admin/telescopes/<int:telescope_id>/toggle_disabled', methods=['POST'])
+@login_required
+def admin_toggle_telescope_disabled(telescope_id):
+    # Force enable or disable a telescope without deleting it
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    from models.tables import Telescope
+    rec = db.session.get(Telescope, telescope_id)
+    if not rec:
+        flash('Telescope not found.', 'danger')
+        return redirect(url_for('admin.admin_manage_telescopes'))
+
+    rec.is_disabled = not rec.is_disabled
+    db.session.commit()
+    state = 'disabled' if rec.is_disabled else 'enabled'
+    sec_logger.info(f"telescope_{state}: id={rec.id}, name={rec.telescope_id}, by={current_user.id}")
+    # If the telescope was disabled, ensure any active connection is disconnected
+    if rec.is_disabled:
+        try:
+            from app.WebsocketServer import disconnect_client_by_id
+            disconnected = disconnect_client_by_id(rec.telescope_id, reason='admin_disabled')
+            disconnect_client_by_id(f"{rec.telescope_id}_liveview", reason='admin_disabled')
+            if disconnected:
+                sec_logger.info(f"Disconnected active client for disabled telescope: {rec.telescope_id}")
+        except Exception:
+            pass
+
+    flash(f'Telescope "{rec.telescope_id}" has been {state}.', 'success')
+    return redirect(url_for('admin.admin_manage_telescopes'))
+
+
 @admin_bp.route('/admin/telescopes/revoke', methods=['POST'])
 @admin_bp.route('/admin/security/tokens/revoke', methods=['POST'])
 @login_required
@@ -866,6 +936,18 @@ def admin_revoke_telescope_token():
     if rec:
         revoke_token_by_id(identifier)
         sec_logger.info(f"token_revoked: token_id={rec.id}, by={current_user.id}")
+
+        # Attempt to disconnect any active websocket clients matching this telescope name
+        try:
+            from app.WebsocketServer import disconnect_client_by_id
+            disconnected = disconnect_client_by_id(rec.name, reason='token_revoked')
+            # also try liveview client id
+            disconnect_client_by_id(f"{rec.name}_liveview", reason='token_revoked')
+            if disconnected:
+                sec_logger.info(f"Disconnected active client for revoked telescope: {rec.name}")
+        except Exception:
+            pass
+
         flash('Telescope token revoked.', 'success')
     else:
         flash('Token not found.', 'danger')

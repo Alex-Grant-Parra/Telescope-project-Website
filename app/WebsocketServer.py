@@ -805,6 +805,32 @@ def admin_disconnect_ws_client_handler(client_id):
         return jsonify({'status': 'success', 'message': f"Disconnected '{client_id}'"})
     except Exception as e:
         return jsonify({'status': 'error', 'error': str(e)}), 500
+
+
+def disconnect_client_by_id(client_id, reason='admin_disconnect'):
+    """
+    Programmatic helper to disconnect a connected websocket client by client_id.
+    Returns True if a client was disconnected, False otherwise.
+    """
+    try:
+        existing = client_manager.get_client(client_id)
+        if not existing:
+            return False
+
+        global ws_event_loop
+        if ws_event_loop is None:
+            return False
+
+        fut = asyncio.run_coroutine_threadsafe(
+            existing.ws.close(code=4011, reason=reason),
+            ws_event_loop,
+        )
+        fut.result(timeout=5)
+        client_manager.remove_client(client_id)
+        _security_log('ws_command_programmatic_disconnect', client_id=client_id, reason=reason)
+        return True
+    except Exception:
+        return False
     
 # Handler for /liveview/<client_id> route
 def liveview_handler(client_id):

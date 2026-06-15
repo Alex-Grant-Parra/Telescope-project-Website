@@ -101,6 +101,12 @@
                                             <i class="fas fa-info-circle"></i> Account Info
                                         </a>
                                     </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item" href="{{ url_for('telescopes.my_telescopes') }}">
+                                            <i class="fas fa-satellite-dish"></i> My Telescopes
+                                        </a>
+                                    </li>
                                     {% if current_user.is_admin %}
                                     <li><hr class="dropdown-divider"></li>
                                     <li>

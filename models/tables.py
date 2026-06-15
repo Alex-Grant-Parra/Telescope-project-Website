@@ -183,6 +183,12 @@ class Telescope(db.Model):
     token_hash = db.Column(db.String(64), nullable=True, index=True)
     token_prefix = db.Column(db.String(16), nullable=True)
     token_created_at = db.Column(db.DateTime, nullable=True)
+    # Ownership: which user registered this telescope (nullable for legacy/admin-created tokens)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    # Approval workflow: new user-registered telescopes require admin approval before connecting
+    is_approved = db.Column(db.Boolean, default=False, nullable=False)
+    # Admin force-disable: keeps record in DB but blocks connections
+    is_disabled = db.Column(db.Boolean, default=False, nullable=False)
     
     def __repr__(self):
         return f"<Telescope(id={self.id}, telescope_id='{self.telescope_id}', type='{self.type}')>"
