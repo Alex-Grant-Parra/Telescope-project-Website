@@ -22,8 +22,15 @@
     .calendar-day .date-number { font-weight: 600; font-size: 0.85rem; color: #202124; }
     .calendar-day .date-number.small-muted { color: #5f6368; font-weight: 400; }
     .selected-badge { position: absolute; top: 6px; left: 6px; width: 28px; height: 28px; border-radius: 50%; background: #1a73e8; color: #fff; display:flex;align-items:center;justify-content:center;font-weight:600;font-size:0.85rem; }
+    .calendar-day.today { box-shadow: inset 0 0 0 2px rgba(251,188,5,0.18); }
+    .today-badge { position: absolute; top: 6px; right: 6px; width:10px; height:10px; border-radius:50%; background:#fbbc05; box-shadow:0 0 6px rgba(251,188,5,0.6); }
     .calendar-day .availability-indicator { font-size: 0.75rem; color: #70757a; }
     .calendar-header-cell { padding: 6px 4px; text-align: center; }
+    .calendar-controls { position: relative; width: 320px; min-width: 220px; }
+    .calendar-controls .prev-btn, .calendar-controls .next-btn { position: absolute; top: 50%; transform: translateY(-50%); }
+    .calendar-controls .prev-btn { left: 4px; }
+    .calendar-controls .next-btn { right: 4px; }
+    #monthLabel { display: block; text-align: center; width: 100%; font-weight: 600; }
     @media (max-width: 576px){ .calendar-cell{ min-height: 64px; } }
     </style>
     <h2>Book Telescope</h2>
@@ -34,10 +41,10 @@
     <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">
             <strong>Date Selection</strong>
-            <div>
-                <button class="btn btn-sm btn-outline-secondary" type="button" id="prevMonth">Prev</button>
-                <span id="monthLabel" class="mx-2"></span>
-                <button class="btn btn-sm btn-outline-secondary" type="button" id="nextMonth">Next</button>
+            <div class="calendar-controls">
+                <button class="btn btn-sm btn-outline-secondary prev-btn" type="button" id="prevMonth">Prev</button>
+                <span id="monthLabel"></span>
+                <button class="btn btn-sm btn-outline-secondary next-btn" type="button" id="nextMonth">Next</button>
             </div>
         </div>
         <div class="card-body">
@@ -103,6 +110,15 @@
         return `${y}-${mm}-${dd}`;
     }
 
+    function parseIsoToUTC(iso) {
+        const parts = iso.split('-').map(Number);
+        return new Date(Date.UTC(parts[0], parts[1]-1, parts[2]));
+    }
+
+    function isoFromUTCDate(dt) {
+        return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-${String(dt.getUTCDate()).padStart(2,'0')}`;
+    }
+
     function updateSelectedText(){
         const arr = Array.from(state.selected).sort();
         const summary = document.getElementById('selectedSummary');
@@ -123,9 +139,9 @@
     function isContiguous(arr){
         if (arr.length <= 1) return true;
         for (let i=1;i<arr.length;i++){
-            const prev = new Date(arr[i-1] + 'T00:00:00');
-            const cur = new Date(arr[i] + 'T00:00:00');
-            const diff = (cur - prev) / (1000*60*60*24);
+            const prev = parseIsoToUTC(arr[i-1]);
+            const cur = parseIsoToUTC(arr[i]);
+            const diff = (cur.getTime() - prev.getTime()) / (1000*60*60*24);
             if (diff !== 1) return false;
         }
         return true;
@@ -138,22 +154,24 @@
         header.innerHTML = '';
 
         const first = new Date(state.year, state.month, 1);
+        const todayIso = new Date().toISOString().slice(0,10);
         const days = new Date(state.year, state.month + 1, 0).getDate();
         const label = first.toLocaleString(undefined, {month:'long', year:'numeric'});
         document.getElementById('monthLabel').textContent = label;
 
-        // Weekday headers
-        const weekdays = [];
-        for (let i=0;i<7;i++){
-            const day = new Date(1970,0,(i+1));
-            weekdays.push(day.toLocaleString(undefined,{weekday:'short'}));
-        }
-        weekdays.forEach(w=>{
+        // Weekday headers derived from the dates shown in the first row
+        for (let col = 0; col < 7; col++) {
+            const inCurrentMonth = col < days;
+            const d = inCurrentMonth ? (col + 1) : (col - days + 1);
+            const dateForCol = inCurrentMonth
+                ? new Date(state.year, state.month, d)
+                : new Date(state.year, state.month + 1, d);
+            const label = dateForCol.toLocaleString(undefined, { weekday: 'short' });
             const c = document.createElement('div');
             c.className = 'calendar-header-cell';
-            c.textContent = w;
+            c.textContent = label;
             header.appendChild(c);
-        });
+        }
 
         // Fixed 7x5 grid (35 cells): day 1 is always the first cell.
         // After month end, continue with next month day numbers.
@@ -163,13 +181,21 @@
             const cellDate = inCurrentMonth
                 ? new Date(state.year, state.month, d)
                 : new Date(state.year, state.month + 1, d);
-            const iso = cellDate.toISOString().slice(0, 10);
+            const iso = fmtDate(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
             const cell = document.createElement('div');
             cell.className = 'calendar-cell';
             cell.dataset.date = iso;
 
             const inner = document.createElement('div');
             inner.className = 'calendar-day d-flex flex-column h-100';
+
+            // highlight today's date with a subtle badge
+            if (iso === todayIso) {
+                inner.classList.add('today');
+                const t = document.createElement('div');
+                t.className = 'today-badge';
+                inner.appendChild(t);
+            }
 
             const dayNum = document.createElement('div');
             dayNum.className = 'date-number';
@@ -201,7 +227,8 @@
                 state.dragging = true;
                 state.didDrag = false;
                 state.dragAdd = !state.selected.has(clicked);
-                state.lastClicked = clicked;
+                // DO NOT set lastClicked here; mousedown should not change
+                // the shift-click anchor. lastClicked is updated on click.
             });
             cell.addEventListener('mouseover', (e)=>{
                 if (!state.dragging) return;
@@ -219,13 +246,15 @@
                     return;
                 }
                 if (e.shiftKey && state.lastClicked) {
-                    const start = new Date(state.lastClicked + 'T00:00:00');
-                    const end = new Date(cell.dataset.date + 'T00:00:00');
+                    const start = parseIsoToUTC(state.lastClicked);
+                    const end = parseIsoToUTC(cell.dataset.date);
                     const [a,b] = start <= end ? [start,end] : [end,start];
-                    for (let cur = new Date(a); cur <= b; cur.setDate(cur.getDate()+1)) {
-                        const iso2 = cur.toISOString().slice(0,10);
+                    for (let cur = new Date(a); cur.getTime() <= b.getTime(); cur.setUTCDate(cur.getUTCDate()+1)) {
+                        const iso2 = isoFromUTCDate(cur);
                         state.selected.add(iso2);
                     }
+                    // Update anchor to the end of the selection for subsequent shift-clicks
+                    state.lastClicked = cell.dataset.date;
                 } else {
                     toggleDate(cell.dataset.date);
                     state.lastClicked = cell.dataset.date;
@@ -244,13 +273,11 @@
     }
 
     function toggleRange(aIso, bIso, add) {
-        const a = new Date(aIso + 'T00:00:00');
-        const b = new Date(bIso + 'T00:00:00');
+        const a = parseIsoToUTC(aIso);
+        const b = parseIsoToUTC(bIso);
         const [start,end] = a<=b ? [a,b] : [b,a];
-        // clear any temporary range first by reloading selected as-is
-        // then apply the new range
-        for (let cur = new Date(start); cur <= end; cur.setDate(cur.getDate()+1)) {
-            const iso2 = cur.toISOString().slice(0,10);
+        for (let cur = new Date(start); cur.getTime() <= end.getTime(); cur.setUTCDate(cur.getUTCDate()+1)) {
+            const iso2 = isoFromUTCDate(cur);
             if (add) state.selected.add(iso2);
             else state.selected.delete(iso2);
         }
