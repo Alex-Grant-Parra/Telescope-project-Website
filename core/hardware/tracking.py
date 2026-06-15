@@ -5,6 +5,7 @@ from utils.Tools import hour_angle
 from utils.telescope_state import set_telescope_coords, get_telescope_coords, get_slew_config, set_target_coords, get_target_coords, update_hour_angle
 from utils.LEDmanager import get_led_manager
 from utils.esp32_state import esp32_state
+from esp32.pins import get_motor_boards
 
 # Motor control
 from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig, ESP32Motor
@@ -55,52 +56,47 @@ def _initialize_motors():
         except Exception as e:
             print(f"[tracking] Could not list motors: {e}")
             motors = {}
-        
-        # Create motor1 (RA) if it doesn't exist
-        if "motor1" not in str(motors):
-            print("[tracking] Creating motor1 (RA motor)...")
+
+        motor_ids = set(motors.get("motors", [])) if isinstance(motors, dict) else set()
+
+        for board_key, board in get_motor_boards().items():
+            motor_id = str(board.get("motor_id", "")).strip()
+            label = str(board.get("label", board_key)).strip() or board_key
+            pins = board.get("pins", {}) if isinstance(board.get("pins", {}), dict) else {}
+            required = bool(board.get("required", False))
+
+            if not motor_id:
+                print(f"[tracking] Skipping motor board '{board_key}': missing motor_id")
+                continue
+
+            if motor_id in motor_ids:
+                print(f"[tracking] {motor_id} ({label}) already exists")
+                continue
+
+            print(f"[tracking] Creating {motor_id} ({label})...")
             try:
-                result = ESP32Motor.create(
+                ESP32Motor.create(
                     conn=conn,
-                    motor_id="motor1",
-                    step_pin=27,
-                    dir_pin=14,
-                    en_pin=26,
-                    steps_per_rev=1600,
-                    engage=True,
-                    replace=True
+                    motor_id=motor_id,
+                    step_pin=int(pins.get("step")),
+                    dir_pin=int(pins.get("dir")),
+                    en_pin=int(pins.get("en")),
+                    steps_per_rev=int(board.get("steps_per_rev", 1600)),
+                    engage=bool(board.get("engage", True)),
+                    replace=bool(board.get("replace", True)),
                 )
-                print(f"[tracking] Motor1 (RA) created successfully: {result}")
+                motor_ids.add(motor_id)
+                print(f"[tracking] {motor_id} ({label}) created successfully")
             except Exception as e:
-                print(f"[tracking] Error creating motor1: {e}")
+                if required:
+                    print(f"[tracking] Error creating required motor {motor_id} ({label}): {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return False
+
+                print(f"[tracking] Warning: Could not create optional motor {motor_id} ({label}): {e}")
                 import traceback
                 traceback.print_exc()
-                return False
-        else:
-            print("[tracking] Motor1 (RA) already exists")
-        
-        # Create motor2 (DEC) if it doesn't exist
-        if "motor2" not in str(motors):
-            print("[tracking] Creating motor2 (DEC motor)...")
-            try:
-                result = ESP32Motor.create(
-                conn=conn,
-                motor_id="motor2",
-                step_pin=33,
-                dir_pin=25,
-                en_pin=32,
-                steps_per_rev=1600,
-                engage=True,
-                replace=True
-                )
-                print(f"[tracking] Motor2 (DEC) created successfully: {result}")
-            except Exception as e:
-                print(f"[tracking] Warning: Could not create motor2 (DEC): {e}")
-                import traceback
-                traceback.print_exc()
-                # Continue even if motor2 fails - might only have 1 motor
-        else:
-            print("[tracking] Motor2 (DEC) already exists")
         
         _motors_initialized = True
         print("[tracking] Motor initialization complete")

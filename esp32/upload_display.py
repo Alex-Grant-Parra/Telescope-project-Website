@@ -4,9 +4,11 @@ from __future__ import annotations
 import argparse
 from PIL import Image
 from esp32.interfaceESP32 import ESP32Connection, ESP32SerialConfig
+from esp32.pins import get_display_config
 
-DISPLAY_WIDTH = 128
-DISPLAY_HEIGHT = 160
+_DISPLAY = get_display_config()
+DISPLAY_WIDTH = int(_DISPLAY["width"])
+DISPLAY_HEIGHT = int(_DISPLAY["height"])
 
 
 def image_to_rgb565_bytes(img: Image.Image) -> bytes:

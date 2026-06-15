@@ -10,6 +10,12 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import serial  # pyserial
+from esp32.pins import get_display_config, get_led_channels
+
+
+_DISPLAY_CONFIG = get_display_config()
+_DISPLAY_WIDTH = int(_DISPLAY_CONFIG["width"])
+_DISPLAY_HEIGHT = int(_DISPLAY_CONFIG["height"])
 
 
 @dataclass
@@ -314,19 +320,27 @@ class ESP32Connection:
 			raise TimeoutError("No response from ESP32")
 		return self._parse_response(resp)
 
-	def play_display_file(self, name: str, x: int = 0, y: int = 0, w: int = 128, h: int = 160) -> Dict[str, Any]:
+	def play_display_file(self, name: str, x: int = 0, y: int = 0, w: int | None = None, h: int | None = None) -> Dict[str, Any]:
 		"""Play a stored display file previously uploaded with `upload_display_file`.
 
 		Currently supports raw RGB565 frames sized exactly w*h*2 bytes.
 		"""
+		if w is None:
+			w = _DISPLAY_WIDTH
+		if h is None:
+			h = _DISPLAY_HEIGHT
 		payload = {"cmd": "display", "action": "play", "name": name, "x": int(x), "y": int(y), "w": int(w), "h": int(h)}
 		return self.send(payload)
 
-	def play_sequence(self, files: list[str], durations_ms: list[int] | None = None, x: int = 0, y: int = 0, w: int = 128, h: int = 160, timeout: float | None = None) -> Dict[str, Any]:
+	def play_sequence(self, files: list[str], durations_ms: list[int] | None = None, x: int = 0, y: int = 0, w: int | None = None, h: int | None = None, timeout: float | None = None) -> Dict[str, Any]:
 		"""Play a stored sequence of files on the ESP32 for smooth animation.
 		files: list of filenames stored on the device (LittleFS)
 		durations_ms: optional list of per-frame durations in milliseconds
 		"""
+		if w is None:
+			w = _DISPLAY_WIDTH
+		if h is None:
+			h = _DISPLAY_HEIGHT
 		# Use CSV strings for compatibility with firmware JSON parser.
 		# Fallback-style sequence: send a CSV of filenames (existing method).
 		payload: Dict[str, Any] = {"cmd": "display", "action": "play_sequence", "files_csv": ",".join(files), "x": int(x), "y": int(y), "w": int(w), "h": int(h)}
@@ -334,12 +348,16 @@ class ESP32Connection:
 			payload["durations_csv"] = ",".join(str(int(d)) for d in durations_ms)
 		return self.send(payload, timeout=timeout)
 
-	def play_sequence_prefix(self, prefix: str, count: int, start: int = 0, pad: int = 4, durations_ms: list[int] | None = None, x: int = 0, y: int = 0, w: int = 128, h: int = 160, timeout: float | None = None) -> Dict[str, Any]:
+	def play_sequence_prefix(self, prefix: str, count: int, start: int = 0, pad: int = 4, durations_ms: list[int] | None = None, x: int = 0, y: int = 0, w: int | None = None, h: int | None = None, timeout: float | None = None) -> Dict[str, Any]:
 		"""Request device-side playback by filename prefix and count.
 		prefix: filename prefix including any trailing underscore, e.g. 'test_abcd1234_'
 		count: number of frames to play
 		pad: zero padding width for frame indices (default 4)
 		"""
+		if w is None:
+			w = _DISPLAY_WIDTH
+		if h is None:
+			h = _DISPLAY_HEIGHT
 		payload: Dict[str, Any] = {"cmd": "display", "action": "play_sequence_prefix", "prefix": prefix, "count": int(count), "start": int(start), "pad": int(pad), "x": int(x), "y": int(y), "w": int(w), "h": int(h)}
 		if durations_ms:
 			payload["durations_csv"] = ",".join(str(int(d)) for d in durations_ms)
@@ -404,24 +422,21 @@ class ESP32LED:
 
 	def __init__(self, conn: ESP32Connection) -> None:
 		self.conn = conn
-		self.board = self.Channel(conn, "board", 2)
+		leds = get_led_channels()
+		for led_name, led_cfg in leds.items():
+			channel_name = str(led_cfg.get("channel", led_name))
+			setattr(self, led_name, self.Channel(conn, channel_name, int(led_cfg["pin"])))
+
+		self.board = getattr(self, "board")
 		self.boardLED = self.board
-		self.yellow = self.Channel(conn, "yellow", 18)
-		self.blue = self.Channel(conn, "blue", 5)
-		self.white = self.Channel(conn, "white", 17)
-		self.green = self.Channel(conn, "green", 16)
-		self.red = self.Channel(conn, "red", 4)
 
 	@classmethod
 	def attach(cls, conn: ESP32Connection) -> "ESP32LED":
 		instance = cls(conn)
+		for led_name in get_led_channels().keys():
+			setattr(cls, led_name, getattr(instance, led_name))
 		cls.board = instance.board
 		cls.boardLED = instance.board
-		cls.yellow = instance.yellow
-		cls.blue = instance.blue
-		cls.white = instance.white
-		cls.green = instance.green
-		cls.red = instance.red
 		return instance
 
 
@@ -587,9 +602,10 @@ class ESP32Motor:
 class ESP32Display:
 	# Control the ST7735S TFT LCD display connected to ESP32.
 
-	# Display constants
-	WIDTH = 128
-	HEIGHT = 160
+	# Display constants from centralized hardware map
+	_WIDTH_HEIGHT = get_display_config()
+	WIDTH = int(_WIDTH_HEIGHT["width"])
+	HEIGHT = int(_WIDTH_HEIGHT["height"])
 
 	# Standard colors (RGB565)
 	COLORS = {
