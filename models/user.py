@@ -26,6 +26,8 @@ class User(UserMixin, db.Model):
     night_mode = db.Column(db.Boolean, default=False, nullable=False)  # Night mode preference
     # Persistent enabled flag for quick checks (new column)
     is_enabled_flag = db.Column('is_enabled', db.Boolean, default=True, nullable=False)
+    # When the account was created (new column)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     # Note: we don't add a persistent is_enabled column here to avoid altering existing DB schema
     # Instead we rely on AccountStatusHistory model to determine current enabled/disabled state.
 
@@ -121,6 +123,23 @@ class User(UserMixin, db.Model):
     def get_night_mode(self):
         # Get the user's night mode preference
         return bool(self.night_mode) if self.night_mode is not None else False
+
+    @property
+    def account_age(self):
+        """Return account age as a datetime.timedelta (UTC now - created_at)."""
+        try:
+            if not self.created_at:
+                return None
+            return datetime.utcnow() - self.created_at
+        except Exception:
+            return None
+
+    def account_age_days(self):
+        """Return integer days since account creation (0 if unknown)."""
+        td = self.account_age
+        if not td:
+            return 0
+        return max(0, td.days)
 
     # Account enabled/disabled helpers that consult AccountStatusHistory
     def is_enabled(self):

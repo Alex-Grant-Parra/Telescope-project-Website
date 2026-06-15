@@ -42,7 +42,7 @@
                                 </span>
                             </p>
                             <p><strong>Member Since:</strong> 
-                                <span class="text-muted">Account created</span>
+                                <span class="text-muted">{% if current_user.created_at %}{{ current_user.created_at.strftime('%b %d, %Y') }} ({{ current_user.account_age_days() }} days){% else %}Unknown{% endif %}</span>
                             </p>
                         </div>
                     </div>
