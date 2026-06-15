@@ -62,6 +62,7 @@
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('home.home') }}">Home</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('interface.interface') }}">Interface</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('map.map_page') }}">Map</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('book.book_page') }}">Book</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('album.album') }}">Album</a></li>
                         {% if current_user.is_authenticated %}
                             <!-- Profile Dropdown -->
@@ -105,6 +106,16 @@
                                     <li>
                                         <a class="dropdown-item" href="{{ url_for('telescopes.my_telescopes') }}">
                                             <i class="fas fa-satellite-dish"></i> My Telescopes
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="{{ url_for('book.my_bookings_page') }}">
+                                            <i class="fas fa-calendar-check"></i> My Bookings
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="{{ url_for('book.owner_bookings_page') }}">
+                                            <i class="fas fa-calendar-alt"></i> Owner Booking Queue
                                         </a>
                                     </li>
                                     {% if current_user.is_admin %}

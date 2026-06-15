@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Owner Booking Requests{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Owner Booking Requests</h2>
+    <p class="text-muted">Approve or reject pending booking requests for your telescopes.</p>
+    <input type="hidden" id="csrfToken" value="{{ csrf_token() }}" />
+
+    {% if bookings %}
+    <div class="table-responsive">
+        <table class="table table-striped table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Telescope</th>
+                    <th>Requester</th>
+                    <th>Start (UTC)</th>
+                    <th>End (UTC)</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in bookings %}
+                <tr>
+                    <td>{{ b.id }}</td>
+                    <td>{{ b.telescope_id }}</td>
+                    <td>{{ b.requester_user_id }}</td>
+                    <td>{{ b.start_utc }}</td>
+                    <td>{{ b.end_utc }}</td>
+                    <td><span class="badge bg-{{ 'warning text-dark' if b.status == 'pending' else ('success' if b.status == 'reserved' else 'secondary') }}">{{ b.status }}</span></td>
+                    <td>
+                        {% if b.status == 'pending' %}
+                        <button class="btn btn-sm btn-success" onclick="decide({{ b.id }}, 'approve')">Approve</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="decide({{ b.id }}, 'reject')">Reject</button>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-muted">No owner bookings found.</p>
+    {% endif %}
+</div>
+
+<script>
+async function decide(bookingId, decision) {
+    const csrf = document.getElementById('csrfToken').value;
+    const resp = await fetch(`{{ url_for('book.owner_booking_decision', booking_id=0) }}`.replace('/0/', `/${bookingId}/`), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrf,
+        },
+        body: JSON.stringify({decision}),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.status !== 'success') {
+        alert(data.message || 'Failed');
+        return;
+    }
+    window.location.reload();
+}
+</script>
+{% endblock %}

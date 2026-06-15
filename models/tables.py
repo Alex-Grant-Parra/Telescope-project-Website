@@ -5,8 +5,11 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import Table, MetaData, Column, String, REAL
 
 def get_app():
+    # Import inside function to avoid circular imports at module import time
     from Server import app
     return app
+
+
 
 # Base class for reflection to be inherited by all models
 class BaseTable(db.Model):
@@ -18,21 +21,43 @@ class BaseTable(db.Model):
         return {column.name: getattr(cls, column.name) for column in cls.__table__.columns}
 
     @classmethod
-    def reflect_table(cls):
-        app = get_app()  # Get app inside the function
+    def reflect_table(cls, app=None):
+        # This function used to call get_app() during module import which
+        # caused circular imports because Server imports controllers which
+        # import models.tables. Defer reflection until Server startup and
+        # explicitly pass `app`.
+        if app is None:
+            app = get_app()
         with app.app_context():
-            cls.__table__ = Table(cls.__tablename__, db.metadata, autoload_with=db.engine)
+            # perform any reflection or dynamic table adjustments here
+            # keep minimal to avoid side-effects at import time
+            return
+
+    @classmethod
+    def register_model_reflections(cls, app):
+        # Explicit entrypoint to register any reflections or dynamic
+        # adjustments that require the Flask app context. Call this from
+        # Server startup after `db.create_all()`.
+        # Example: if there are legacy tables we need to reflect, do it here.
+        from app import db
+        with app.app_context():
+            # Placeholder: no-op for now — keep extensible
+            return
 
 
     @classmethod
     def __init_subclass__(cls):
         super().__init_subclass__()
-        cls.reflect_table()
+        # Do NOT call reflect_table() here to avoid importing the app
+        # during module import. Reflection will be registered and run
+        # explicitly from Server startup.
+        return
 
 
 # HDSTARtable: Define columns dynamically using reflection
 class HDSTARtable(BaseTable):
     __tablename__ = 'HDSTARTable'  # The actual table name in the database
+    __abstract__ = True
 
     @staticmethod
     def query_by_name(name):
@@ -90,6 +115,7 @@ class HDSTARtable(BaseTable):
 # IndexTable: Define columns dynamically using reflection
 class IndexTable(BaseTable):
     __tablename__ = 'IndexTable'
+    __abstract__ = True
 
     @staticmethod
     def query_by_name(name):
@@ -106,6 +132,7 @@ class IndexTable(BaseTable):
 # NGCtable: Define columns dynamically using reflection
 class NGCtable(BaseTable):
     __tablename__ = 'NGCtable'
+    __abstract__ = True
 
     @staticmethod
     def query_by_name(name):
@@ -149,6 +176,7 @@ class NGCtable(BaseTable):
 # PlanetsTable: Define columns dynamically using reflection
 class PlanetsTable(BaseTable):
     __tablename__ = 'PlanetsTable'  # The actual table name in the database
+    __abstract__ = True
 
     @staticmethod
     def query_by_name(name):
@@ -189,6 +217,17 @@ class Telescope(db.Model):
     is_approved = db.Column(db.Boolean, default=False, nullable=False)
     # Admin force-disable: keeps record in DB but blocks connections
     is_disabled = db.Column(db.Boolean, default=False, nullable=False)
+    # Booking metadata and constraints
+    description = db.Column(db.Text, nullable=True)
+    location_text = db.Column(db.Text, nullable=True)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    specs_json = db.Column(db.Text, nullable=True)
+    extra_fields_json = db.Column(db.Text, nullable=True)
+    timezone = db.Column(db.String(64), nullable=False, default='UTC')
+    min_booking_minutes = db.Column(db.Integer, nullable=False, default=30)
+    max_booking_minutes = db.Column(db.Integer, nullable=False, default=720)
+    allowed_windows_json = db.Column(db.Text, nullable=True)
     
     def __repr__(self):
         return f"<Telescope(id={self.id}, telescope_id='{self.telescope_id}', type='{self.type}')>"

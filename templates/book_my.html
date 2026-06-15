@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}My Bookings{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>My Bookings</h2>
+    <a href="{{ url_for('book.book_page') }}" class="btn btn-outline-primary btn-sm mb-3">New Booking</a>
+
+    {% if bookings %}
+    <div class="table-responsive">
+        <table class="table table-striped table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Telescope</th>
+                    <th>Start (UTC)</th>
+                    <th>End (UTC)</th>
+                    <th>Status</th>
+                    <th>Note</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in bookings %}
+                <tr>
+                    <td>{{ b.id }}</td>
+                    <td>{{ b.telescope_id }}</td>
+                    <td>{{ b.start_utc }}</td>
+                    <td>{{ b.end_utc }}</td>
+                    <td><span class="badge bg-{{ 'warning text-dark' if b.status == 'pending' else ('success' if b.status == 'reserved' else 'secondary') }}">{{ b.status }}</span></td>
+                    <td>{{ b.note or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-muted">No bookings yet.</p>
+    {% endif %}
+</div>
+{% endblock %}
