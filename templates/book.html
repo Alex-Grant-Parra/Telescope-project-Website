@@ -4,6 +4,28 @@
 
 {% block content %}
 <div class="container mt-4">
+    <style>
+    /* Month calendar styles */
+    #calendarHeader {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+    #calendarGrid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        grid-template-rows: repeat(5, minmax(88px, 1fr));
+        min-height: 440px;
+    }
+    .calendar-cell { min-height: 88px; border: 1px solid rgba(0,0,0,0.04); }
+    .calendar-day { border-radius: 0; background: transparent; min-height: 86px; padding: 6px; position: relative; }
+    .calendar-day:hover { background: rgba(0,0,0,0.02); cursor: pointer; }
+    .calendar-day .date-number { font-weight: 600; font-size: 0.85rem; color: #202124; }
+    .calendar-day .date-number.small-muted { color: #5f6368; font-weight: 400; }
+    .selected-badge { position: absolute; top: 6px; left: 6px; width: 28px; height: 28px; border-radius: 50%; background: #1a73e8; color: #fff; display:flex;align-items:center;justify-content:center;font-weight:600;font-size:0.85rem; }
+    .calendar-day .availability-indicator { font-size: 0.75rem; color: #70757a; }
+    .calendar-header-cell { padding: 6px 4px; text-align: center; }
+    @media (max-width: 576px){ .calendar-cell{ min-height: 64px; } }
+    </style>
     <h2>Book Telescope</h2>
     <p class="text-muted">Select one or more dates (shift-click for a continuous range), then choose a time window.</p>
 
@@ -19,8 +41,11 @@
             </div>
         </div>
         <div class="card-body">
-            <div id="calendarGrid" class="row row-cols-7 g-1"></div>
-            <small class="text-muted d-block mt-2">Selected dates: <span id="selectedDatesText">none</span></small>
+                <div id="calendarHeader" class="small text-uppercase text-muted mb-1"></div>
+                <div id="calendarGrid"></div>
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                <div id="selectedSummary" class="text-muted"></div>
+                </div>
         </div>
     </div>
 
@@ -29,11 +54,11 @@
         <div class="card-body row g-2">
             <div class="col-md-2">
                 <label class="form-label">Start</label>
-                <input id="startTime" type="time" class="form-control" value="21:00" required>
+                <input id="startTime" type="time" class="form-control" value="" required>
             </div>
             <div class="col-md-2">
                 <label class="form-label">End</label>
-                <input id="endTime" type="time" class="form-control" value="03:00" required>
+                <input id="endTime" type="time" class="form-control" value="" required>
             </div>
             <div class="col-md-4">
                 <label class="form-label">Location query</label>
@@ -68,6 +93,8 @@
         month: new Date().getMonth(),
         selected: new Set(),
         lastClicked: null,
+        dragging: false,
+        didDrag: false,
     };
 
     function fmtDate(y,m,d){
@@ -78,56 +105,154 @@
 
     function updateSelectedText(){
         const arr = Array.from(state.selected).sort();
-        document.getElementById('selectedDatesText').textContent = arr.length ? arr.join(', ') : 'none';
+        const summary = document.getElementById('selectedSummary');
+        if (!arr.length) {
+            summary.textContent = 'No dates selected';
+            return;
+        }
+        // If selection is contiguous, show range otherwise show count
+        const first = arr[0];
+        const last = arr[arr.length-1];
+        if (isContiguous(arr)) {
+            summary.textContent = `${first} → ${last} (${arr.length} day${arr.length>1?'s':''})`;
+        } else {
+            summary.textContent = `${arr.length} selected`;
+        }
+    }
+
+    function isContiguous(arr){
+        if (arr.length <= 1) return true;
+        for (let i=1;i<arr.length;i++){
+            const prev = new Date(arr[i-1] + 'T00:00:00');
+            const cur = new Date(arr[i] + 'T00:00:00');
+            const diff = (cur - prev) / (1000*60*60*24);
+            if (diff !== 1) return false;
+        }
+        return true;
     }
 
     function renderCalendar(){
         const grid = document.getElementById('calendarGrid');
+        const header = document.getElementById('calendarHeader');
         grid.innerHTML = '';
+        header.innerHTML = '';
 
         const first = new Date(state.year, state.month, 1);
         const days = new Date(state.year, state.month + 1, 0).getDate();
-        const pad = first.getDay();
         const label = first.toLocaleString(undefined, {month:'long', year:'numeric'});
         document.getElementById('monthLabel').textContent = label;
 
-        for (let i=0;i<pad;i++) {
-            const p = document.createElement('div');
-            p.className = 'col';
-            grid.appendChild(p);
+        // Weekday headers
+        const weekdays = [];
+        for (let i=0;i<7;i++){
+            const day = new Date(1970,0,(i+1));
+            weekdays.push(day.toLocaleString(undefined,{weekday:'short'}));
         }
+        weekdays.forEach(w=>{
+            const c = document.createElement('div');
+            c.className = 'calendar-header-cell';
+            c.textContent = w;
+            header.appendChild(c);
+        });
 
-        for (let d=1; d<=days; d++) {
-            const iso = fmtDate(state.year, state.month, d);
-            const btnWrap = document.createElement('div');
-            btnWrap.className = 'col';
-            const b = document.createElement('button');
-            b.type = 'button';
-            b.className = 'btn btn-sm w-100 ' + (state.selected.has(iso) ? 'btn-primary' : 'btn-outline-secondary');
-            b.textContent = d;
-            b.dataset.date = iso;
+        // Fixed 7x5 grid (35 cells): day 1 is always the first cell.
+        // After month end, continue with next month day numbers.
+        for (let i = 0; i < 35; i++) {
+            const inCurrentMonth = i < days;
+            const d = inCurrentMonth ? (i + 1) : (i - days + 1);
+            const cellDate = inCurrentMonth
+                ? new Date(state.year, state.month, d)
+                : new Date(state.year, state.month + 1, d);
+            const iso = cellDate.toISOString().slice(0, 10);
+            const cell = document.createElement('div');
+            cell.className = 'calendar-cell';
+            cell.dataset.date = iso;
 
-            b.addEventListener('click', (e)=>{
-                const clicked = e.currentTarget.dataset.date;
+            const inner = document.createElement('div');
+            inner.className = 'calendar-day d-flex flex-column h-100';
+
+            const dayNum = document.createElement('div');
+            dayNum.className = 'date-number';
+            dayNum.textContent = d;
+            if (!inCurrentMonth) dayNum.classList.add('small-muted');
+
+            // small availability indicator placeholder
+            const indicator = document.createElement('div');
+            indicator.className = 'mt-auto small availability-indicator';
+            indicator.textContent = '';
+
+            inner.appendChild(dayNum);
+            inner.appendChild(indicator);
+            cell.appendChild(inner);
+
+            // if selected, add small circular badge
+            if (state.selected.has(iso)) {
+                const badge = document.createElement('div');
+                badge.className = 'selected-badge';
+                badge.textContent = d;
+                inner.appendChild(badge);
+                dayNum.classList.add('small-muted');
+            }
+
+            // Mouse handlers: set drag state on mousedown (do NOT toggle here)
+            cell.addEventListener('mousedown', (e)=>{
+                e.preventDefault();
+                const clicked = cell.dataset.date;
+                state.dragging = true;
+                state.didDrag = false;
+                state.dragAdd = !state.selected.has(clicked);
+                state.lastClicked = clicked;
+            });
+            cell.addEventListener('mouseover', (e)=>{
+                if (!state.dragging) return;
+                state.didDrag = true;
+                const over = cell.dataset.date;
+                toggleRange(state.lastClicked, over, state.dragAdd);
+                renderCalendar(); updateSelectedText();
+            });
+            cell.addEventListener('mouseup', (e)=>{
+                state.dragging = false;
+            });
+            cell.addEventListener('click', (e)=>{
+                if (state.didDrag) {
+                    state.didDrag = false;
+                    return;
+                }
                 if (e.shiftKey && state.lastClicked) {
                     const start = new Date(state.lastClicked + 'T00:00:00');
-                    const end = new Date(clicked + 'T00:00:00');
+                    const end = new Date(cell.dataset.date + 'T00:00:00');
                     const [a,b] = start <= end ? [start,end] : [end,start];
                     for (let cur = new Date(a); cur <= b; cur.setDate(cur.getDate()+1)) {
                         const iso2 = cur.toISOString().slice(0,10);
                         state.selected.add(iso2);
                     }
                 } else {
-                    if (state.selected.has(clicked)) state.selected.delete(clicked);
-                    else state.selected.add(clicked);
-                    state.lastClicked = clicked;
+                    toggleDate(cell.dataset.date);
+                    state.lastClicked = cell.dataset.date;
                 }
-                renderCalendar();
-                updateSelectedText();
+                renderCalendar(); updateSelectedText();
             });
 
-            btnWrap.appendChild(b);
-            grid.appendChild(btnWrap);
+            grid.appendChild(cell);
+        }
+    }
+
+    function toggleDate(iso, add) {
+        if (add === undefined) add = !state.selected.has(iso);
+        if (add) state.selected.add(iso);
+        else state.selected.delete(iso);
+    }
+
+    function toggleRange(aIso, bIso, add) {
+        const a = new Date(aIso + 'T00:00:00');
+        const b = new Date(bIso + 'T00:00:00');
+        const [start,end] = a<=b ? [a,b] : [b,a];
+        // clear any temporary range first by reloading selected as-is
+        // then apply the new range
+        for (let cur = new Date(start); cur <= end; cur.setDate(cur.getDate()+1)) {
+            const iso2 = cur.toISOString().slice(0,10);
+            if (add) state.selected.add(iso2);
+            else state.selected.delete(iso2);
         }
     }
 
@@ -225,6 +350,12 @@
     document.getElementById('searchBtn').addEventListener('click', search);
     document.getElementById('prevMonth').addEventListener('click', ()=>{ state.month--; if (state.month < 0){ state.month = 11; state.year--; } renderCalendar(); });
     document.getElementById('nextMonth').addEventListener('click', ()=>{ state.month++; if (state.month > 11){ state.month = 0; state.year++; } renderCalendar(); });
+
+    // ensure dragging stops if mouseup occurs outside cells
+    window.addEventListener('mouseup', ()=>{
+        state.dragging = false;
+        state.didDrag = false;
+    });
 
     renderCalendar();
     updateSelectedText();
