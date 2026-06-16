@@ -64,7 +64,7 @@ ASTRA uses a web-based control server connected to distributed Raspberry Pi \+
 
 ## Planetary Models
 
-ASTRA includes a few different planetary models under the Astrophysics folder, each with varying precision.
+ASTRA includes a few different planetary models under the astrophysics folder, each with varying precision.
 - V1_Keplarian is a traditional keplarian algorithm
 - V2_VSOP87A is an iterative solution, taking the sum of a large number of orbital parameters
 - V3_Helios is a custom N-body engine, with a local integrator and engine, with initial parameters provided by JPL SPICE data

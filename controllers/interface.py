@@ -3,7 +3,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from flask import Blueprint, render_template, request, jsonify, session
-from Astrophysics.V1_Keplarian.convert import convert
+from astrophysics.V1_Keplarian.convert import convert
 from datetime import datetime
 import time
 
@@ -80,7 +80,7 @@ def extract_friendly_common_name(common_names_field: str) -> str:
 
 @interface_bp.route("/search_object", methods=["POST"])
 def search_object():
-    from Astrophysics.V1_Keplarian.astroTools import getAllCelestialData
+    from astrophysics.V1_Keplarian.astroTools import getAllCelestialData
     from models.tables import HDSTARtable, IndexTable, NGCtable
     data = request.json
     search_value = data.get("searchValue", "").strip()

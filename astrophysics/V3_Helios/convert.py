@@ -89,7 +89,7 @@ def get_radec_at_time(time_input=None):
         sys.path.insert(0, str(project_root))
 
     try:
-        from Astrophysics.V3_Helios import engine as engine_module
+        from astrophysics.V3_Helios import engine as engine_module
     except Exception:
         import engine as engine_module
 

@@ -1,4 +1,4 @@
-from Astrophysics.V2_VSOP87A.loader import load_planets
+from astrophysics.V2_VSOP87A.loader import load_planets
 ps = load_planets()
 if 'Earth' in ps:
     e = ps['Earth']
