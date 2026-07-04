@@ -25,6 +25,10 @@ downloads
 de440.bsp
 initial_conditions.json
 
+# Helios auto-generated cache files
+astrophysics/V3_Helios/rHistory.npz
+astrophysics/V3_Helios/cheb_table.npz
+
 astrophysics/V3_Helios/tests/
 !astrophysics/V3_Helios/tests/astra_de440_compare.py
 !astrophysics/V3_Helios/tests/plot_diagnostics.py

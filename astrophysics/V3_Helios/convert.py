@@ -1,6 +1,4 @@
 from pathlib import Path
-import contextlib
-import io
 import json
 from datetime import datetime, timezone, timedelta
 from time import struct_time
@@ -80,47 +78,35 @@ def get_radec_at_time(time_input=None):
     - datetime
     - time.struct_time
     - ISO8601 string
+
+    Requires cheb_table.npz to exist. Build it once with:
+        python astrophysics/V3_Helios/chebyshev.py
     """
     req_time = _normalize_time_input(time_input)
     epoch = _load_epoch()
+    t_sec = (req_time - epoch).total_seconds()
 
-    project_root = Path(__file__).resolve().parents[3]
-    if str(project_root) not in sys.path:
-        sys.path.insert(0, str(project_root))
+    project_root = str(Path(__file__).resolve().parents[2])  # …/Server
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
 
     try:
-        from astrophysics.V3_Helios import engine as engine_module
-    except Exception:
-        import engine as engine_module
+        from astrophysics.V3_Helios.chebyshev import evaluateAt
+    except ImportError:
+        from chebyshev import evaluateAt
 
-    # Suppress the engine's stdout prints but capture progress via callback to stderr
-    def _progress_cb(step, steps, percent, e_val, p_mag, p_drift_pct):
-        try:
-            print(f"Step {step}/{steps} ({percent}%)", file=sys.stderr)
-        except Exception:
-            pass
-
-    with contextlib.redirect_stdout(io.StringIO()):
-        results = engine_module.runSimulation(progress_callback=_progress_cb)
-    names = list(results["names"])
-    history = np.asarray(results["rHistory"])
-
-    dt = 900.0
-    store_every = 10
-    sample_idx = int(round((req_time - epoch).total_seconds() / dt)) // store_every
+    positions = evaluateAt(t_sec)
+    names = list(positions.keys())
 
     observer = "earth_moon" if "earth_moon" in names else names[0]
-    observer_idx = names.index(observer)
-
-    if sample_idx < 0 or sample_idx >= history.shape[0]:
-        raise IndexError(f"Time maps to sample {sample_idx}, but valid samples are 0..{history.shape[0] - 1}")
+    observer_pos = positions[observer]
 
     output = {}
-    for index, body in enumerate(names):
+    for body, pos in positions.items():
         if body == observer:
             continue
 
-        vector = history[sample_idx, index, :] - history[sample_idx, observer_idx, :]
+        vector = pos - observer_pos
         ra_deg, dec_deg, distance_m = _cart_to_radec(_ecl_to_equ(vector))
         output[body] = {
             "ra_hms": _deg_to_hms(ra_deg),
