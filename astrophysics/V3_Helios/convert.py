@@ -8,6 +8,12 @@ import sys
 import numpy as np
 
 
+# London, UK (city center; WGS84 geodetic)
+LONDON_LAT_DEG = 51.5074
+LONDON_LON_DEG = -0.1278
+LONDON_ALT_M = 35.0
+
+
 def _ecl_to_equ(vec):
     eps = np.deg2rad(23.439291111)
     rot = np.array(
@@ -162,9 +168,12 @@ def get_radec_at_time(time_input=None, observer_lat_deg=None, observer_lon_deg=N
             continue
 
         vector = pos - observer_pos
+        vector_equ = _ecl_to_equ(vector)
         if observer_offset is not None:
-            vector = vector - observer_offset
-        ra_deg, dec_deg, distance_m = _cart_to_radec(_ecl_to_equ(vector))
+            # observer_offset is in equatorial J2000 (ECI), so apply it in
+            # the same frame as the target vector.
+            vector_equ = vector_equ - observer_offset
+        ra_deg, dec_deg, distance_m = _cart_to_radec(vector_equ)
         output[body] = {
             "ra_hms": _deg_to_hms(ra_deg),
             "dec_dms": _deg_to_dms(dec_deg),
@@ -179,7 +188,12 @@ def get_radec_at_time(time_input=None, observer_lat_deg=None, observer_lon_deg=N
 if __name__ == "__main__":
     from time import gmtime
 
-    res = get_radec_at_time(gmtime())
+    res = get_radec_at_time(
+        gmtime(),
+        observer_lat_deg=LONDON_LAT_DEG,
+        observer_lon_deg=LONDON_LON_DEG,
+        observer_alt_m=LONDON_ALT_M,
+    )
     print(f"{'Body':<10}  {'RA':>13}  {'Dec':>14}  {'Dist':>16}")
     print("-" * 60)
     for body, data in res.items():
