@@ -35,10 +35,12 @@ _RHISTORY_PATH = _BASE / "rHistory.npz"
 _CHEB_TABLE_PATH = _BASE / "cheb_table.npz"
 
 # ---------------------------------------------------------------------------
-# Fitting parameters — adjust for accuracy vs table size trade-off.
-# Degree 16 over 32-day segments gives ~1 km accuracy for inner planets.
+# Fitting parameters.
+# 4-day segments resolve the 27.3-day lunar orbit (~6-7 segments/orbit) while
+# remaining more than sufficient for the slowly-moving outer planets.
+# Degree 16 gives sub-km accuracy for all bodies over 4-day windows.
 # ---------------------------------------------------------------------------
-SEGMENT_DAYS = 32
+SEGMENT_DAYS = 4
 DEGREE = 16
 
 # Must match engine.py defaults.

@@ -30,11 +30,14 @@ print("Epoch ET:", et)
 meters_per_kilometer = 1000.0
 
 # Bodies to sample from the Solar System barycenter in the chosen frame.
+# Earth and Moon are queried separately so the N-body engine can integrate
+# their mutual gravitational interaction explicitly.
 bodies = {
     "sun": "SUN",
     "mercury": "MERCURY BARYCENTER",
     "venus": "VENUS BARYCENTER",
-    "earth_moon": "EARTH BARYCENTER",
+    "earth": "EARTH",
+    "moon": "MOON",
     "mars": "MARS BARYCENTER",
     "jupiter": "JUPITER BARYCENTER",
     "saturn": "SATURN BARYCENTER",
