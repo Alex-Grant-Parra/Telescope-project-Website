@@ -73,20 +73,33 @@ def _run_simulation():
 
     print("Running N-body simulation (this happens once) …")
     results = runSimulation()
-    return list(results["names"]), np.asarray(results["rHistory"])
+    tHistory = np.asarray(results.get(
+        "tHistory",
+        np.arange(1, len(results["rHistory"]) + 1, dtype=np.float64) * _DT_STORED,
+    ))
+    return list(results["names"]), np.asarray(results["rHistory"]), tHistory
 
 
 def _get_rhistory():
-    """Return (names, rHistory) from disk cache or by running the simulation."""
+    """Return (names, rHistory, tHistory) from disk cache or by running the simulation."""
     if _is_newer(_RHISTORY_PATH, _IC_PATH):
         print(f"Loading cached trajectory from {_RHISTORY_PATH.name} …")
         data = np.load(_RHISTORY_PATH, allow_pickle=True)
-        return list(data["names"]), data["rHistory"]
+        names = list(data["names"])
+        rHistory = data["rHistory"]
+        # tHistory absent in cache files built before this version
+        if "tHistory" in data:
+            tHistory = data["tHistory"].astype(np.float64)
+        else:
+            n = rHistory.shape[0]
+            tHistory = np.arange(1, n + 1, dtype=np.float64) * _DT_STORED
+        return names, rHistory, tHistory
 
-    names, rHistory = _run_simulation()
-    np.savez_compressed(_RHISTORY_PATH, names=np.array(names), rHistory=rHistory)
-    print(f"Trajectory cached → {_RHISTORY_PATH.name}")
-    return names, rHistory
+    names, rHistory, tHistory = _run_simulation()
+    np.savez_compressed(_RHISTORY_PATH, names=np.array(names), rHistory=rHistory,
+                        tHistory=tHistory)
+    print(f"Trajectory cached \u2192 {_RHISTORY_PATH.name}")
+    return names, rHistory, tHistory
 
 
 # ---------------------------------------------------------------------------
@@ -98,16 +111,14 @@ def buildTable() -> None:
     Fit Chebyshev polynomials to the simulated trajectory and save
     cheb_table.npz.  Safe to re-run; reuses rHistory.npz when fresh.
     """
-    names, rHistory = _get_rhistory()
+    names, rHistory, tHistory = _get_rhistory()
 
     ic = json.loads(_IC_PATH.read_text())
     epoch_utc = ic["epoch_utc"]
 
     n_samples, n_bodies, _ = rHistory.shape
-    total_seconds = float(n_samples * _DT_STORED)
-
-    # Uniform time grid for the stored trajectory (seconds from epoch)
-    t_uniform = np.arange(n_samples, dtype=np.float64) * _DT_STORED
+    t_uniform = tHistory                       # actual sample timestamps (s from epoch)
+    total_seconds = float(t_uniform[-1])
 
     segment_seconds = float(SEGMENT_DAYS * 86400)
     n_segments = int(np.ceil(total_seconds / segment_seconds))

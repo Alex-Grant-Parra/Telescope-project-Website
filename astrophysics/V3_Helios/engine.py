@@ -1,7 +1,8 @@
 import json
 import numpy as np
 from pathlib import Path
-from integrator import computeAccelerations, velocityVerletStep, yoshida4Step
+from integrator import (computeAccelerations, computeGRCorrections,
+                        velocityVerletStep, yoshida4Step, adaptiveVerletStep)
 
 
 # ============================================================================
@@ -83,7 +84,9 @@ def getMasses(names):
     return np.array([massMap[n] for n in names], dtype=np.float64)
 
 
-def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet", progress_callback=None):
+def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet",
+                  use_gr=False, adaptive=False, adaptive_tol=1e4, duration=None,
+                  progress_callback=None):
     # 35040 steps * 900 seconds = 31,536,000 seconds = ~365 days (one Earth orbit)
     # dt=900s keeps the run practical while preserving acceptable accuracy
     # Velocity Verlet is used for its stability and simplicity
@@ -103,6 +106,8 @@ def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet", prog
     initial_angular_momentum = totalAngularMomentum(r, v, masses)
 
     a = computeAccelerations(r, masses)
+    if use_gr:
+        a = a + computeGRCorrections(r, v, masses)
 
     # diagnostic storage
     energyLog = []
@@ -110,53 +115,94 @@ def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet", prog
     angularMomentumLog = []
     earthDistanceLog = []
 
-    # trajectory storage 
+    # trajectory storage
     rHistory = []
     vHistory = []
+    tHistory = []
 
-    # Select integrator — yoshida4 for higher accuracy, verlet for speed
-    step_func = yoshida4Step if integrator == "yoshida4" else velocityVerletStep
+    # Select integrator (adaptive mode always uses Verlet as the base)
+    step_func = yoshida4Step if (integrator == "yoshida4" and not adaptive) else velocityVerletStep
+    t_end = float(duration if duration is not None else steps * dt)
 
-    for step in range(steps):
+    if not adaptive:
+        # ---- Fixed-step loop --------------------------------------------------
+        for step in range(steps):
+            r, v, a = step_func(r, v, a, masses, dt, use_gr=use_gr)
 
-        # Pass acceleration state explicitly for proper symplectic integration
-        r, v, a = step_func(r, v, a, masses, dt)
+            if step % store_every == 0:
+                rHistory.append(r.copy())
+                vHistory.append(v.copy())
+                tHistory.append((step + 1) * float(dt))
 
-        # Project back to the conserved total momentum to suppress roundoff drift.
-        current_momentum = totalMomentum(v, masses)
-        momentum_correction = (current_momentum - initial_momentum) / total_mass
-        v = v - momentum_correction
+            if step % 5 == 0:
+                energyLog.append(totalEnergy(r, v, masses) - initial_energy)
+                momentumLog.append(totalMomentum(v, masses) - initial_momentum)
+                angularMomentumLog.append(totalAngularMomentum(r, v, masses) - initial_angular_momentum)
+                earthDistanceLog.append(earthSunDistance(r))
 
-        # store trajectory
-        if step % store_every == 0:
-            rHistory.append(r.copy())
-            vHistory.append(v.copy())
+            if step % 5000 == 0:
+                p_mag = np.linalg.norm(momentumLog[-1]) if momentumLog else 0
+                e_val = energyLog[-1] if energyLog else 0
+                baseline = np.linalg.norm(initial_momentum)
+                p_drift_pct = (p_mag / baseline) * 100 if baseline > 0 else 0
+                percent = 100 * step // steps
+                if progress_callback is not None:
+                    try:
+                        progress_callback(step, steps, percent, e_val, p_mag, p_drift_pct)
+                    except Exception:
+                        pass
+                else:
+                    print(f"Step {step:6d}/{steps} ({percent:2d}%)  E={e_val:.3e} J  p={p_mag:.3e} kg*m/s  p_drift={p_drift_pct:.2f}%")
 
-        # diagnostics every 5 steps = every 25 minutes
-        if step % 5 == 0:
-            energyLog.append(totalEnergy(r, v, masses) - initial_energy)
-            momentumLog.append(totalMomentum(v, masses) - initial_momentum)
-            angularMomentumLog.append(totalAngularMomentum(r, v, masses) - initial_angular_momentum)
-            earthDistanceLog.append(earthSunDistance(r))
+    else:
+        # ---- Adaptive-step loop -----------------------------------------------
+        t_sim = 0.0
+        current_dt = float(dt)
+        accepted = 0
+        diag_interval = 5.0 * float(dt)
+        diag_t_next = 0.0
+        report_interval = 5000.0 * float(dt)
+        report_t_next = 0.0
 
-        # Progress reporting & diagnostics
-        if step % 5000 == 0:
-            p_mag = np.linalg.norm(momentumLog[-1]) if momentumLog else 0
-            e_val = energyLog[-1] if energyLog else 0
-            baseline = np.linalg.norm(initial_momentum)
-            p_drift_pct = (p_mag / baseline) * 100 if baseline > 0 else 0
-            percent = 100 * step // steps
-            if progress_callback is not None:
-                try:
-                    progress_callback(step, steps, percent, e_val, p_mag, p_drift_pct)
-                except Exception:
-                    # ignore callback errors to avoid breaking the simulation
-                    pass
-            else:
-                print(f"Step {step:6d}/{steps} ({percent:2d}%)  E={e_val:.3e} J  p={p_mag:.3e} kg*m/s  p_drift={p_drift_pct:.2f}%")
+        while t_sim < t_end:
+            step_dt = min(current_dt, t_end - t_sim)
+            if step_dt <= 0.0:
+                break
+
+            r, v, a, dt_used, current_dt = adaptiveVerletStep(
+                r, v, a, masses, step_dt, adaptive_tol, use_gr=use_gr
+            )
+            t_sim += dt_used
+            accepted += 1
+
+            if accepted % store_every == 0:
+                rHistory.append(r.copy())
+                vHistory.append(v.copy())
+                tHistory.append(t_sim)
+
+            if t_sim >= diag_t_next:
+                energyLog.append(totalEnergy(r, v, masses) - initial_energy)
+                momentumLog.append(totalMomentum(v, masses) - initial_momentum)
+                angularMomentumLog.append(totalAngularMomentum(r, v, masses) - initial_angular_momentum)
+                earthDistanceLog.append(earthSunDistance(r))
+                diag_t_next = t_sim + diag_interval
+
+            if t_sim >= report_t_next:
+                p_mag = np.linalg.norm(momentumLog[-1]) if momentumLog else 0
+                e_val = energyLog[-1] if energyLog else 0
+                percent = int(100 * t_sim / t_end)
+                if progress_callback is not None:
+                    try:
+                        progress_callback(accepted, int(t_end / dt), percent, e_val, p_mag, 0.0)
+                    except Exception:
+                        pass
+                else:
+                    print(f"t={t_sim:.0f}s ({percent:2d}%)  dt={current_dt:.1f}s  accepted={accepted}  E={e_val:.3e} J")
+                report_t_next = t_sim + report_interval
 
     rHistory = np.array(rHistory)
     vHistory = np.array(vHistory)
+    tHistory = np.array(tHistory)
     
     # Final diagnostics for conservation laws
     final_momentum = totalMomentum(v, masses)
@@ -182,6 +228,7 @@ def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet", prog
         "names": names,
         "rHistory": rHistory,
         "vHistory": vHistory,
+        "tHistory": tHistory,
         "energy": np.array(energyLog),
         "momentum": np.array(momentumLog),
         "angularMomentum": np.array(angularMomentumLog),
