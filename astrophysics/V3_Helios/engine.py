@@ -84,7 +84,7 @@ def getMasses(names):
     return np.array([massMap[n] for n in names], dtype=np.float64)
 
 
-def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet",
+def runSimulation(steps=35040, dt=900, store_every=10, integrator="auto",
                   use_gr=False, adaptive=False, adaptive_tol=1e4, duration=None,
                   progress_callback=None):
     # 35040 steps * 900 seconds = 31,536,000 seconds = ~365 days (one Earth orbit)
@@ -120,9 +120,20 @@ def runSimulation(steps=35040, dt=900, store_every=10, integrator="verlet",
     vHistory = []
     tHistory = []
 
-    # Select integrator (adaptive mode always uses Verlet as the base)
-    step_func = yoshida4Step if (integrator == "yoshida4" and not adaptive) else velocityVerletStep
     t_end = float(duration if duration is not None else steps * dt)
+
+    # Select integrator automatically when integrator="auto":
+    #   - adaptive=True  → always Verlet (adaptive step-doubling is Verlet-based)
+    #   - duration <= 2 years → Verlet (accuracy already well below Chebyshev error)
+    #   - duration >  2 years → Yoshida 4th order (higher-order accuracy compounds)
+    _TWO_YEARS = 2 * 365.25 * 86400.0
+    if integrator == "auto":
+        if adaptive or t_end <= _TWO_YEARS:
+            integrator = "verlet"
+        else:
+            integrator = "yoshida4"
+    step_func = yoshida4Step if (integrator == "yoshida4" and not adaptive) else velocityVerletStep
+    print(f"Integrator: {integrator}  adaptive={adaptive}  t_end={t_end/86400:.1f} days")
 
     if not adaptive:
         # ---- Fixed-step loop --------------------------------------------------
