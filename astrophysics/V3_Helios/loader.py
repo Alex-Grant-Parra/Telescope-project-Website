@@ -27,7 +27,7 @@ et = spice.utc2et(utcStr)
 print("Epoch ET:", et)
 
 # Use a single scale factor for kilometer-to-meter conversion.
-meters_per_kilometer = 1000.0
+metersPerKilometer = 1000.0
 
 # Bodies to sample from the Solar System barycenter in the chosen frame.
 # Earth and Moon are queried separately so the N-body engine can integrate
@@ -56,7 +56,7 @@ state = {
 }
 
 for name, target in bodies.items():
-    state_vec, _ = spice.spkezr(
+    stateVec, _ = spice.spkezr(
         target,
         et,
         frame,
@@ -64,13 +64,13 @@ for name, target in bodies.items():
         "SOLAR SYSTEM BARYCENTER"
     )
 
-    position_m = [component * meters_per_kilometer for component in state_vec[:3]]
-    velocity_m_s = [component * meters_per_kilometer for component in state_vec[3:6]]
+    positionM = [component * metersPerKilometer for component in stateVec[:3]]
+    velocityMS = [component * metersPerKilometer for component in stateVec[3:6]]
 
     # SPICE returns kilometers and km/s; convert to meters for storage.
     state["bodies"][name] = {
-        "position_m": position_m,
-        "velocity_m_s": velocity_m_s
+        "position_m": positionM,
+        "velocity_m_s": velocityMS
     }
 
     print(name, "extracted")

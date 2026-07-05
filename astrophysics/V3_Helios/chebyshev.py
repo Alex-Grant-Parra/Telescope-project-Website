@@ -62,12 +62,12 @@ _ENGINE_DEFAULT_STEPS = 35040
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _is_newer(path: Path, reference: Path) -> bool:
+def _isNewer(path: Path, reference: Path) -> bool:
     """Return True if *path* exists and is at least as new as *reference*."""
     return path.exists() and path.stat().st_mtime >= reference.stat().st_mtime
 
 
-def _file_sha256(path: Path) -> str:
+def _fileSha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -75,7 +75,7 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _table_cache_key() -> tuple:
+def _tableCacheKey() -> tuple:
     return (
         str(_CHEB_TABLE_PATH),
         _CHEB_TABLE_PATH.stat().st_mtime_ns,
@@ -83,28 +83,28 @@ def _table_cache_key() -> tuple:
     )
 
 
-def _expected_metadata(ic_sha256: str) -> dict:
+def _expectedMetadata(icSha256: str) -> dict:
     return {
         "schema": _METADATA_SCHEMA,
         "segment_days": SEGMENT_DAYS,
         "degree": DEGREE,
         "sim_dt": _SIM_DT,
         "sim_store_every": _SIM_STORE_EVERY,
-        "ic_sha256": ic_sha256,
+        "ic_sha256": icSha256,
     }
 
 
-def _expected_rhistory_metadata(ic_sha256: str) -> dict:
+def _expectedRhistoryMetadata(icSha256: str) -> dict:
     return {
         "schema": _METADATA_SCHEMA,
         "sim_dt": _SIM_DT,
         "sim_store_every": _SIM_STORE_EVERY,
         "sim_steps": _ENGINE_DEFAULT_STEPS,
-        "ic_sha256": ic_sha256,
+        "ic_sha256": icSha256,
     }
 
 
-def _parse_metadata(table: dict) -> dict:
+def _parseMetadata(table: dict) -> dict:
     raw = table.get("metadata_json")
     if raw is None:
         return {}
@@ -113,9 +113,9 @@ def _parse_metadata(table: dict) -> dict:
     return json.loads(str(raw))
 
 
-def _validate_metadata(table: dict) -> None:
-    metadata = _parse_metadata(table)
-    expected = _expected_metadata(_file_sha256(_IC_PATH))
+def _validateMetadata(table: dict) -> None:
+    metadata = _parseMetadata(table)
+    expected = _expectedMetadata(_fileSha256(_IC_PATH))
 
     missing_keys = [k for k in expected if k not in metadata]
     if missing_keys:
@@ -134,9 +134,9 @@ def _validate_metadata(table: dict) -> None:
         )
 
 
-def _validate_rhistory_metadata(data: dict) -> None:
-    metadata = _parse_metadata(data)
-    expected = _expected_rhistory_metadata(_file_sha256(_IC_PATH))
+def _validateRhistoryMetadata(data: dict) -> None:
+    metadata = _parseMetadata(data)
+    expected = _expectedRhistoryMetadata(_fileSha256(_IC_PATH))
     missing_keys = [k for k in expected if k not in metadata]
     if missing_keys:
         raise RuntimeError(
@@ -154,7 +154,7 @@ def _validate_rhistory_metadata(data: dict) -> None:
         )
 
 
-def _run_simulation():
+def _runSimulation():
     """Run the N-body engine and return (names, rHistory ndarray)."""
     try:
         from .engine import runSimulation
@@ -170,14 +170,14 @@ def _run_simulation():
     return list(results["names"]), np.asarray(results["rHistory"]), tHistory
 
 
-def _get_rhistory():
+def _getRhistory():
     """Return (names, rHistory, tHistory) from disk cache or by running the simulation."""
-    if _is_newer(_RHISTORY_PATH, _IC_PATH):
+    if _isNewer(_RHISTORY_PATH, _IC_PATH):
         print(f"Loading cached trajectory from {_RHISTORY_PATH.name} …")
         try:
             with np.load(_RHISTORY_PATH, allow_pickle=True) as npz:
                 data = {key: npz[key] for key in npz.files}
-            _validate_rhistory_metadata(data)
+            _validateRhistoryMetadata(data)
             names = list(data["names"])
             rHistory = data["rHistory"]
             # tHistory absent in cache files built before this version
@@ -191,9 +191,9 @@ def _get_rhistory():
             print(f"Cached trajectory rejected: {exc}")
             print("Rebuilding trajectory cache …")
 
-    names, rHistory, tHistory = _run_simulation()
+    names, rHistory, tHistory = _runSimulation()
     metadata_json = json.dumps(
-        _expected_rhistory_metadata(_file_sha256(_IC_PATH)),
+        _expectedRhistoryMetadata(_fileSha256(_IC_PATH)),
         sort_keys=True,
     )
     np.savez_compressed(
@@ -216,13 +216,13 @@ def buildTable() -> None:
     Fit Chebyshev polynomials to the simulated trajectory and save
     cheb_table.npz.  Safe to re-run; reuses rHistory.npz when fresh.
     """
-    names, rHistory, tHistory = _get_rhistory()
+    names, rHistory, tHistory = _getRhistory()
 
     ic_text = _IC_PATH.read_text()
     ic = json.loads(ic_text)
     epoch_utc = ic["epoch_utc"]
     metadata_json = json.dumps(
-        _expected_metadata(hashlib.sha256(ic_text.encode("utf-8")).hexdigest()),
+        _expectedMetadata(hashlib.sha256(ic_text.encode("utf-8")).hexdigest()),
         sort_keys=True,
     )
 
@@ -284,7 +284,7 @@ def buildTable() -> None:
     )
 
 
-def _load_table(force_reload: bool = False):
+def _loadTable(forceReload: bool = False):
     """Load and validate the Chebyshev table from disk."""
     global _TABLE_CACHE, _TABLE_CACHE_KEY
 
@@ -293,22 +293,22 @@ def _load_table(force_reload: bool = False):
             "Chebyshev table not found. Build it first:\n"
             "    python astrophysics/V3_Helios/chebyshev.py"
         )
-    if not _is_newer(_CHEB_TABLE_PATH, _IC_PATH):
+    if not _isNewer(_CHEB_TABLE_PATH, _IC_PATH):
         raise RuntimeError(
             "Chebyshev table is stale — initial_conditions.json is newer. "
             "Rebuild with:\n    python astrophysics/V3_Helios/chebyshev.py"
         )
 
-    cache_key = _table_cache_key()
-    if not force_reload and _TABLE_CACHE is not None and _TABLE_CACHE_KEY == cache_key:
+    cacheKey = _tableCacheKey()
+    if not forceReload and _TABLE_CACHE is not None and _TABLE_CACHE_KEY == cacheKey:
         return _TABLE_CACHE
 
     with np.load(_CHEB_TABLE_PATH, allow_pickle=True) as data:
         table = {key: data[key] for key in data.files}
 
-    _validate_metadata(table)
+    _validateMetadata(table)
     _TABLE_CACHE = table
-    _TABLE_CACHE_KEY = cache_key
+    _TABLE_CACHE_KEY = cacheKey
     return table
 
 
@@ -319,12 +319,12 @@ def clearTableCache() -> None:
     _TABLE_CACHE_KEY = None
 
 
-def getEpochUTC(force_reload: bool = False) -> datetime:
+def getEpochUTC(forceReload: bool = False) -> datetime:
     """Return epoch_utc from initial_conditions.json with mtime-based caching."""
     global _EPOCH_CACHE, _EPOCH_CACHE_KEY
 
-    epoch_key = (_IC_PATH.stat().st_mtime_ns,)
-    if not force_reload and _EPOCH_CACHE is not None and _EPOCH_CACHE_KEY == epoch_key:
+    epochKey = (_IC_PATH.stat().st_mtime_ns,)
+    if not forceReload and _EPOCH_CACHE is not None and _EPOCH_CACHE_KEY == epochKey:
         return _EPOCH_CACHE
 
     data = json.loads(_IC_PATH.read_text())
@@ -335,11 +335,11 @@ def getEpochUTC(force_reload: bool = False) -> datetime:
     parsed = parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
     _EPOCH_CACHE = parsed
-    _EPOCH_CACHE_KEY = epoch_key
+    _EPOCH_CACHE_KEY = epochKey
     return parsed
 
 
-def _evaluate_batch_arrays(t_values: np.ndarray, table: dict) -> dict:
+def _evaluateBatchArrays(tValues: np.ndarray, table: dict) -> dict:
     names = list(table["names"])
     coefficients = table["coefficients"]
     seg_t_a = table["seg_t_a"]
@@ -347,26 +347,26 @@ def _evaluate_batch_arrays(t_values: np.ndarray, table: dict) -> dict:
     total_seconds = float(table["total_seconds"])
     segment_seconds = float(table["segment_seconds"])
 
-    if t_values.size == 0:
+    if tValues.size == 0:
         return {name: np.empty((0, 3), dtype=np.float64) for name in names}
 
-    t_flat = np.asarray(t_values, dtype=np.float64).reshape(-1)
-    if np.any((t_flat < 0.0) | (t_flat > total_seconds)):
-        bad = float(t_flat[((t_flat < 0.0) | (t_flat > total_seconds))][0])
+    tFlat = np.asarray(tValues, dtype=np.float64).reshape(-1)
+    if np.any((tFlat < 0.0) | (tFlat > total_seconds)):
+        bad = float(tFlat[((tFlat < 0.0) | (tFlat > total_seconds))][0])
         raise ValueError(
             f"t_sec={bad:.0f} s is outside the simulated range "
             f"[0, {total_seconds:.0f}] s  ({total_seconds / 86400:.1f} days from epoch)."
         )
 
-    seg_idx = np.minimum((t_flat / segment_seconds).astype(np.int64), len(seg_t_a) - 1)
-    output = {name: np.empty((t_flat.size, 3), dtype=np.float64) for name in names}
+    segIdx = np.minimum((tFlat / segment_seconds).astype(np.int64), len(seg_t_a) - 1)
+    output = {name: np.empty((tFlat.size, 3), dtype=np.float64) for name in names}
 
-    for seg in np.unique(seg_idx):
-        mask = seg_idx == seg
-        t_seg = t_flat[mask]
-        t_a = float(seg_t_a[seg])
-        t_b = float(seg_t_b[seg])
-        tau = np.clip((2.0 * t_seg - (t_a + t_b)) / (t_b - t_a), -1.0, 1.0)
+    for seg in np.unique(segIdx):
+        mask = segIdx == seg
+        tSeg = tFlat[mask]
+        tA = float(seg_t_a[seg])
+        tB = float(seg_t_b[seg])
+        tau = np.clip((2.0 * tSeg - (tA + tB)) / (tB - tA), -1.0, 1.0)
 
         for body_idx, name in enumerate(names):
             for axis in range(3):
@@ -390,11 +390,11 @@ def evaluateAtBatch(t_seconds) -> dict:
     dict
         Maps body name -> np.ndarray with shape (len(t_seconds), 3).
     """
-    table = _load_table()
-    t_values = np.asarray(t_seconds, dtype=np.float64)
-    if t_values.ndim != 1:
+    table = _loadTable()
+    tValues = np.asarray(t_seconds, dtype=np.float64)
+    if tValues.ndim != 1:
         raise ValueError("t_seconds must be a 1-D array-like sequence")
-    return _evaluate_batch_arrays(t_values, table)
+    return _evaluateBatchArrays(tValues, table)
 
 
 def evaluateAt(t_sec: float) -> dict:
@@ -419,8 +419,8 @@ def evaluateAt(t_sec: float) -> dict:
     FileNotFoundError / RuntimeError
         If the Chebyshev table is missing or stale.
     """
-    table = _load_table()
-    batch = _evaluate_batch_arrays(np.array([float(t_sec)], dtype=np.float64), table)
+    table = _loadTable()
+    batch = _evaluateBatchArrays(np.array([float(t_sec)], dtype=np.float64), table)
     return {name: values[0] for name, values in batch.items()}
 
 
