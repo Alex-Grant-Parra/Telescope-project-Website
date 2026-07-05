@@ -1,11 +1,14 @@
-from pathlib import Path
-import json
 import calendar
 from datetime import datetime, timezone
 from time import struct_time
 import sys
 
 import numpy as np
+
+try:
+    from .chebyshev import evaluateAt, evaluateAtBatch, getEpochUTC
+except ImportError:
+    from chebyshev import evaluateAt, evaluateAtBatch, getEpochUTC
 
 
 # London, UK (city center; WGS84 geodetic)
@@ -90,15 +93,6 @@ def _deg_to_dms(dec_deg):
     return f"{sign}{degrees:02d}:{minutes:02d}:{seconds:05.2f}"
 
 
-def _load_epoch():
-    data = json.loads((Path(__file__).parent / "initial_conditions.json").read_text())
-    epoch = data["epoch_utc"]
-    if epoch.endswith("Z"):
-        epoch = epoch.replace("Z", "+00:00")
-    parsed = datetime.fromisoformat(epoch)
-    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
-
-
 def _normalize_time_input(time_input):
     if time_input is None:
         return datetime.fromtimestamp(sys.modules["time"].time(), tz=timezone.utc)
@@ -141,17 +135,8 @@ def get_radec_at_time(time_input=None, observer_lat_deg=None, observer_lon_deg=N
         python astrophysics/V3_Helios/chebyshev.py
     """
     req_time = _normalize_time_input(time_input)
-    epoch = _load_epoch()
+    epoch = getEpochUTC()
     t_sec = (req_time - epoch).total_seconds()
-
-    project_root = str(Path(__file__).resolve().parents[2])  # …/Server
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-
-    try:
-        from astrophysics.V3_Helios.chebyshev import evaluateAt
-    except ImportError:
-        from chebyshev import evaluateAt
 
     positions = evaluateAt(t_sec)
     names = list(positions.keys())
@@ -185,6 +170,59 @@ def get_radec_at_time(time_input=None, observer_lat_deg=None, observer_lon_deg=N
     return output
 
 
+def get_radec_at_times(time_inputs, observer_lat_deg=None, observer_lon_deg=None, observer_alt_m=0.0):
+    """Return RA/Dec for each body across multiple requested times.
+
+    Parameters
+    ----------
+    time_inputs : sequence
+        Sequence of accepted time inputs for get_radec_at_time.
+
+    Returns
+    -------
+    list[dict]
+        A list with one output dict per requested time.
+    """
+    req_times = [_normalize_time_input(value) for value in time_inputs]
+    epoch = getEpochUTC()
+    t_seconds = np.array([(value - epoch).total_seconds() for value in req_times], dtype=np.float64)
+    positions_by_body = evaluateAtBatch(t_seconds)
+    names = list(positions_by_body.keys())
+    observer = "earth" if "earth" in names else names[0]
+
+    observer_offsets = None
+    if observer_lat_deg is not None and observer_lon_deg is not None:
+        observer_offsets = np.array(
+            [_observer_eci_m(value, observer_lat_deg, observer_lon_deg, observer_alt_m) for value in req_times],
+            dtype=np.float64,
+        )
+
+    output_per_time = []
+    for idx in range(len(req_times)):
+        observer_pos = positions_by_body[observer][idx]
+        row = {}
+        for body, pos_series in positions_by_body.items():
+            if body == observer:
+                continue
+
+            vector = pos_series[idx] - observer_pos
+            vector_equ = _ecl_to_equ(vector)
+            if observer_offsets is not None:
+                vector_equ = vector_equ - observer_offsets[idx]
+
+            ra_deg, dec_deg, distance_m = _cart_to_radec(vector_equ)
+            row[body] = {
+                "ra_hms": _deg_to_hms(ra_deg),
+                "dec_dms": _deg_to_dms(dec_deg),
+                "ra_deg": ra_deg,
+                "dec_deg": dec_deg,
+                "dist_m": distance_m,
+            }
+        output_per_time.append(row)
+
+    return output_per_time
+
+
 if __name__ == "__main__":
     from time import gmtime
 
@@ -197,4 +235,4 @@ if __name__ == "__main__":
     print(f"{'Body':<10}  {'RA':>13}  {'Dec':>14}  {'Dist':>16}")
     print("-" * 60)
     for body, data in res.items():
-        print(f"{body:<10}  {data['ra_hms']:>13}  {data['dec_dms']:>14}  {data['dist_m']/1e9:>13.1f} Mm")
+        print(f"{body:<10}  {data['ra_hms']:>13}  {data['dec_dms']:>14}  {data['dist_m']/1e9:>13.6g} Mm")

@@ -24,15 +24,23 @@ loader.py for a new epoch):
     python astrophysics/V3_Helios/chebyshev.py
 """
 
+import hashlib
 import json
-import sys
-import numpy as np
+from datetime import datetime, timezone
 from pathlib import Path
+
+import numpy as np
 
 _BASE = Path(__file__).resolve().parent
 _IC_PATH = _BASE / "initial_conditions.json"
 _RHISTORY_PATH = _BASE / "rHistory.npz"
 _CHEB_TABLE_PATH = _BASE / "cheb_table.npz"
+
+_TABLE_CACHE = None
+_TABLE_CACHE_KEY = None
+_EPOCH_CACHE = None
+_EPOCH_CACHE_KEY = None
+_METADATA_SCHEMA = 1
 
 # ---------------------------------------------------------------------------
 # Fitting parameters.
@@ -47,6 +55,7 @@ DEGREE = 16
 _SIM_DT = 900.0          # integrator timestep (seconds)
 _SIM_STORE_EVERY = 10    # trajectory stored every N steps
 _DT_STORED = _SIM_DT * _SIM_STORE_EVERY   # 9 000 s between stored samples
+_ENGINE_DEFAULT_STEPS = 35040
 
 
 # ---------------------------------------------------------------------------
@@ -58,18 +67,97 @@ def _is_newer(path: Path, reference: Path) -> bool:
     return path.exists() and path.stat().st_mtime >= reference.stat().st_mtime
 
 
-def _ensure_importable() -> None:
-    """Add the project root to sys.path so package imports work."""
-    project_root = str(_BASE.parents[2])   # …/Server
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _table_cache_key() -> tuple:
+    return (
+        str(_CHEB_TABLE_PATH),
+        _CHEB_TABLE_PATH.stat().st_mtime_ns,
+        _IC_PATH.stat().st_mtime_ns,
+    )
+
+
+def _expected_metadata(ic_sha256: str) -> dict:
+    return {
+        "schema": _METADATA_SCHEMA,
+        "segment_days": SEGMENT_DAYS,
+        "degree": DEGREE,
+        "sim_dt": _SIM_DT,
+        "sim_store_every": _SIM_STORE_EVERY,
+        "ic_sha256": ic_sha256,
+    }
+
+
+def _expected_rhistory_metadata(ic_sha256: str) -> dict:
+    return {
+        "schema": _METADATA_SCHEMA,
+        "sim_dt": _SIM_DT,
+        "sim_store_every": _SIM_STORE_EVERY,
+        "sim_steps": _ENGINE_DEFAULT_STEPS,
+        "ic_sha256": ic_sha256,
+    }
+
+
+def _parse_metadata(table: dict) -> dict:
+    raw = table.get("metadata_json")
+    if raw is None:
+        return {}
+    if isinstance(raw, np.ndarray):
+        raw = raw.item()
+    return json.loads(str(raw))
+
+
+def _validate_metadata(table: dict) -> None:
+    metadata = _parse_metadata(table)
+    expected = _expected_metadata(_file_sha256(_IC_PATH))
+
+    missing_keys = [k for k in expected if k not in metadata]
+    if missing_keys:
+        raise RuntimeError(
+            "Chebyshev table metadata is incomplete. "
+            f"Missing keys: {', '.join(missing_keys)}. Rebuild with:\n"
+            "    python astrophysics/V3_Helios/chebyshev.py"
+        )
+
+    mismatched = [k for k, value in expected.items() if metadata.get(k) != value]
+    if mismatched:
+        raise RuntimeError(
+            "Chebyshev table metadata does not match current settings "
+            f"for: {', '.join(mismatched)}. Rebuild with:\n"
+            "    python astrophysics/V3_Helios/chebyshev.py"
+        )
+
+
+def _validate_rhistory_metadata(data: dict) -> None:
+    metadata = _parse_metadata(data)
+    expected = _expected_rhistory_metadata(_file_sha256(_IC_PATH))
+    missing_keys = [k for k in expected if k not in metadata]
+    if missing_keys:
+        raise RuntimeError(
+            "rHistory cache metadata is incomplete. "
+            f"Missing keys: {', '.join(missing_keys)}. Rebuild with:\n"
+            "    python astrophysics/V3_Helios/chebyshev.py"
+        )
+
+    mismatched = [k for k, value in expected.items() if metadata.get(k) != value]
+    if mismatched:
+        raise RuntimeError(
+            "rHistory cache metadata does not match current settings "
+            f"for: {', '.join(mismatched)}. Rebuild with:\n"
+            "    python astrophysics/V3_Helios/chebyshev.py"
+        )
 
 
 def _run_simulation():
     """Run the N-body engine and return (names, rHistory ndarray)."""
-    _ensure_importable()
     try:
-        from astrophysics.V3_Helios.engine import runSimulation
+        from .engine import runSimulation
     except ImportError:
         from engine import runSimulation
 
@@ -86,20 +174,35 @@ def _get_rhistory():
     """Return (names, rHistory, tHistory) from disk cache or by running the simulation."""
     if _is_newer(_RHISTORY_PATH, _IC_PATH):
         print(f"Loading cached trajectory from {_RHISTORY_PATH.name} …")
-        data = np.load(_RHISTORY_PATH, allow_pickle=True)
-        names = list(data["names"])
-        rHistory = data["rHistory"]
-        # tHistory absent in cache files built before this version
-        if "tHistory" in data:
-            tHistory = data["tHistory"].astype(np.float64)
-        else:
-            n = rHistory.shape[0]
-            tHistory = np.arange(1, n + 1, dtype=np.float64) * _DT_STORED
-        return names, rHistory, tHistory
+        try:
+            with np.load(_RHISTORY_PATH, allow_pickle=True) as npz:
+                data = {key: npz[key] for key in npz.files}
+            _validate_rhistory_metadata(data)
+            names = list(data["names"])
+            rHistory = data["rHistory"]
+            # tHistory absent in cache files built before this version
+            if "tHistory" in data:
+                tHistory = data["tHistory"].astype(np.float64)
+            else:
+                n = rHistory.shape[0]
+                tHistory = np.arange(1, n + 1, dtype=np.float64) * _DT_STORED
+            return names, rHistory, tHistory
+        except RuntimeError as exc:
+            print(f"Cached trajectory rejected: {exc}")
+            print("Rebuilding trajectory cache …")
 
     names, rHistory, tHistory = _run_simulation()
-    np.savez_compressed(_RHISTORY_PATH, names=np.array(names), rHistory=rHistory,
-                        tHistory=tHistory)
+    metadata_json = json.dumps(
+        _expected_rhistory_metadata(_file_sha256(_IC_PATH)),
+        sort_keys=True,
+    )
+    np.savez_compressed(
+        _RHISTORY_PATH,
+        names=np.array(names),
+        rHistory=rHistory,
+        tHistory=tHistory,
+        metadata_json=np.array(metadata_json),
+    )
     print(f"Trajectory cached \u2192 {_RHISTORY_PATH.name}")
     return names, rHistory, tHistory
 
@@ -115,8 +218,13 @@ def buildTable() -> None:
     """
     names, rHistory, tHistory = _get_rhistory()
 
-    ic = json.loads(_IC_PATH.read_text())
+    ic_text = _IC_PATH.read_text()
+    ic = json.loads(ic_text)
     epoch_utc = ic["epoch_utc"]
+    metadata_json = json.dumps(
+        _expected_metadata(hashlib.sha256(ic_text.encode("utf-8")).hexdigest()),
+        sort_keys=True,
+    )
 
     n_samples, n_bodies, _ = rHistory.shape
     t_uniform = tHistory                       # actual sample timestamps (s from epoch)
@@ -167,6 +275,7 @@ def buildTable() -> None:
         seg_t_b=seg_t_b,
         coefficients=coefficients,
         total_seconds=np.array(total_seconds),
+        metadata_json=np.array(metadata_json),
     )
     print(
         f"Chebyshev table saved → {_CHEB_TABLE_PATH.name}\n"
@@ -175,8 +284,10 @@ def buildTable() -> None:
     )
 
 
-def _load_table():
+def _load_table(force_reload: bool = False):
     """Load and validate the Chebyshev table from disk."""
+    global _TABLE_CACHE, _TABLE_CACHE_KEY
+
     if not _CHEB_TABLE_PATH.exists():
         raise FileNotFoundError(
             "Chebyshev table not found. Build it first:\n"
@@ -187,7 +298,103 @@ def _load_table():
             "Chebyshev table is stale — initial_conditions.json is newer. "
             "Rebuild with:\n    python astrophysics/V3_Helios/chebyshev.py"
         )
-    return np.load(_CHEB_TABLE_PATH, allow_pickle=True)
+
+    cache_key = _table_cache_key()
+    if not force_reload and _TABLE_CACHE is not None and _TABLE_CACHE_KEY == cache_key:
+        return _TABLE_CACHE
+
+    with np.load(_CHEB_TABLE_PATH, allow_pickle=True) as data:
+        table = {key: data[key] for key in data.files}
+
+    _validate_metadata(table)
+    _TABLE_CACHE = table
+    _TABLE_CACHE_KEY = cache_key
+    return table
+
+
+def clearTableCache() -> None:
+    """Clear the in-memory Chebyshev table cache."""
+    global _TABLE_CACHE, _TABLE_CACHE_KEY
+    _TABLE_CACHE = None
+    _TABLE_CACHE_KEY = None
+
+
+def getEpochUTC(force_reload: bool = False) -> datetime:
+    """Return epoch_utc from initial_conditions.json with mtime-based caching."""
+    global _EPOCH_CACHE, _EPOCH_CACHE_KEY
+
+    epoch_key = (_IC_PATH.stat().st_mtime_ns,)
+    if not force_reload and _EPOCH_CACHE is not None and _EPOCH_CACHE_KEY == epoch_key:
+        return _EPOCH_CACHE
+
+    data = json.loads(_IC_PATH.read_text())
+    epoch = str(data["epoch_utc"])
+    if epoch.endswith("Z"):
+        epoch = epoch.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(epoch)
+    parsed = parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+
+    _EPOCH_CACHE = parsed
+    _EPOCH_CACHE_KEY = epoch_key
+    return parsed
+
+
+def _evaluate_batch_arrays(t_values: np.ndarray, table: dict) -> dict:
+    names = list(table["names"])
+    coefficients = table["coefficients"]
+    seg_t_a = table["seg_t_a"]
+    seg_t_b = table["seg_t_b"]
+    total_seconds = float(table["total_seconds"])
+    segment_seconds = float(table["segment_seconds"])
+
+    if t_values.size == 0:
+        return {name: np.empty((0, 3), dtype=np.float64) for name in names}
+
+    t_flat = np.asarray(t_values, dtype=np.float64).reshape(-1)
+    if np.any((t_flat < 0.0) | (t_flat > total_seconds)):
+        bad = float(t_flat[((t_flat < 0.0) | (t_flat > total_seconds))][0])
+        raise ValueError(
+            f"t_sec={bad:.0f} s is outside the simulated range "
+            f"[0, {total_seconds:.0f}] s  ({total_seconds / 86400:.1f} days from epoch)."
+        )
+
+    seg_idx = np.minimum((t_flat / segment_seconds).astype(np.int64), len(seg_t_a) - 1)
+    output = {name: np.empty((t_flat.size, 3), dtype=np.float64) for name in names}
+
+    for seg in np.unique(seg_idx):
+        mask = seg_idx == seg
+        t_seg = t_flat[mask]
+        t_a = float(seg_t_a[seg])
+        t_b = float(seg_t_b[seg])
+        tau = np.clip((2.0 * t_seg - (t_a + t_b)) / (t_b - t_a), -1.0, 1.0)
+
+        for body_idx, name in enumerate(names):
+            for axis in range(3):
+                output[name][mask, axis] = np.polynomial.chebyshev.chebval(
+                    tau, coefficients[body_idx, axis, seg, :]
+                )
+
+    return output
+
+
+def evaluateAtBatch(t_seconds) -> dict:
+    """Evaluate all bodies at multiple times.
+
+    Parameters
+    ----------
+    t_seconds : array-like
+        1-D sequence of seconds elapsed since simulation epoch.
+
+    Returns
+    -------
+    dict
+        Maps body name -> np.ndarray with shape (len(t_seconds), 3).
+    """
+    table = _load_table()
+    t_values = np.asarray(t_seconds, dtype=np.float64)
+    if t_values.ndim != 1:
+        raise ValueError("t_seconds must be a 1-D array-like sequence")
+    return _evaluate_batch_arrays(t_values, table)
 
 
 def evaluateAt(t_sec: float) -> dict:
@@ -213,33 +420,8 @@ def evaluateAt(t_sec: float) -> dict:
         If the Chebyshev table is missing or stale.
     """
     table = _load_table()
-    names = list(table["names"])
-    coefficients = table["coefficients"]     # (n_bodies, 3, n_segs, DEGREE+1)
-    seg_t_a = table["seg_t_a"]
-    seg_t_b = table["seg_t_b"]
-    total_seconds = float(table["total_seconds"])
-    segment_seconds = float(table["segment_seconds"])
-
-    if t_sec < 0.0 or t_sec > total_seconds:
-        raise ValueError(
-            f"t_sec={t_sec:.0f} s is outside the simulated range "
-            f"[0, {total_seconds:.0f}] s  ({total_seconds / 86400:.1f} days from epoch)."
-        )
-
-    # Locate the correct segment
-    seg = min(int(t_sec / segment_seconds), len(seg_t_a) - 1)
-
-    t_a = float(seg_t_a[seg])
-    t_b = float(seg_t_b[seg])
-    tau = float(np.clip((2.0 * t_sec - (t_a + t_b)) / (t_b - t_a), -1.0, 1.0))
-
-    return {
-        name: np.array([
-            np.polynomial.chebyshev.chebval(tau, coefficients[body_idx, axis, seg, :])
-            for axis in range(3)
-        ])
-        for body_idx, name in enumerate(names)
-    }
+    batch = _evaluate_batch_arrays(np.array([float(t_sec)], dtype=np.float64), table)
+    return {name: values[0] for name, values in batch.items()}
 
 
 if __name__ == "__main__":

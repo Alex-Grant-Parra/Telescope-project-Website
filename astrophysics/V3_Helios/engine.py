@@ -1,8 +1,18 @@
 import json
 import numpy as np
 from pathlib import Path
-from integrator import (computeAccelerations, computeGRCorrections,
-                        velocityVerletStep, yoshida4Step, adaptiveVerletStep)
+
+try:
+    from .integrator import (
+        computeAccelerations,
+        computeGRCorrections,
+        velocityVerletStep,
+        yoshida4Step,
+        adaptiveVerletStep,
+    )
+except ImportError:
+    from integrator import (computeAccelerations, computeGRCorrections,
+                            velocityVerletStep, yoshida4Step, adaptiveVerletStep)
 
 
 # ============================================================================
@@ -13,35 +23,35 @@ G = 6.67430e-11
 
 
 def totalEnergy(r, v, m):
-    masses = np.asarray(m, dtype=np.longdouble)
-    velocities = np.asarray(v, dtype=np.longdouble)
-    positions = np.asarray(r, dtype=np.longdouble)
+    masses = np.asarray(m, dtype=np.float64)
+    velocities = np.asarray(v, dtype=np.float64)
+    positions = np.asarray(r, dtype=np.float64)
 
-    kinetic = 0.5 * np.sum(masses * np.sum(velocities * velocities, axis=1, dtype=np.longdouble), dtype=np.longdouble)
+    kinetic = 0.5 * np.sum(masses * np.sum(velocities * velocities, axis=1, dtype=np.float64), dtype=np.float64)
 
-    potential = np.longdouble(0.0)
+    potential = np.float64(0.0)
     n = len(m)
 
     for i in range(n):
         for j in range(i + 1, n):
             diff = positions[j] - positions[i]
             dist = np.linalg.norm(diff)
-            potential -= np.longdouble(G) * masses[i] * masses[j] / dist
+            potential -= np.float64(G) * masses[i] * masses[j] / dist
 
-    return np.longdouble(kinetic + potential)
+    return np.float64(kinetic + potential)
 
 
 def totalMomentum(v, m):
-    masses = np.asarray(m, dtype=np.longdouble)
-    velocities = np.asarray(v, dtype=np.longdouble)
-    return np.sum(masses[:, None] * velocities, axis=0, dtype=np.longdouble)
+    masses = np.asarray(m, dtype=np.float64)
+    velocities = np.asarray(v, dtype=np.float64)
+    return np.sum(masses[:, None] * velocities, axis=0, dtype=np.float64)
 
 
 def totalAngularMomentum(r, v, m):
-    masses = np.asarray(m, dtype=np.longdouble)
-    positions = np.asarray(r, dtype=np.longdouble)
-    velocities = np.asarray(v, dtype=np.longdouble)
-    return np.sum(masses[:, None] * np.cross(positions, velocities), axis=0, dtype=np.longdouble)
+    masses = np.asarray(m, dtype=np.float64)
+    positions = np.asarray(r, dtype=np.float64)
+    velocities = np.asarray(v, dtype=np.float64)
+    return np.sum(masses[:, None] * np.cross(positions, velocities), axis=0, dtype=np.float64)
 
 
 def earthSunDistance(r, earthIndex=3, sunIndex=0):
@@ -82,6 +92,10 @@ def getMasses(names):
         "neptune": 1.024e26
     }
 
+    missing = [name for name in names if name not in massMap]
+    if missing:
+        raise KeyError(f"Missing mass entries for bodies: {', '.join(missing)}")
+
     return np.array([massMap[n] for n in names], dtype=np.float64)
 
 
@@ -92,9 +106,9 @@ def runSimulation(steps=35040, dt=900, store_every=10, integrator="auto",
     # dt=900s keeps the run practical while preserving acceptable accuracy
     # Velocity Verlet is used for its stability and simplicity
     names, r, v = loadInitialConditions()
-    r = np.asarray(r, dtype=np.longdouble)
-    v = np.asarray(v, dtype=np.longdouble)
-    masses = np.asarray(getMasses(names), dtype=np.longdouble)
+    r = np.asarray(r, dtype=np.float64)
+    v = np.asarray(v, dtype=np.float64)
+    masses = np.asarray(getMasses(names), dtype=np.float64)
 
     # Remove net center-of-mass velocity to eliminate bulk drift
     total_mass = np.sum(masses)
@@ -137,24 +151,42 @@ def runSimulation(steps=35040, dt=900, store_every=10, integrator="auto",
     print(f"Integrator: {integrator}  adaptive={adaptive}  t_end={t_end/86400:.1f} days")
 
     if not adaptive:
+        n_bodies = len(names)
+        n_store = ((steps - 1) // store_every + 1) if steps > 0 else 0
+        n_diag = ((steps - 1) // 5 + 1) if steps > 0 else 0
+
+        rHistory = np.empty((n_store, n_bodies, 3), dtype=np.float64)
+        vHistory = np.empty((n_store, n_bodies, 3), dtype=np.float64)
+        tHistory = np.empty(n_store, dtype=np.float64)
+
+        energyLog = np.empty(n_diag, dtype=np.float64)
+        momentumLog = np.empty((n_diag, 3), dtype=np.float64)
+        angularMomentumLog = np.empty((n_diag, 3), dtype=np.float64)
+        earthDistanceLog = np.empty(n_diag, dtype=np.float64)
+
+        store_idx = 0
+        diag_idx = 0
+
         # ---- Fixed-step loop --------------------------------------------------
         for step in range(steps):
             r, v, a = step_func(r, v, a, masses, dt, use_gr=use_gr)
 
             if step % store_every == 0:
-                rHistory.append(r.copy())
-                vHistory.append(v.copy())
-                tHistory.append((step + 1) * float(dt))
+                rHistory[store_idx] = r
+                vHistory[store_idx] = v
+                tHistory[store_idx] = (step + 1) * float(dt)
+                store_idx += 1
 
             if step % 5 == 0:
-                energyLog.append(totalEnergy(r, v, masses) - initial_energy)
-                momentumLog.append(totalMomentum(v, masses) - initial_momentum)
-                angularMomentumLog.append(totalAngularMomentum(r, v, masses) - initial_angular_momentum)
-                earthDistanceLog.append(earthSunDistance(r))
+                energyLog[diag_idx] = totalEnergy(r, v, masses) - initial_energy
+                momentumLog[diag_idx] = totalMomentum(v, masses) - initial_momentum
+                angularMomentumLog[diag_idx] = totalAngularMomentum(r, v, masses) - initial_angular_momentum
+                earthDistanceLog[diag_idx] = earthSunDistance(r)
+                diag_idx += 1
 
             if step % 5000 == 0:
-                p_mag = np.linalg.norm(momentumLog[-1]) if momentumLog else 0
-                e_val = energyLog[-1] if energyLog else 0
+                p_mag = np.linalg.norm(momentumLog[diag_idx - 1]) if diag_idx > 0 else 0
+                e_val = energyLog[diag_idx - 1] if diag_idx > 0 else 0
                 baseline = np.linalg.norm(initial_momentum)
                 p_drift_pct = (p_mag / baseline) * 100 if baseline > 0 else 0
                 percent = 100 * step // steps
@@ -212,9 +244,14 @@ def runSimulation(steps=35040, dt=900, store_every=10, integrator="auto",
                     print(f"t={t_sim:.0f}s ({percent:2d}%)  dt={current_dt:.1f}s  accepted={accepted}  E={e_val:.3e} J")
                 report_t_next = t_sim + report_interval
 
-    rHistory = np.array(rHistory)
-    vHistory = np.array(vHistory)
-    tHistory = np.array(tHistory)
+    if adaptive:
+        rHistory = np.array(rHistory, dtype=np.float64)
+        vHistory = np.array(vHistory, dtype=np.float64)
+        tHistory = np.array(tHistory, dtype=np.float64)
+        energyLog = np.array(energyLog, dtype=np.float64)
+        momentumLog = np.array(momentumLog, dtype=np.float64)
+        angularMomentumLog = np.array(angularMomentumLog, dtype=np.float64)
+        earthDistanceLog = np.array(earthDistanceLog, dtype=np.float64)
     
     # Final diagnostics for conservation laws
     final_momentum = totalMomentum(v, masses)
@@ -241,10 +278,10 @@ def runSimulation(steps=35040, dt=900, store_every=10, integrator="auto",
         "rHistory": rHistory,
         "vHistory": vHistory,
         "tHistory": tHistory,
-        "energy": np.array(energyLog),
-        "momentum": np.array(momentumLog),
-        "angularMomentum": np.array(angularMomentumLog),
-        "earthDistance": np.array(earthDistanceLog),
+        "energy": energyLog,
+        "momentum": momentumLog,
+        "angularMomentum": angularMomentumLog,
+        "earthDistance": earthDistanceLog,
         "initialEnergy": initial_energy,
         "initialMomentum": initial_momentum,
         "totalMass": total_mass
