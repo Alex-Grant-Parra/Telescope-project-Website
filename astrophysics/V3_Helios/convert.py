@@ -16,6 +16,8 @@ LONDON_LAT_DEG = 51.5074
 LONDON_LON_DEG = -0.1278
 LONDON_ALT_M = 35.0
 
+AU_M = 149597870700.0
+
 
 def _ecl_to_equ(vec):
     eps = np.deg2rad(23.439291111)
@@ -93,6 +95,122 @@ def _deg_to_dms(dec_deg):
     return f"{sign}{degrees:02d}:{minutes:02d}:{seconds:05.2f}"
 
 
+def _angle_deg(vec_a, vec_b):
+    norm_a = float(np.linalg.norm(vec_a))
+    norm_b = float(np.linalg.norm(vec_b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    cosine = np.dot(vec_a, vec_b) / (norm_a * norm_b)
+    return float(np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))))
+
+
+def _phase_angle_deg(body_pos, sun_pos, earth_pos):
+    # Angle Sun-Body-Earth as measured at the body.
+    body_to_sun = sun_pos - body_pos
+    body_to_earth = earth_pos - body_pos
+    return _angle_deg(body_to_sun, body_to_earth)
+
+
+def _planet_visual_magnitude(body, r_au, delta_au, phase_deg):
+    if r_au <= 0.0 or delta_au <= 0.0:
+        return None
+
+    common_term = 5.0 * np.log10(r_au * delta_au)
+    phase = float(phase_deg)
+
+    if body == "mercury":
+        mag = -0.42 + 0.0380 * phase - 0.000273 * phase * phase + 0.000002 * phase**3
+        return float(mag + common_term)
+    if body == "venus":
+        mag = -4.40 + 0.0009 * phase + 0.000239 * phase * phase - 0.00000065 * phase**3
+        return float(mag + common_term)
+    if body == "mars":
+        mag = -1.52 + 0.016 * phase
+        return float(mag + common_term)
+    if body == "jupiter":
+        mag = -9.395 + 0.005 * phase
+        return float(mag + common_term)
+    if body == "saturn":
+        # Ring brightness is not modeled; this is a disk-only approximation.
+        mag = -8.88 + 0.044 * phase
+        return float(mag + common_term)
+    if body == "uranus":
+        mag = -7.19 + 0.001 * phase
+        return float(mag + common_term)
+    if body == "neptune":
+        mag = -6.87
+        return float(mag + common_term)
+
+    return None
+
+
+def _moon_visual_magnitude(earth_moon_distance_m, phase_angle_deg):
+    distance_km = float(earth_moon_distance_m) / 1000.0
+    if distance_km <= 0.0:
+        return None
+
+    alpha = float(phase_angle_deg)
+    base_mag = -12.73 + 0.026 * alpha + 4.0e-9 * (alpha**4)
+    distance_term = 5.0 * np.log10(distance_km / 384400.0)
+    return float(base_mag + distance_term)
+
+
+def _moon_phase_from_geometry(sun_pos, earth_pos, moon_pos):
+    sun_geo = sun_pos - earth_pos
+    moon_geo = moon_pos - earth_pos
+
+    elongation_deg = _angle_deg(sun_geo, moon_geo)
+    illum_frac = float((1.0 - np.cos(np.deg2rad(elongation_deg))) / 2.0)
+    waxing = np.cross(sun_geo, moon_geo)[2] > 0.0
+
+    if elongation_deg < 22.5:
+        phase_name = "New Moon"
+    elif elongation_deg < 67.5:
+        phase_name = "Waxing Crescent" if waxing else "Waning Crescent"
+    elif elongation_deg < 112.5:
+        phase_name = "First Quarter" if waxing else "Last Quarter"
+    elif elongation_deg < 157.5:
+        phase_name = "Waxing Gibbous" if waxing else "Waning Gibbous"
+    else:
+        phase_name = "Full Moon"
+
+    return {
+        "moon_phase_name": phase_name,
+        "moon_illumination_fraction": illum_frac,
+        "moon_elongation_deg": float(elongation_deg),
+    }
+
+
+def _visual_magnitude_payload(body, positions, observer):
+    if observer != "earth" or "sun" not in positions or "earth" not in positions:
+        return {}
+
+    sun_pos = positions["sun"]
+    earth_pos = positions["earth"]
+    body_pos = positions[body]
+
+    if body == "moon":
+        phase_deg = _phase_angle_deg(body_pos, sun_pos, earth_pos)
+        dist_m = float(np.linalg.norm(body_pos - earth_pos))
+        payload = {
+            "visual_mag": _moon_visual_magnitude(dist_m, phase_deg),
+            "phase_angle_deg": float(phase_deg),
+        }
+        payload.update(_moon_phase_from_geometry(sun_pos, earth_pos, body_pos))
+        return payload
+
+    if body in {"mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"}:
+        phase_deg = _phase_angle_deg(body_pos, sun_pos, earth_pos)
+        r_au = float(np.linalg.norm(body_pos - sun_pos) / AU_M)
+        delta_au = float(np.linalg.norm(body_pos - earth_pos) / AU_M)
+        return {
+            "visual_mag": _planet_visual_magnitude(body, r_au, delta_au, phase_deg),
+            "phase_angle_deg": float(phase_deg),
+        }
+
+    return {}
+
+
 def _normalize_time_input(time_input):
     if time_input is None:
         return datetime.fromtimestamp(sys.modules["time"].time(), tz=timezone.utc)
@@ -166,6 +284,7 @@ def get_radec_at_time(time_input=None, observer_lat_deg=None, observer_lon_deg=N
             "dec_deg": dec_deg,
             "dist_m": distance_m,
         }
+        output[body].update(_visual_magnitude_payload(body, positions, observer))
 
     return output
 
@@ -199,7 +318,8 @@ def get_radec_at_times(time_inputs, observer_lat_deg=None, observer_lon_deg=None
 
     output_per_time = []
     for idx in range(len(req_times)):
-        observer_pos = positions_by_body[observer][idx]
+        positions_at_t = {name: series[idx] for name, series in positions_by_body.items()}
+        observer_pos = positions_at_t[observer]
         row = {}
         for body, pos_series in positions_by_body.items():
             if body == observer:
@@ -218,6 +338,7 @@ def get_radec_at_times(time_inputs, observer_lat_deg=None, observer_lon_deg=None
                 "dec_deg": dec_deg,
                 "dist_m": distance_m,
             }
+            row[body].update(_visual_magnitude_payload(body, positions_at_t, observer))
         output_per_time.append(row)
 
     return output_per_time
@@ -232,7 +353,21 @@ if __name__ == "__main__":
         observer_lon_deg=LONDON_LON_DEG,
         observer_alt_m=LONDON_ALT_M,
     )
-    print(f"{'Body':<10}  {'RA':>13}  {'Dec':>14}  {'Dist':>16}")
-    print("-" * 60)
+    print(f"{'Body':<10}  {'RA':>13}  {'Dec':>14}  {'Dist':>16}  {'Vmag':>7}")
+    print("-" * 72)
     for body, data in res.items():
-        print(f"{body:<10}  {data['ra_hms']:>13}  {data['dec_dms']:>14}  {data['dist_m']/1e9:>13.6g} Mm")
+        visual_mag = data.get("visual_mag")
+        vmag_text = f"{visual_mag:7.3f}" if visual_mag is not None else f"{'-':>7}"
+        print(
+            f"{body:<10}  {data['ra_hms']:>13}  {data['dec_dms']:>14}  "
+            f"{data['dist_m']/1e9:>13.6g} Mm  {vmag_text}"
+        )
+
+    moon = res.get("moon")
+    if moon is not None:
+        illum_pct = 100.0 * float(moon.get("moon_illumination_fraction", 0.0))
+        phase_name = moon.get("moon_phase_name", "Unknown")
+        print("\nMoon Phase")
+        print("-" * 20)
+        print(f"Illumination: {illum_pct:.2f}%")
+        print(f"Phase: {phase_name}")
