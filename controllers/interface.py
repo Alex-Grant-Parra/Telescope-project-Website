@@ -4,6 +4,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from flask import Blueprint, render_template, request, jsonify, session
 from astrophysics.V1_Keplarian.convert import convert
+from astrophysics.planetary_model import getAllCelestialData
 from datetime import datetime
 import time
 
@@ -80,7 +81,6 @@ def extract_friendly_common_name(common_names_field: str) -> str:
 
 @interface_bp.route("/search_object", methods=["POST"])
 def search_object():
-    from astrophysics.V1_Keplarian.astroTools import getAllCelestialData
     from models.tables import HDSTARtable, IndexTable, NGCtable
     data = request.json
     search_value = data.get("searchValue", "").strip()
@@ -121,7 +121,7 @@ def search_object():
         elif norm.lower() in searchableCelestials:
             search_value = norm.lower()
             now = datetime.utcnow()
-            CelestialData = getAllCelestialData(now.year, now.month, now.day)
+            CelestialData = getAllCelestialData(now.year, now.month, now.day, now.hour, now.minute, now.second)
 
             if search_value in CelestialData:
                 formattedData = format_celestial_data(search_value, CelestialData[search_value])

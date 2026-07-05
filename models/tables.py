@@ -2,7 +2,7 @@ from app.db import db
 import logging
 
 logger = logging.getLogger(__name__)
-from sqlalchemy import Table, MetaData, Column, String, REAL
+from sqlalchemy import func
 
 def get_app():
     # Import inside function to avoid circular imports at module import time
@@ -57,37 +57,56 @@ class BaseTable(db.Model):
 # HDSTARtable: Define columns dynamically using reflection
 class HDSTARtable(BaseTable):
     __tablename__ = 'HDSTARTable'  # The actual table name in the database
-    __abstract__ = True
+    __table_args__ = {'extend_existing': True}
+
+    Name = db.Column(db.String(255), primary_key=True)
+    RA = db.Column(db.Float, nullable=True)
+    DEC = db.Column(db.Float, nullable=True)
+    V_Mag = db.Column('V-Mag', db.Float, nullable=True)
+    commonNames = db.Column(db.Text, nullable=True)
 
     @staticmethod
     def query_by_name(name):
         print(f"Querying HDSTARtable for name: {name}")
-        result = db.session.query(HDSTARtable).filter_by(Name=name).first()
+        result = db.session.query(HDSTARtable).filter(HDSTARtable.Name == name).first()
         if result:
-            if isinstance(result, dict):
-                return result
-            result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
-            return result_data
+            return {
+                'Name': result.Name,
+                'RA': result.RA,
+                'DEC': result.DEC,
+                'V-Mag': result.V_Mag,
+                'commonNames': result.commonNames,
+            }
         return None
 
     @staticmethod
     def query_by_name_flexible(name_or_hd: str):
         # Query HDSTARtable matching HD name case/space-insensitively, returns dict or None
         try:
-            from sqlalchemy import text
             # Normalize: remove spaces and uppercase for comparison
             norm = (name_or_hd or "").strip().replace(" ", "").upper()
             if norm.startswith("HD"):
-                stmt = text(
-                    "SELECT * FROM HDSTARTable WHERE REPLACE(UPPER(Name),' ', '') = :norm LIMIT 1"
-                )
-                row = db.session.execute(stmt, {"norm": norm}).mappings().first()
-                if row:
-                    return dict(row)
+                result = db.session.query(HDSTARtable).filter(
+                    func.replace(func.upper(HDSTARtable.Name), ' ', '') == norm
+                ).first()
+                if result:
+                    return {
+                        'Name': result.Name,
+                        'RA': result.RA,
+                        'DEC': result.DEC,
+                        'V-Mag': result.V_Mag,
+                        'commonNames': result.commonNames,
+                    }
             # Fallback: try exact Name (case-sensitive as stored)
-            result = db.session.query(HDSTARtable).filter_by(Name=name_or_hd).first()
+            result = db.session.query(HDSTARtable).filter(HDSTARtable.Name == name_or_hd).first()
             if result:
-                return {column: getattr(result, column) for column in result.__table__.columns.keys()}
+                return {
+                    'Name': result.Name,
+                    'RA': result.RA,
+                    'DEC': result.DEC,
+                    'V-Mag': result.V_Mag,
+                    'commonNames': result.commonNames,
+                }
         except Exception as e:
             logger.error(f"query_by_name_flexible failed: {e}")
         return None
@@ -96,17 +115,17 @@ class HDSTARtable(BaseTable):
     def query_by_common_name(common_name: str):
         # Query HDSTARtable by commonNames column using case-insensitive substring match
         try:
-            col_map = getattr(HDSTARtable, "__table__").c
-            if 'commonNames' not in col_map:
-                return None
-            # Use ilike for case-insensitive match on the comma-separated names list
             result = db.session.query(HDSTARtable).filter(
-                col_map['commonNames'].ilike(f"%{common_name}%")
+                HDSTARtable.commonNames.ilike(f"%{common_name}%")
             ).first()
             if result:
-                if isinstance(result, dict):
-                    return result
-                return {column: getattr(result, column) for column in result.__table__.columns.keys()}
+                return {
+                    'Name': result.Name,
+                    'RA': result.RA,
+                    'DEC': result.DEC,
+                    'V-Mag': result.V_Mag,
+                    'commonNames': result.commonNames,
+                }
         except Exception as e:
             logger.error(f"query_by_common_name failed: {e}")
         return None
@@ -115,78 +134,120 @@ class HDSTARtable(BaseTable):
 # IndexTable: Define columns dynamically using reflection
 class IndexTable(BaseTable):
     __tablename__ = 'IndexTable'
-    __abstract__ = True
+    __table_args__ = {'extend_existing': True}
+
+    Name = db.Column(db.String(255), primary_key=True)
+    RA = db.Column(db.Float, nullable=True)
+    DEC = db.Column(db.Float, nullable=True)
+    V_Mag = db.Column('V-Mag', db.Float, nullable=True)
 
     @staticmethod
     def query_by_name(name):
         print(f"Querying IndexTable for name: {name}")
-        result = db.session.query(IndexTable).filter_by(Name=name).first()
+        result = db.session.query(IndexTable).filter(IndexTable.Name == name).first()
         if result:
-            if isinstance(result, dict):
-                return result
-            result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
-            return result_data
+            return {
+                'Name': result.Name,
+                'RA': result.RA,
+                'DEC': result.DEC,
+                'V-Mag': result.V_Mag,
+            }
         return None
 
 
 # NGCtable: Define columns dynamically using reflection
 class NGCtable(BaseTable):
     __tablename__ = 'NGCtable'
-    __abstract__ = True
+    __table_args__ = {'extend_existing': True}
+
+    Name = db.Column(db.String(255), primary_key=True)
+    RA = db.Column(db.Float, nullable=True)
+    DEC = db.Column(db.Float, nullable=True)
+    V_Mag = db.Column('V-Mag', db.Float, nullable=True)
+    Messier = db.Column(db.String(64), nullable=True)
+    Common_names = db.Column('Common names', db.Text, nullable=True)
 
     @staticmethod
     def query_by_name(name):
         print(f"Querying NGCtable for name: {name}")
-        result = db.session.query(NGCtable).filter_by(Name=name).first()
+        result = db.session.query(NGCtable).filter(NGCtable.Name == name).first()
         if result:
-            if isinstance(result, dict):
-                return result
-            result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
-            return result_data
+            return {
+                'Name': result.Name,
+                'RA': result.RA,
+                'DEC': result.DEC,
+                'V-Mag': result.V_Mag,
+                'Messier': result.Messier,
+                'Common names': result.Common_names,
+            }
         return None
 
     @staticmethod
     def query_by_messier(messier_designation):
         # Query NGCtable by Messier designation (e.g., 'M1', 'M31', 'M104')
         print(f"Querying NGCtable for Messier: {messier_designation}")
-        result = db.session.query(NGCtable).filter_by(Messier=messier_designation).first()
+        result = db.session.query(NGCtable).filter(NGCtable.Messier == messier_designation).first()
         if result:
-            if isinstance(result, dict):
-                return result
-            result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
-            return result_data
+            return {
+                'Name': result.Name,
+                'RA': result.RA,
+                'DEC': result.DEC,
+                'V-Mag': result.V_Mag,
+                'Messier': result.Messier,
+                'Common names': result.Common_names,
+            }
         return None
 
     @staticmethod
     def query_by_common_name(common_name):
         # Query NGCtable by common name using case-insensitive exact matching
         print(f"Querying NGCtable for common name: {common_name}")
-        # Use ilike for case-insensitive exact matching
         result = db.session.query(NGCtable).filter(
-            NGCtable.__table__.c['Common names'].ilike(common_name)
+            NGCtable.Common_names.ilike(f"%{common_name}%")
         ).first()
         if result:
-            if isinstance(result, dict):
-                return result
-            result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
-            return result_data
+            return {
+                'Name': result.Name,
+                'RA': result.RA,
+                'DEC': result.DEC,
+                'V-Mag': result.V_Mag,
+                'Messier': result.Messier,
+                'Common names': result.Common_names,
+            }
         return None
 
 
 # PlanetsTable: Define columns dynamically using reflection
 class PlanetsTable(BaseTable):
     __tablename__ = 'PlanetsTable'  # The actual table name in the database
-    __abstract__ = True
+    __table_args__ = {'extend_existing': True}
+
+    Name = db.Column(db.String(255), primary_key=True)
+    SemiMajorAxis = db.Column(db.Float, nullable=True)
+    Eccentricity = db.Column(db.Float, nullable=True)
+    Inclination = db.Column(db.Float, nullable=True)
+    AscNodeLong = db.Column(db.Float, nullable=True)
+    ArgPeri = db.Column(db.Float, nullable=True)
+    MeanAnomaly = db.Column(db.Float, nullable=True)
+    LongitudeAtEpoch = db.Column(db.Float, nullable=True)
+    V_Mag = db.Column('V-Mag', db.Float, nullable=True)
 
     @staticmethod
     def query_by_name(name):
         logger.debug(f"Querying PlanetsTable for name: {name}")
-        result = db.session.query(PlanetsTable).filter_by(Name=name).first()
+        result = db.session.query(PlanetsTable).filter(PlanetsTable.Name == name).first()
         if result:
-            if isinstance(result, dict):
-                return result
-            result_data = {column: getattr(result, column) for column in result.__table__.columns.keys()}
-            return result_data
+            return {
+                'Name': result.Name,
+                'SemiMajorAxis': result.SemiMajorAxis,
+                'Eccentricity': result.Eccentricity,
+                'Inclination': result.Inclination,
+                'AscNodeLong': result.AscNodeLong,
+                'ArgPeri': result.ArgPeri,
+                'MeanAnomaly': result.MeanAnomaly,
+                'LongitudeAtEpoch': result.LongitudeAtEpoch,
+                'V-Mag': result.V_Mag,
+            }
         return None
 
     @staticmethod
@@ -194,7 +255,7 @@ class PlanetsTable(BaseTable):
         # Load all planets into a dictionary for easy access by name
 
         planets = db.session.query(PlanetsTable).all()
-        return {row.name.lower(): row for row in planets if hasattr(row, 'name')}  # Assuming 'name' is a column
+        return {row.Name.lower(): row for row in planets if getattr(row, 'Name', None)}
 
 
 # Telescope model: For managing connected telescopes

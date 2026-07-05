@@ -5,8 +5,8 @@ from models.tables import HDSTARtable, IndexTable, NGCtable
 from app.db import db
 from sqlalchemy import func
 
+from astrophysics.planetary_model import getAllCelestialData
 from astrophysics.V1_Keplarian.convert import convert
-from astrophysics.V1_Keplarian.astroTools import getAllCelestialData
 from app.telescopeLink import Telescope
 
 star_map_bp = Blueprint("star_map", __name__)
@@ -19,9 +19,9 @@ def loadStarsFromTables(tables):
             try:
                 ra = float(star.RA) if star.RA is not None else 0
                 dec = float(star.DEC) if star.DEC is not None else 0
-                mag = getattr(star, "V-Mag", 30)
+                mag = star.V_Mag if star.V_Mag is not None else 30
                 all_stars.append({
-                    "name": getattr(star, "Name"),
+                    "name": star.Name,
                     "ra": ra,
                     "dec": dec,
                     "mag": mag,
@@ -64,6 +64,16 @@ def get_all_celestial_objects(_dt: Optional[datetime] = None):
         })
 
     return all_objects
+
+
+def _star_magnitude(star, default=30):
+    value = getattr(star, "V_Mag", None)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except Exception:
+        return default
 
 @star_map_bp.route("/api/stars")
 def get_stars():
@@ -120,43 +130,27 @@ def get_stars():
     # Build stars result, using DB-side filters when possible
     def query_table_stars(table, limit_override: Optional[int] = None):
         stars_list = []
-        try:
-            col_map = table.__table__.c
-            q = db.session.query(table)
-            # Apply magnitude filter at DB level if column exists and sort by brightness
-            if 'V-Mag' in col_map:
-                q = q.filter(col_map['V-Mag'] >= min_mag, col_map['V-Mag'] <= max_mag)
-                try:
-                    q = q.order_by(col_map['V-Mag'].asc())
-                except Exception:
-                    pass
-            # Apply limit if provided
-            eff_limit = limit_override if (limit_override is not None and limit_override > 0) else limit
-            if eff_limit is not None and eff_limit > 0:
-                q = q.limit(eff_limit)
-            rows = q.all()
-            for star in rows:
-                try:
-                    ra = float(getattr(star, 'RA')) if getattr(star, 'RA', None) is not None else 0
-                    dec = float(getattr(star, 'DEC')) if getattr(star, 'DEC', None) is not None else 0
-                    mag_val = getattr(star, 'V-Mag', None)
-                    try:
-                        magv = float(mag_val) if mag_val is not None else 30
-                    except Exception:
-                        magv = 30
-                    if 'V-Mag' not in col_map and (magv < min_mag or magv > max_mag):
-                        continue
-                    stars_list.append({
-                        "name": getattr(star, 'Name', None),
-                        "ra": ra,
-                        "dec": dec,
-                        "mag": magv,
-                        "type": "star"
-                    })
-                except Exception as e:
-                    print(f"Error processing star {getattr(star, 'Name', 'UNKNOWN')}: {e}")
-        except Exception as e:
-            print(f"Query failed for table {getattr(table, '__tablename__', 'unknown')}: {e}")
+        rows = table.query.all()
+        for star in rows:
+            try:
+                ra = float(star.RA) if star.RA is not None else 0
+                dec = float(star.DEC) if star.DEC is not None else 0
+                magv = _star_magnitude(star)
+                if magv < min_mag or magv > max_mag:
+                    continue
+                stars_list.append({
+                    "name": star.Name,
+                    "ra": ra,
+                    "dec": dec,
+                    "mag": magv,
+                    "type": "star"
+                })
+            except Exception as e:
+                print(f"Error processing star {getattr(star, 'Name', 'UNKNOWN')}: {e}")
+        eff_limit = limit_override if (limit_override is not None and limit_override > 0) else limit
+        if eff_limit is not None and eff_limit > 0 and len(stars_list) > eff_limit:
+            stars_list.sort(key=lambda item: item.get("mag", 30))
+            stars_list = stars_list[:eff_limit]
         return stars_list
 
     tables = [HDSTARtable, IndexTable, NGCtable]
@@ -186,26 +180,12 @@ def get_stars_meta():
     overall_max = None
     for table in tables:
         try:
-            col_map = table.__table__.c
-            if 'V-Mag' not in col_map:
-                continue
-            col = col_map['V-Mag']
-            mn, mx = db.session.query(func.min(col), func.max(col)).first()
-            # Normalize types
-            try:
-                if mn is not None:
-                    mn = float(mn)
-            except Exception:
-                mn = None
-            try:
-                if mx is not None:
-                    mx = float(mx)
-            except Exception:
-                mx = None
-            if mn is not None:
-                overall_min = mn if (overall_min is None or mn < overall_min) else overall_min
-            if mx is not None:
-                overall_max = mx if (overall_max is None or mx > overall_max) else overall_max
+            for star in table.query.all():
+                mag = _star_magnitude(star, default=None)
+                if mag is None:
+                    continue
+                overall_min = mag if (overall_min is None or mag < overall_min) else overall_min
+                overall_max = mag if (overall_max is None or mag > overall_max) else overall_max
         except Exception as e:
             print(f"stars_meta aggregation failed for table {getattr(table, '__tablename__', 'unknown')}: {e}")
 
@@ -278,26 +258,6 @@ def extract_friendly_common_name(common_names_field: str) -> str:
 
 @star_map_bp.route("/star_info/<star_name>")
 def star_info(star_name):
-    tables = [HDSTARtable, IndexTable, NGCtable]
-
-    for table in tables:
-        result = table.query.filter_by(Name=star_name).first()
-        if result:
-            response_data = {
-                "name": result.Name,
-                "ra": float(result.RA) if result.RA is not None else 0,
-                "dec": float(result.DEC) if result.DEC is not None else 0,
-                "mag": getattr(result, "V-Mag", 0) or 0,
-                "type": "star"
-            }
-            # Add friendly common name if available
-            common_names_raw = getattr(result, 'commonNames', None) or getattr(result, 'Common names', None)
-            if common_names_raw:
-                friendly_name = extract_friendly_common_name(common_names_raw)
-                if friendly_name:
-                    response_data['friendlyName'] = friendly_name
-            return jsonify(response_data)
-
     _now = datetime.utcnow()
     celestial_data = getAllCelestialData(_now.year, _now.month, _now.day, _now.hour, _now.minute, _now.second)
     obj_name_lower = star_name.lower()
@@ -320,6 +280,26 @@ def star_info(star_name):
             "mag": mag,
             "type": "planet"
         })
+
+    tables = [HDSTARtable, IndexTable, NGCtable]
+
+    for table in tables:
+        result = table.query.filter_by(Name=star_name).first()
+        if result:
+            response_data = {
+                "name": result.Name,
+                "ra": float(result.RA) if result.RA is not None else 0,
+                "dec": float(result.DEC) if result.DEC is not None else 0,
+                "mag": result.V_Mag or 0,
+                "type": "star"
+            }
+            # Add friendly common name if available
+            common_names_raw = getattr(result, 'commonNames', None) or getattr(result, 'Common_names', None)
+            if common_names_raw:
+                friendly_name = extract_friendly_common_name(common_names_raw)
+                if friendly_name:
+                    response_data['friendlyName'] = friendly_name
+            return jsonify(response_data)
 
     return jsonify({"error": "Star not found"}), 404
 
