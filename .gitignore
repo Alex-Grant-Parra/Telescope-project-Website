@@ -32,3 +32,5 @@ astrophysics/V3_Helios/cheb_table.npz
 astrophysics/V3_Helios/tests/
 !astrophysics/V3_Helios/tests/astra_de440_compare.py
 !astrophysics/V3_Helios/tests/plot_diagnostics.py
+
+docs/improvements notes.md
