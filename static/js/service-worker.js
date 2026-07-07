@@ -26,9 +26,18 @@ function isVideoRequest(requestUrl) {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (!isVideoRequest(req.url)) return;
+  // Never intercept ranged/streaming requests: <video> elements rely on partial
+  // (206) byte-range responses, and caching/replaying those through the Cache API
+  // corrupts playback. Chrome responds by aborting the request outright, which
+  // produced an infinite request/net::ERR_ABORTED loop on every video element.
+  if (req.headers.has('range')) return;
 
   event.respondWith(
     fetch(req).then(networkResp => {
+      // Only cache complete, cacheable responses (skip partial/opaque ones)
+      if (networkResp.status !== 200 || !networkResp.ok) {
+        return networkResp;
+      }
       // Clone & store in cache but keep cache small
       const clone = networkResp.clone();
       caches.open(CACHE_NAME).then(async cache => {

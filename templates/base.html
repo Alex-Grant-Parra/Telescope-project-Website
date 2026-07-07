@@ -1,92 +1,89 @@
 <!DOCTYPE html>
-{# Put server-pref on the <html> element so the head script can read it before body exists #}
 <html lang="en" data-night-mode="{% if current_user.is_authenticated %}{{ current_user.get_night_mode()|tojson }}{% else %}false{% endif %}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}My Flask App{% endblock %}</title>
-    <!-- Instant night-mode: check localStorage or server-rendered flag before CSS loads to avoid FOUC -->
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}ASTRA{% endblock %}</title>
     <script>
-        (function(){
+        // One-time cleanup: an older build registered a service worker that intercepted
+        // <video> range requests and broke playback (infinite net::ERR_ABORTED loop).
+        // The redesign no longer uses it, so proactively unregister it for anyone who
+        // still has it installed from a previous visit.
+        (function () {
             try {
-                // Read server-rendered attr on <html> (string 'true'/'false')
-                var serverAttr = document.documentElement.getAttribute('data-night-mode');
-                var ls = null;
-                try { ls = localStorage.getItem('night_mode'); } catch(e) { ls = null; }
-                var shouldNight = (serverAttr === 'true') || (ls === 'true');
-                if (shouldNight) {
-                    // Apply to <html> immediately (available in head)
-                    document.documentElement.classList.add('night-mode');
-
-                    // Also mirror to <body> as soon as it's available so existing CSS that
-                    // targets `body.night-mode` still applies instantly. If body isn't
-                    // parsed yet, add a DOMContentLoaded listener to mirror it.
-                    if (document.body) {
-                        document.body.classList.add('night-mode');
-                    } else {
-                        document.addEventListener('DOMContentLoaded', function(){
-                            document.body.classList.add('night-mode');
-                        });
-                    }
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(function (regs) {
+                        regs.forEach(function (reg) { reg.unregister(); });
+                    }).catch(function () {});
                 }
-            } catch(e) {
-                // fail silently
-            }
+                if ('caches' in window) {
+                    caches.keys().then(function (keys) {
+                        keys.forEach(function (key) {
+                            if (key.indexOf('video-cache') !== -1) caches.delete(key);
+                        });
+                    }).catch(function () {});
+                }
+            } catch (e) {}
+        })();
+        (function () {
+            try {
+                var html = document.documentElement;
+                var serverNight = html.getAttribute('data-night-mode') === 'true';
+                var savedNight = localStorage.getItem('night_mode');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var isNight = (savedNight === 'true') || (savedNight === null && (serverNight || prefersDark));
+                html.setAttribute('data-theme', isNight ? 'dark' : 'light');
+                if (isNight) html.classList.add('night-mode');
+            } catch (e) {}
         })();
     </script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- style.css must load AFTER Bootstrap so our design tokens win the cascade -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='icons/favicon.ico') }}" type="image/x-icon">
     <script>
-        // Expose server-configured domain to JS
         window.APP_DOMAIN = "{{ config['APP_DOMAIN'] or 'telescopes.dev' }}";
     </script>
     {% block extra_css %}{% endblock %}
 </head>
-{# Server-render the user's night mode preference so the page can apply it instantly #}
-<body 
-    data-authenticated="{{ current_user.is_authenticated|tojson|lower }}" 
+<body
+    data-authenticated="{{ current_user.is_authenticated|tojson|lower }}"
     data-night-mode="{% if current_user.is_authenticated %}{{ current_user.get_night_mode()|tojson }}{% else %}false{% endif %}"
     class="{% if current_user.is_authenticated and current_user.get_night_mode() %}night-mode{% endif %}">
 
-    <div class="content">
-        <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-            <div class="container">
-                <a class="navbar-brand" href="{{ url_for('home.home') }}">Telescope Control</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
-                    <ul class="navbar-nav">
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('home.home') }}">Home</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('interface.interface') }}">Interface</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('map.map_page') }}">Map</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('book.book_page') }}">Book</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('album.album') }}">Album</a></li>
-                        {% if current_user.is_authenticated %}
-                            <!-- Profile Dropdown -->
-                            <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle" 
-                                   href="#" 
-                                   id="profileDropdown" 
-                                   role="button" 
-                                   data-bs-toggle="dropdown" 
-                                   aria-expanded="false"
-                                   style="cursor: pointer;">
+    <div class="site-shell">
+        <header class="site-header">
+            <nav class="navbar navbar-expand-lg astra-nav">
+                <div class="container-fluid astra-nav-inner">
+                    <a class="navbar-brand astra-brand" href="{{ url_for('home.home') }}">ASTRA</a>
+                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+                    <div class="collapse navbar-collapse" id="navbarNav">
+                        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('home.home') }}">Home</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('interface.interface') }}">Interface</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('map.map_page') }}">Map</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('book.book_page') }}">Book</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('album.album') }}">Album</a></li>
+                        </ul>
+
+                        <div class="d-flex align-items-center gap-2">
+                            <button id="themeToggle" class="theme-toggle" type="button" aria-label="Toggle dark mode">
+                                <span class="theme-toggle-track"><span class="theme-toggle-thumb"></span></span>
+                                <span class="theme-toggle-label">Theme</span>
+                            </button>
+
+                            {% if current_user.is_authenticated %}
+                            <div class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" id="profileDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                     <i class="fas fa-user-circle"></i> {{ current_user.username }}
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
-                                    <li>
-                                        <a class="dropdown-item" href="{{ url_for('profile.profile') }}">
-                                            <i class="fas fa-user"></i> Profile
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a class="dropdown-item" href="{{ url_for('profile.edit_profile') }}">
-                                            <i class="fas fa-edit"></i> Edit Profile
-                                        </a>
-                                    </li>
+                                    <li><a class="dropdown-item" href="{{ url_for('profile.profile') }}"><i class="fas fa-user"></i> Profile</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('profile.edit_profile') }}"><i class="fas fa-edit"></i> Edit Profile</a></li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
                                         <a class="dropdown-item" href="{{ url_for('profile.profile_trusted_devices') }}">
@@ -97,527 +94,154 @@
                                             {% endif %}
                                         </a>
                                     </li>
-                                    <li>
-                                        <a class="dropdown-item" href="{{ url_for('profile.account_info') }}">
-                                            <i class="fas fa-info-circle"></i> Account Info
-                                        </a>
-                                    </li>
+                                    <li><a class="dropdown-item" href="{{ url_for('profile.account_info') }}"><i class="fas fa-info-circle"></i> Account Info</a></li>
                                     <li><hr class="dropdown-divider"></li>
-                                    <li>
-                                        <a class="dropdown-item" href="{{ url_for('telescopes.my_telescopes') }}">
-                                            <i class="fas fa-satellite-dish"></i> My Telescopes
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a class="dropdown-item" href="{{ url_for('book.my_bookings_page') }}">
-                                            <i class="fas fa-calendar-check"></i> My Bookings
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a class="dropdown-item" href="{{ url_for('book.owner_bookings_page') }}">
-                                            <i class="fas fa-calendar-alt"></i> Owner Booking Queue
-                                        </a>
-                                    </li>
+                                    <li><a class="dropdown-item" href="{{ url_for('telescopes.my_telescopes') }}"><i class="fas fa-satellite-dish"></i> My Telescopes</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('book.my_bookings_page') }}"><i class="fas fa-calendar-check"></i> My Bookings</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('book.owner_bookings_page') }}"><i class="fas fa-calendar-alt"></i> Owner Booking Queue</a></li>
                                     {% if current_user.is_admin %}
                                     <li><hr class="dropdown-divider"></li>
-                                    <li>
-                                        <a class="dropdown-item text-warning" href="{{ url_for('admin.admin') }}">
-                                            <i class="fas fa-cogs"></i> Admin Panel
-                                        </a>
-                                    </li>
+                                    <li><a class="dropdown-item text-warning" href="{{ url_for('admin.admin') }}"><i class="fas fa-cogs"></i> Admin Panel</a></li>
                                     {% endif %}
                                     <li><hr class="dropdown-divider"></li>
-                                    <li>
-                                        <a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
-                                            <i class="fas fa-sign-out-alt"></i> Logout
-                                        </a>
-                                    </li>
+                                    <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
                                 </ul>
-                            </li>
-                        {% else %}
-                            <li class="nav-item"><a class="nav-link btn btn-success text-white me-2" href="{{ url_for('auth.login') }}">Login</a></li>
-                            <li class="nav-item"><a class="nav-link btn btn-warning text-white" href="{{ url_for('auth.register') }}">Register</a></li>
-                        {% endif %}
-                    </ul>
-                </div>
-            </div>
-        </nav>
-
-        <div class="container mt-4">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    <div class="mb-3" aria-live="polite" aria-atomic="true">
-                        {% for category, message in messages %}
-                            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                                {{ message }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                             </div>
+                            {% else %}
+                            <a class="btn btn-sm btn-outline-light" href="{{ url_for('auth.login') }}">Login</a>
+                            <a class="btn btn-sm btn-primary" href="{{ url_for('auth.register') }}">Register</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </nav>
+        </header>
+
+        <main class="site-main">
+            <div class="container-fluid app-container">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                    <div class="flash-stack" aria-live="polite" aria-atomic="true">
+                        {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
                         {% endfor %}
                     </div>
-                {% endif %}
-            {% endwith %}
-            {% block content %}{% endblock %}
-        </div>
-    </div>
-    <footer class="footer bg-dark text-white text-center py-3 position-relative">
-        <div class="container">
-            <button id="nightModeToggle" class="btn btn-outline-light position-absolute start-0 bottom-0 mb-2 ms-2 d-flex align-items-center" style="z-index:2;">
-                <span class="nightmode-icon me-2" aria-hidden="true">
-                    <span class="sun">
-                        <span class="sun-core"></span>
-                        <span class="sun-ray ray1"></span>
-                        <span class="sun-ray ray2"></span>
-                        <span class="sun-ray ray3"></span>
-                        <span class="sun-ray ray4"></span>
-                    </span>
-                    <span class="moon-stars">
-                        <span class="moon"></span>
-                        <span class="star star1"></span>
-                        <span class="star star2"></span>
-                        <span class="star star3"></span>
-                    </span>
-                    <img class="evil-grin-gif" src="{{ url_for('static', filename='evil-grin.gif') }}" alt="evil grin" style="display:none; width:28px; height:28px; position:absolute; left:0; top:0; z-index:10; border-radius:50%;" />
-                </span>
-                <span class="nightmode-label">Night Mode</span>
-            </button>
-            <p>
-                <a href="{{ url_for('about.about') }}" class="text-white">About</a> |
-                <a href="{{ url_for('about.license_page') }}" class="text-white">License</a> |
-                <a href="{{ url_for('about.privacy') }}" class="text-white">Privacy Policy</a> | 
-                <a href="{{ url_for('about.tos') }}" class="text-white">Terms of Service</a> |
-                <a href="{{ url_for('contact.support_home') }}" class="text-white fw-semibold">Support</a>
-            </p>
-        </div>
-    </footer>
-    <script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', function() {
-        // Get authentication state from body data attribute
-        const isAuthenticated = document.body.getAttribute('data-authenticated') === 'true';
-        
-        const btn = document.getElementById('nightModeToggle');
-        const label = btn.querySelector('.nightmode-label');
-        const icon = btn.querySelector('.nightmode-icon');
-        const sun = icon.querySelector('.sun');
-        const moon = icon.querySelector('.moon-stars');
-        const grin = icon.querySelector('.evil-grin-gif');
-        let clickCount = 0;
-        let lastClickTime = 0;
-        let grinTrigger = Math.floor(Math.random() * 11) + 10; // 10-20
-        
-        // Load saved night mode preference for logged-in users.
-        // We first read the server-rendered data attribute so the UI is updated immediately
-        // and avoid waiting for an async fetch which causes visual flicker.
-        function loadNightModePreference() {
-            if (!isAuthenticated) return;
+                    {% endif %}
+                {% endwith %}
+                {% block content %}{% endblock %}
+            </div>
+        </main>
 
-            const serverPref = document.body.getAttribute('data-night-mode');
-            if (serverPref !== null) {
-                const isNightMode = serverPref === 'true' || serverPref === 'True';
-                if (isNightMode) {
-                    document.body.classList.add('night-mode');
-                    label.textContent = 'Day Mode';
-                    sun.style.display = 'none';
-                    moon.style.display = 'flex';
-                } else {
-                    document.body.classList.remove('night-mode');
-                    label.textContent = 'Night Mode';
-                    sun.style.display = 'flex';
-                    moon.style.display = 'none';
-                }
-                // We already have the authoritative value from the server, skip fetching.
-                return;
+        <footer class="site-footer">
+            <div class="container-fluid footer-inner">
+                <p>
+                    <a href="{{ url_for('about.about') }}">About</a>
+                    <span>•</span>
+                    <a href="{{ url_for('about.license_page') }}">License</a>
+                    <span>•</span>
+                    <a href="{{ url_for('about.privacy') }}">Privacy</a>
+                    <span>•</span>
+                    <a href="{{ url_for('about.tos') }}">Terms</a>
+                    <span>•</span>
+                    <a href="{{ url_for('contact.support_home') }}">Support</a>
+                </p>
+                <small>ASTRA observatory platform</small>
+            </div>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (function () {
+            var isAuthenticated = document.body.getAttribute('data-authenticated') === 'true';
+            var themeBtn = document.getElementById('themeToggle');
+            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            var csrfToken = csrfMeta ? csrfMeta.content : '';
+
+            function applyTheme(isDark) {
+                document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+                document.documentElement.classList.toggle('night-mode', isDark);
+                document.body.classList.toggle('night-mode', isDark);
+                try { localStorage.setItem('night_mode', isDark ? 'true' : 'false'); } catch (e) {}
             }
 
-            // Fallback: if no server-rendered preference is available, fetch it.
-            fetch('/user/night_mode', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    const isNightMode = data.night_mode;
-                    if (isNightMode) {
-                        document.body.classList.add('night-mode');
-                        label.textContent = 'Day Mode';
-                        sun.style.display = 'none';
-                        moon.style.display = 'flex';
-                    } else {
-                        document.body.classList.remove('night-mode');
-                        label.textContent = 'Night Mode';
-                        sun.style.display = 'flex';
-                        moon.style.display = 'none';
-                    }
-                }
-            })
-            .catch(error => {
-                console.log('Not logged in or error loading night mode preference:', error);
-            });
-        }
-        
-        // Save night mode preference for logged-in users
-        function saveNightModePreference(isNightMode) {
-            // Persist immediately in localStorage so subsequent page loads can apply
-            // the theme instantly (works for anonymous users too).
-            try { localStorage.setItem('night_mode', isNightMode ? 'true' : 'false'); } catch (e) {}
-
-            // Also persist to server when authenticated
-            if (isAuthenticated) {
+            function saveTheme(isDark) {
+                if (!isAuthenticated) return;
                 fetch('/user/night_mode', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
                     },
-                    body: JSON.stringify({ night_mode: isNightMode })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        console.log('Night mode preference saved:', data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error saving night mode preference:', error);
+                    body: JSON.stringify({ night_mode: isDark })
+                }).catch(function(){});
+            }
+
+            if (themeBtn) {
+                themeBtn.addEventListener('click', function () {
+                    var dark = document.documentElement.getAttribute('data-theme') !== 'dark';
+                    applyTheme(dark);
+                    saveTheme(dark);
                 });
             }
-        }
-        
-        // Load preference on page load
-        loadNightModePreference();
-        
-        btn.addEventListener('click', function() {
-            const now = Date.now();
-            if (now - lastClickTime > 2000) {
-                clickCount = 0;
-                grinTrigger = Math.floor(Math.random() * 11) + 10;
-            }
-            lastClickTime = now;
-            clickCount++;
-            if (clickCount === grinTrigger) {
-                sun.style.display = 'none';
-                moon.style.display = 'none';
-                grin.style.display = 'block';
-                btn.disabled = true;
-                setTimeout(() => {
-                    grin.style.display = 'none';
-                    sun.style.display = document.body.classList.contains('night-mode') ? 'none' : 'flex';
-                    moon.style.display = document.body.classList.contains('night-mode') ? 'flex' : 'none';
-                    btn.disabled = false;
-                    clickCount = 0;
-                    grinTrigger = Math.floor(Math.random() * 11) + 10;
-                }, 2500);
-                return;
-            }
-            
-            // Toggle night mode
-            document.body.classList.toggle('night-mode');
-            const isNightMode = document.body.classList.contains('night-mode');
-            
-            // Update UI
-            label.textContent = isNightMode ? 'Day Mode' : 'Night Mode';
-            sun.style.display = isNightMode ? 'none' : 'flex';
-            moon.style.display = isNightMode ? 'flex' : 'none';
-            
-            // Save preference
-            saveNightModePreference(isNightMode);
-        });
-    });
-    </script>
-    
-    <!-- Bootstrap JavaScript Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Comprehensive dropdown debugging and fallback -->
-    <script>
-        console.log('🔧 Starting dropdown initialization...');
-        
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('📱 DOM Content Loaded');
-            
-            // Check if Bootstrap is loaded
-            if (typeof bootstrap !== 'undefined') {
-                console.log('✅ Bootstrap JS is loaded:', bootstrap);
-            } else {
-                console.log('❌ Bootstrap JS is NOT loaded');
-            }
-            
-            // Find dropdown elements
-            const dropdownToggle = document.getElementById('profileDropdown');
-            const dropdownMenu = document.querySelector('.dropdown-menu');
-            
-            console.log('🔍 Dropdown toggle element:', dropdownToggle);
-            console.log('🔍 Dropdown menu element:', dropdownMenu);
-            
-            if (!dropdownToggle) {
-                console.log('❌ Profile dropdown toggle not found!');
-                return;
-            }
-            
-            if (!dropdownMenu) {
-                console.log('❌ Dropdown menu not found!');
-                return;
-            }
-            
-            console.log('✅ Both dropdown elements found');
-            
-            // Method 1: Try Bootstrap native dropdown
-            try {
-                if (typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
-                    console.log('🚀 Attempting Bootstrap native dropdown...');
-                    const dropdown = new bootstrap.Dropdown(dropdownToggle);
-                    console.log('✅ Bootstrap dropdown initialized:', dropdown);
-                    
-                    // Add event listeners for debugging
-                    dropdownToggle.addEventListener('show.bs.dropdown', function () {
-                        console.log('📂 Bootstrap dropdown showing...');
-                    });
-                    
-                    dropdownToggle.addEventListener('shown.bs.dropdown', function () {
-                        console.log('✅ Bootstrap dropdown shown');
-                    });
-                    
-                    dropdownToggle.addEventListener('hide.bs.dropdown', function () {
-                        console.log('📁 Bootstrap dropdown hiding...');
-                    });
-                    
-                    dropdownToggle.addEventListener('hidden.bs.dropdown', function () {
-                        console.log('✅ Bootstrap dropdown hidden');
-                    });
-                    
-                } else {
-                    throw new Error('Bootstrap Dropdown not available');
-                }
-            } catch (error) {
-                console.log('❌ Bootstrap dropdown failed:', error);
-                console.log('🔄 Falling back to custom implementation...');
-                
-                // Method 2: Custom dropdown implementation
-                initCustomDropdown();
-            }
-            
-            // Method 3: Force click handler (always add as backup)
-            dropdownToggle.addEventListener('click', function(e) {
-                console.log('👆 Dropdown clicked!', e);
-                e.preventDefault();
-                e.stopPropagation();
-                
-                const isOpen = dropdownMenu.classList.contains('show');
-                console.log('📊 Dropdown currently open:', isOpen);
-                
-                if (isOpen) {
-                    console.log('🔒 Closing dropdown...');
-                    dropdownMenu.classList.remove('show');
-                    dropdownToggle.setAttribute('aria-expanded', 'false');
-                } else {
-                    console.log('🔓 Opening dropdown...');
-                    dropdownMenu.classList.add('show');
-                    dropdownToggle.setAttribute('aria-expanded', 'true');
-                }
-                
-                console.log('📋 Dropdown classes after toggle:', dropdownMenu.className);
-            });
-            
-            // Debug click detection
-            dropdownToggle.addEventListener('mousedown', function(e) {
-                console.log('🖱️ Mouse down on dropdown:', e);
-            });
-            
-            dropdownToggle.addEventListener('mouseup', function(e) {
-                console.log('🖱️ Mouse up on dropdown:', e);
-            });
-            
-            // Method 4: Document click handler for closing
-            document.addEventListener('click', function(e) {
-                console.log('📍 Document clicked:', e.target);
-                
-                if (!dropdownToggle.contains(e.target) && !dropdownMenu.contains(e.target)) {
-                    console.log('🚪 Clicking outside dropdown, closing...');
-                    dropdownMenu.classList.remove('show');
-                    dropdownToggle.setAttribute('aria-expanded', 'false');
-                }
-            });
-            
-            // Custom dropdown implementation function
-            function initCustomDropdown() {
-                console.log('🛠️ Initializing custom dropdown...');
-                
-                // Remove any existing Bootstrap attributes that might interfere
-                dropdownToggle.removeAttribute('data-bs-toggle');
-                dropdownToggle.removeAttribute('data-bs-target');
-                
-                // Force cursor pointer
-                dropdownToggle.style.cursor = 'pointer';
-                
-                console.log('✅ Custom dropdown initialized');
-            }
-            
-            // Method 5: Keyboard support
-            dropdownToggle.addEventListener('keydown', function(e) {
-                console.log('⌨️ Key pressed on dropdown:', e.key);
-                
-                if (e.key === 'Enter' || e.key === ' ') {
-                    console.log('🎯 Enter/Space pressed, triggering click...');
-                    e.preventDefault();
-                    dropdownToggle.click();
-                }
-                
-                if (e.key === 'Escape') {
-                    console.log('🔔 Escape pressed, closing dropdown...');
-                    dropdownMenu.classList.remove('show');
-                    dropdownToggle.setAttribute('aria-expanded', 'false');
-                }
-            });
-            
-            // Method 6: Force visibility check
-            setTimeout(function() {
-                console.log('🔍 Checking dropdown visibility after 1 second...');
-                console.log('📊 Dropdown toggle visible:', dropdownToggle.offsetWidth > 0 && dropdownToggle.offsetHeight > 0);
-                console.log('📊 Dropdown toggle computed style:', window.getComputedStyle(dropdownToggle).display);
-                console.log('📊 Dropdown menu computed style:', window.getComputedStyle(dropdownMenu).display);
-                
-                // Force ensure dropdown works
-                if (!dropdownToggle.onclick) {
-                    console.log('🔧 No onclick handler detected, adding force handler...');
-                    dropdownToggle.onclick = function(e) {
-                        console.log('💪 Force click handler activated!');
-                        e.preventDefault();
-                        dropdownMenu.classList.toggle('show');
-                        const isOpen = dropdownMenu.classList.contains('show');
-                        dropdownToggle.setAttribute('aria-expanded', isOpen.toString());
-                        console.log('📊 Force toggle result:', isOpen);
-                    };
-                }
-            }, 1000);
-            
-            console.log('🏁 Dropdown initialization complete');
-        });
-        
-        // Global debugging function
-        window.debugDropdown = function() {
-            console.log('🔧 Manual dropdown debug:');
-            const toggle = document.getElementById('profileDropdown');
-            const menu = document.querySelector('.dropdown-menu');
-            
-            console.log('Toggle element:', toggle);
-            console.log('Menu element:', menu);
-            console.log('Bootstrap available:', typeof bootstrap !== 'undefined');
-            console.log('Menu classes:', menu ? menu.className : 'Menu not found');
-            console.log('Toggle aria-expanded:', toggle ? toggle.getAttribute('aria-expanded') : 'Toggle not found');
-            
-            if (menu) {
-                menu.classList.toggle('show');
-                console.log('Toggled menu, new classes:', menu.className);
-            }
-        };
-        
-        console.log('🎯 You can run debugDropdown() in the console to test manually');
-    </script>
-    
-        <!-- Global CSRF protection script - works for all templates -->
-        <script>
-            // Global CSRF protection that works even for templates that don't extend base.html
-            window.setupCSRFProtection = function() {
+
+            window.setupCSRFProtection = function () {
                 try {
-                    // Get CSRF token - try multiple sources
-                    let CSRF_TOKEN = '';
-                    
-                    // Try to get from meta tag first (if already set)
-                    const existingMeta = document.querySelector('meta[name="csrf-token"]');
-                    if (existingMeta) {
-                        CSRF_TOKEN = existingMeta.content;
-                    } else {
-                        // Render the token via template substitution (server-side)
-                        CSRF_TOKEN = "{{ csrf_token() }}";
-                        
-                        // Add meta tag for easy access
-                        const meta = document.createElement('meta');
-                        meta.name = 'csrf-token';
-                        meta.content = CSRF_TOKEN;
-                        document.head.appendChild(meta);
-                    }
-                    
-                    // Make CSRF token globally available
-                    window.CSRF_TOKEN = CSRF_TOKEN;
+                    window.CSRF_TOKEN = csrfToken;
 
-                    function injectTokenIntoForm(form){
-                        if(!form) return;
-                        // Only inject into forms that are POSTing
-                        const method = (form.getAttribute('method') || '').toLowerCase();
-                        if(method !== 'post') return;
-
-                        // Check if input already exists
-                        if(form.querySelector('input[name="csrf_token"]')) return;
-
-                        const input = document.createElement('input');
+                    function injectTokenIntoForm(form) {
+                        if (!form) return;
+                        var method = (form.getAttribute('method') || '').toLowerCase();
+                        if (method !== 'post') return;
+                        if (form.querySelector('input[name="csrf_token"]')) return;
+                        var input = document.createElement('input');
                         input.type = 'hidden';
                         input.name = 'csrf_token';
-                        input.value = CSRF_TOKEN;
+                        input.value = csrfToken;
                         form.prepend(input);
                     }
 
-                    // Inject into existing forms
                     document.querySelectorAll('form').forEach(injectTokenIntoForm);
 
-                    // Observe for dynamically added forms
-                    const obs = new MutationObserver(function(mutations){
-                        for(const m of mutations){
-                            for(const node of m.addedNodes){
-                                if(node.tagName === 'FORM') injectTokenIntoForm(node);
-                                if(node.querySelectorAll) {
-                                    node.querySelectorAll('form').forEach(injectTokenIntoForm);
-                                }
-                            }
-                        }
+                    var obs = new MutationObserver(function (mutations) {
+                        mutations.forEach(function (mutation) {
+                            mutation.addedNodes.forEach(function (node) {
+                                if (!node || !node.querySelectorAll) return;
+                                if (node.tagName === 'FORM') injectTokenIntoForm(node);
+                                node.querySelectorAll('form').forEach(injectTokenIntoForm);
+                            });
+                        });
                     });
                     obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
 
-                    // Wrap fetch to include CSRF header for same-origin POST/PUT/DELETE/PATCH
-                    if (!window._originalFetch) {
-                        window._originalFetch = window.fetch;
-                        window.fetch = function(resource, init){
-                            try {
-                                init = init || {};
-                                init.headers = init.headers || {};
-
-                                // If a JSON body or explicit method that mutates state, include token
-                                const method = ((init.method || 'GET') + '').toUpperCase();
-                                const safeMethods = ['GET','HEAD','OPTIONS'];
-                                const url = (typeof resource === 'string') ? resource : (resource && resource.url) || '';
-                                const isSameOrigin = url === '' || url.startsWith(window.location.origin) || url.startsWith('/') || url.startsWith('./') || url.startsWith('../');
-
-                                if(isSameOrigin && !safeMethods.includes(method)){
-                                    // If header not already set, set X-CSRFToken
-                                    if(!init.headers['X-CSRFToken'] && !init.headers['x-csrftoken']){
-                                        init.headers['X-CSRFToken'] = CSRF_TOKEN;
-                                    }
-                                }
-                            } catch(e){
-                                // ignore
+                    if (window._originalFetch) return;
+                    window._originalFetch = window.fetch;
+                    window.fetch = function (resource, init) {
+                        init = init || {};
+                        init.headers = init.headers || {};
+                        var method = ((init.method || 'GET') + '').toUpperCase();
+                        var safeMethods = ['GET', 'HEAD', 'OPTIONS'];
+                        var url = typeof resource === 'string' ? resource : (resource && resource.url) || '';
+                        var sameOrigin = url === '' || url.startsWith('/') || url.startsWith(window.location.origin);
+                        if (sameOrigin && !safeMethods.includes(method) && csrfToken) {
+                            if (!init.headers['X-CSRFToken'] && !init.headers['x-csrftoken']) {
+                                init.headers['X-CSRFToken'] = csrfToken;
                             }
-                            return window._originalFetch.apply(this, arguments);
-                        };
-                    }
-                } catch(e){
-                    console.error('CSRF protection setup failed', e);
+                        }
+                        return window._originalFetch(resource, init);
+                    };
+                } catch (e) {
+                    console.error('Failed to initialize CSRF protection', e);
                 }
             };
-            
-            // Run CSRF protection setup immediately
+
             window.setupCSRFProtection();
-        </script>
-        
-        <!-- Global script to ensure CSRF protection is available on all pages -->
-        <script>
-            // Ensure CSRF protection is set up on every page load
-            document.addEventListener('DOMContentLoaded', function() {
-                if (typeof window.setupCSRFProtection === 'function') {
-                    window.setupCSRFProtection();
-                }
-            });
-        </script>
-    
+        })();
+    </script>
+
     {% block extra_js %}{% endblock %}
 </body>
 </html>
