@@ -7,7 +7,7 @@
 	(title_block
 		(title "ASTRA Telescope Node")
 		(date "2026-05-28")
-		(rev "4")
+		(rev "5")
 		(comment 1 "Author: Alex Grant-Parra")
 	)
 	(lib_symbols
@@ -5457,6 +5457,16 @@
 	)
 	(wire
 		(pts
+			(xy 72.39 137.16) (xy 77.47 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "061ce102-0d29-4fcf-9b15-50b4af21c235")
+	)
+	(wire
+		(pts
 			(xy 93.98 152.4) (xy 99.06 152.4)
 		)
 		(stroke
@@ -5757,6 +5767,16 @@
 	)
 	(wire
 		(pts
+			(xy 72.39 129.54) (xy 77.47 129.54)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "41d28934-738c-4f80-bdd4-c1cd8c25870a")
+	)
+	(wire
+		(pts
 			(xy 72.39 149.86) (xy 77.47 149.86)
 		)
 		(stroke
@@ -5997,6 +6017,16 @@
 	)
 	(wire
 		(pts
+			(xy 72.39 132.08) (xy 77.47 132.08)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "650f2071-dcd4-4852-9384-faa36f07593f")
+	)
+	(wire
+		(pts
 			(xy 193.04 52.07) (xy 193.04 59.69)
 		)
 		(stroke
@@ -6024,6 +6054,16 @@
 			(type default)
 		)
 		(uuid "66e21612-597d-4b1e-8d13-f188e3217231")
+	)
+	(wire
+		(pts
+			(xy 72.39 134.62) (xy 77.47 134.62)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "679b0711-287a-4673-9a74-c357568b16a0")
 	)
 	(wire
 		(pts
@@ -6284,6 +6324,16 @@
 			(type default)
 		)
 		(uuid "869fa59f-5f89-4178-bd18-2fae26e6c73c")
+	)
+	(wire
+		(pts
+			(xy 72.39 127) (xy 77.47 127)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "882a2551-9525-4816-aff1-3684b3c3d103")
 	)
 	(wire
 		(pts
@@ -7165,16 +7215,6 @@
 		)
 		(uuid "021228b9-8ce6-48d3-9746-a3c0d07062b1")
 	)
-	(label "BOTTOM"
-		(at 72.39 152.4 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "072fe344-1ed9-41d5-87f3-33411dd53167")
-	)
 	(label "SDA"
 		(at 41.91 129.54 0)
 		(effects
@@ -7185,16 +7225,6 @@
 		)
 		(uuid "0c71a8c6-1846-4246-ad34-7b1865b9ec9e")
 	)
-	(label "TOP"
-		(at 72.39 149.86 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "0e6a642e-5c73-403f-911e-37fd23ac6c8e")
-	)
 	(label "D23"
 		(at 99.06 90.17 180)
 		(effects
@@ -7204,6 +7234,26 @@
 			(justify right bottom)
 		)
 		(uuid "0f4c5be2-b9d3-4b0e-97b2-7d8df3380a2c")
+	)
+	(label "BLUE"
+		(at 72.39 129.54 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "0f701ef8-90d4-4e2a-a5f3-7641f1c5b90f")
+	)
+	(label "BOTTOM"
+		(at 72.39 154.94 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "10e753b0-ede0-4101-a336-db18f3ce2a23")
 	)
 	(label "GND"
 		(at 110.49 57.15 180)
@@ -7285,6 +7335,16 @@
 		)
 		(uuid "2d629327-02fa-441d-b87c-d12f57479211")
 	)
+	(label "RETURN"
+		(at 72.39 149.86 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "2d974585-edfc-48d0-a972-d2428ba24f1e")
+	)
 	(label "D26"
 		(at 110.49 69.85 180)
 		(effects
@@ -7294,16 +7354,6 @@
 			(justify right bottom)
 		)
 		(uuid "2f594f35-dc19-470e-b54f-62a5f29e53e2")
-	)
-	(label "RIGHT"
-		(at 72.39 144.78 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "33ea2da6-f46f-420d-bed1-9af06f5d72d5")
 	)
 	(label "AD0"
 		(at 97.79 26.67 180)
@@ -7455,16 +7505,6 @@
 		)
 		(uuid "4f59f1ef-6def-4474-acca-46acfab88bc7")
 	)
-	(label "WHITE"
-		(at 72.39 162.56 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "507c1b29-c4cb-4ade-a20b-463ac76df0b2")
-	)
 	(label "2DIR"
 		(at 152.4 93.98 180)
 		(effects
@@ -7494,16 +7534,6 @@
 			(justify right bottom)
 		)
 		(uuid "5e441a28-3bd2-44ca-ab0c-2ae0d705ae61")
-	)
-	(label "BLUE"
-		(at 72.39 165.1 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "614608e4-e481-4faf-8f06-9688b1b7a2de")
 	)
 	(label "INT"
 		(at 97.79 21.59 180)
@@ -7595,7 +7625,17 @@
 		)
 		(uuid "74039a01-8017-4275-a454-10817315bf8b")
 	)
-	(label "T1_DIAG"
+	(label "SELECT"
+		(at 72.39 144.78 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "76af4181-45c5-499e-83ac-d96c5944c2d8")
+	)
+	(label "T2_DIAG"
 		(at 125.73 78.74 180)
 		(effects
 			(font
@@ -7605,7 +7645,7 @@
 		)
 		(uuid "79983fcd-8032-486c-927b-832546c239b1")
 	)
-	(label "RED"
+	(label "LEFT"
 		(at 72.39 157.48 0)
 		(effects
 			(font
@@ -7613,7 +7653,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "7cb47997-513a-48f6-b7b2-31be4b6d4ff1")
+		(uuid "7b40b5ff-9955-47d9-b9be-9e1e2da736ff")
 	)
 	(label "CS"
 		(at 97.79 24.13 180)
@@ -7624,16 +7664,6 @@
 			(justify right bottom)
 		)
 		(uuid "7e8007c5-d860-44c7-ab86-83c068d34552")
-	)
-	(label "SELECT"
-		(at 72.39 142.24 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "7f21b946-044c-41e2-8e88-4647851e482c")
 	)
 	(label "D2"
 		(at 99.06 62.23 180)
@@ -7665,7 +7695,7 @@
 		)
 		(uuid "83c83deb-4cb7-4f10-bbf5-8302a2dcff53")
 	)
-	(label "T2_DIAG"
+	(label "T1_DIAG"
 		(at 125.73 81.28 180)
 		(effects
 			(font
@@ -7825,16 +7855,6 @@
 		)
 		(uuid "a472f04a-ce5f-4c49-beca-64782c75b59a")
 	)
-	(label "RETURN"
-		(at 72.39 139.7 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "a5cf7d2c-80f3-48c5-b768-62d8ed79cd0f")
-	)
 	(label "OUTl"
 		(at 240.03 142.24 0)
 		(effects
@@ -7854,6 +7874,16 @@
 			(justify right bottom)
 		)
 		(uuid "a7c6db19-9409-4187-9414-31e1b9a9ee55")
+	)
+	(label "YELLOW"
+		(at 72.39 127 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "a8ed0a1a-3a7b-470a-a949-c84a5242e1f1")
 	)
 	(label "SDA"
 		(at 97.79 29.21 180)
@@ -7894,16 +7924,6 @@
 			(justify right bottom)
 		)
 		(uuid "b0ff53d2-4051-4bc1-91c9-eda14d2bf396")
-	)
-	(label "GREEN"
-		(at 72.39 160.02 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "b4a30b4d-5f53-4ae8-99db-c0c189a46fde")
 	)
 	(label "TX0{slash}D1"
 		(at 102.87 85.09 180)
@@ -8045,6 +8065,16 @@
 		)
 		(uuid "c89d1470-8691-4b3d-bd29-e2dacedb9ad3")
 	)
+	(label "GREEN"
+		(at 72.39 165.1 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "ce3a6403-2630-4162-a46d-c2d471e009c0")
+	)
 	(label "T2_DIAG"
 		(at 189.23 44.45 0)
 		(effects
@@ -8054,6 +8084,16 @@
 			(justify left bottom)
 		)
 		(uuid "d09c74a1-8505-4977-9d7b-b11a2f19b6cc")
+	)
+	(label "RIGHT"
+		(at 72.39 160.02 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "d0f78a21-5e68-438e-8e82-483bf87f4c2e")
 	)
 	(label "SCK"
 		(at 69.85 83.82 180)
@@ -8155,16 +8195,6 @@
 		)
 		(uuid "e582763c-1713-4681-9849-0adce89bea08")
 	)
-	(label "LEFT"
-		(at 72.39 154.94 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "e807995e-e939-4359-b8d0-83ebdd74b33e")
-	)
 	(label "1EN"
 		(at 90.17 88.9 180)
 		(effects
@@ -8205,6 +8235,16 @@
 		)
 		(uuid "f0848e70-254c-44e0-9c46-486b690ae17f")
 	)
+	(label "WHITE"
+		(at 72.39 167.64 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "f0c0fa73-e646-4302-8b4a-498cc7138aa4")
+	)
 	(label "LEFT"
 		(at 119.38 134.62 180)
 		(effects
@@ -8235,6 +8275,16 @@
 		)
 		(uuid "fbb552f1-d257-4a1a-b618-1adc0697eea4")
 	)
+	(label "TOP"
+		(at 72.39 152.4 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "fbb6e1cb-6b56-4b47-8f61-b52d3e91b969")
+	)
 	(label "RST"
 		(at 97.79 19.05 180)
 		(effects
@@ -8245,15 +8295,15 @@
 		)
 		(uuid "fbc44451-5306-4e22-a0c7-84cbfb14c0b4")
 	)
-	(label "YELLOW"
-		(at 72.39 167.64 0)
+	(label "RED"
+		(at 72.39 162.56 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left bottom)
 		)
-		(uuid "fc7eaba9-9d73-4722-9208-d9bcceda235e")
+		(uuid "ff5f4e7b-951f-437c-be0a-ef9699a022cf")
 	)
 	(symbol
 		(lib_id "power:GND")
@@ -12155,106 +12205,6 @@
 		)
 	)
 	(symbol
-		(lib_id "Connector:RJ45")
-		(at 127 24.13 180)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "9463b2f8-f9f0-4efd-8abd-6874e93c71d9")
-		(property "Reference" "J4"
-			(at 135.89 24.1299 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(property "Value" "RJ45 (BNO085)"
-			(at 135.89 26.6699 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(property "Footprint" "Connector_RJ:RJ45_Amphenol_54602-x08_Horizontal"
-			(at 127 24.765 90)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 127 24.765 90)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "RJ connector, 8P8C (8 positions 8 connected)"
-			(at 127 24.13 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "5"
-			(uuid "b8ef6a57-a85d-4850-a5ab-26c39d519a57")
-		)
-		(pin "1"
-			(uuid "6f2736a2-2071-4aa4-952e-103e9eeb2113")
-		)
-		(pin "3"
-			(uuid "764d824a-a94e-494b-b666-8aa4440aea10")
-		)
-		(pin "4"
-			(uuid "d415a55e-3f3d-461f-9bdb-6a461ee0c6cd")
-		)
-		(pin "8"
-			(uuid "320f434a-d046-4e27-a808-f5125cdcb835")
-		)
-		(pin "7"
-			(uuid "3d8e1cff-5fe9-41e7-911b-2970dc32954a")
-		)
-		(pin "6"
-			(uuid "6f81dc8b-1152-45f6-9727-48efa451bc77")
-		)
-		(pin "2"
-			(uuid "b70b85f7-6348-4f89-b9c9-fe1a047f8cb0")
-		)
-		(instances
-			(project "ASTRA"
-				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
-					(reference "J4")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "power:GND")
 		(at 69.85 73.66 90)
 		(unit 1)
@@ -14303,108 +14253,6 @@
 		)
 	)
 	(symbol
-		(lib_id "Connector_Generic:Conn_01x09")
-		(at 88.9 26.67 180)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "e2475495-4e83-4761-a11d-b65a898e62e9")
-		(property "Reference" "G1"
-			(at 90.17 13.97 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "BNO085"
-			(at 86.106 22.606 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Connector_PinSocket_2.54mm:PinSocket_1x09_P2.54mm_Vertical"
-			(at 88.9 26.67 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 88.9 26.67 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Generic connector, single row, 01x09, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 88.9 26.67 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "9"
-			(uuid "750366da-8584-4e3b-86a1-ce0d22113700")
-		)
-		(pin "3"
-			(uuid "c4067ef7-f2d8-44ad-8457-e3bd373cd753")
-		)
-		(pin "5"
-			(uuid "e1292713-3dd4-4c50-b0d1-0fb53f96908d")
-		)
-		(pin "4"
-			(uuid "9a8ca91c-0652-439d-9f56-20781ee12c87")
-		)
-		(pin "8"
-			(uuid "4c95edfc-e202-4af2-9db8-11edf5f037b9")
-		)
-		(pin "1"
-			(uuid "e626379e-5cb8-4dec-93f7-9095ad42d93e")
-		)
-		(pin "2"
-			(uuid "68120df3-8434-4a4a-851c-73978eb85c18")
-		)
-		(pin "6"
-			(uuid "84f3ef3a-de08-42ce-829e-a0fc13617075")
-		)
-		(pin "7"
-			(uuid "be4381d1-405f-4334-a0fe-59a49083dbe3")
-		)
-		(instances
-			(project "ASTRA"
-				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
-					(reference "G1")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "power:GND")
 		(at 187.96 69.85 90)
 		(unit 1)
@@ -15049,6 +14897,106 @@
 		)
 	)
 	(symbol
+		(lib_id "Connector:RJ45")
+		(at 127 24.13 180)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "f4ad3cb4-85c0-4d04-9e72-35efd744e8b2")
+		(property "Reference" "J4"
+			(at 135.89 24.1299 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "RJ45 (BNO085)"
+			(at 135.89 26.6699 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Connector_RJ:RJ45_Amphenol_54602-x08_Horizontal"
+			(at 127 24.765 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 127 24.765 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "RJ connector, 8P8C (8 positions 8 connected)"
+			(at 127 24.13 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "5"
+			(uuid "70758732-a4ff-46b5-b166-263874ee175e")
+		)
+		(pin "1"
+			(uuid "11ac4e55-7b1a-4c62-a70f-1e890d052efe")
+		)
+		(pin "3"
+			(uuid "e2e0e040-f799-490f-bf6e-3d752996b33e")
+		)
+		(pin "4"
+			(uuid "d4452c7e-4ed8-4947-9bd4-b41db5d88bdf")
+		)
+		(pin "8"
+			(uuid "ea7393f2-6d78-4e75-a059-19d2fa879f52")
+		)
+		(pin "7"
+			(uuid "f365495b-0cdb-40ea-8e4a-2887a64831d2")
+		)
+		(pin "6"
+			(uuid "a7b76b4c-d344-4e19-9d97-121bc23c8400")
+		)
+		(pin "2"
+			(uuid "7bbb1984-2827-40ca-8399-cf6435c95071")
+		)
+		(instances
+			(project "ASTRA"
+				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
+					(reference "J4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GND")
 		(at 46.99 172.72 0)
 		(mirror y)
@@ -15202,6 +15150,108 @@
 			(project "ASTRA"
 				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
 					(reference "SW7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic:Conn_01x09")
+		(at 88.9 26.67 180)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "fa540950-9e26-4707-8866-45853eb1816a")
+		(property "Reference" "G1"
+			(at 90.17 13.97 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "BNO085"
+			(at 86.106 22.606 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Connector_PinSocket_2.54mm:PinSocket_1x09_P2.54mm_Vertical"
+			(at 88.9 26.67 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 88.9 26.67 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Generic connector, single row, 01x09, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 88.9 26.67 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "9"
+			(uuid "d5ab4462-e3a5-46c4-9782-d0ccc7672e07")
+		)
+		(pin "3"
+			(uuid "a18ac9fc-20b0-42f7-be9b-5b246c923da1")
+		)
+		(pin "5"
+			(uuid "2dc26414-de9b-4183-83c4-d1193be05c55")
+		)
+		(pin "4"
+			(uuid "20ee9082-40f8-4ac9-9790-3a20d34022f8")
+		)
+		(pin "8"
+			(uuid "b6482f9d-22e0-4cb0-ba61-2b87beb6293c")
+		)
+		(pin "1"
+			(uuid "a7a8eb8a-505c-4eec-ab6e-a8572e2351e8")
+		)
+		(pin "2"
+			(uuid "0fdf8ddc-a49a-4c8a-8994-6d0f6915cb20")
+		)
+		(pin "6"
+			(uuid "64124fef-010a-477a-a9da-01aa3f9a8a7b")
+		)
+		(pin "7"
+			(uuid "80328fab-f5f3-4ee5-9620-7330dd051ed5")
+		)
+		(instances
+			(project "ASTRA"
+				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
+					(reference "G1")
 					(unit 1)
 				)
 			)
