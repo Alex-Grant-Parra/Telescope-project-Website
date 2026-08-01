@@ -11,6 +11,21 @@ from app.telescopeLink import Telescope
 
 star_map_bp = Blueprint("star_map", __name__)
 
+_CELESTIAL_DEFAULT_VMAGS = {
+    "sun": -26.74,
+    "moon": -12.70,
+}
+
+
+def _celestial_magnitude(obj_name, coords, default=30):
+    value = coords.get("vmag")
+    if value is not None:
+        try:
+            return float(value)
+        except Exception:
+            pass
+    return _CELESTIAL_DEFAULT_VMAGS.get(obj_name.lower(), default)
+
 def loadStarsFromTables(tables):
     all_stars = []
     for table in tables:
@@ -46,7 +61,7 @@ def get_all_celestial_objects(_dt: Optional[datetime] = None):
     for obj_name, coords in celestial_data.items():
         ra_h, ra_m, ra_s = coords["ra"]
         dec_d, dec_m, dec_s = coords["dec"]
-        mag = coords.get("vmag", 30)
+        mag = _celestial_magnitude(obj_name, coords)
 
         ra_deg = convert.HrMinSecToDegrees(ra_h, ra_m, ra_s) * 15
         if dec_d < 0:
@@ -110,7 +125,7 @@ def get_stars():
         for obj_name, coords in celestial_data.items():
             ra_h, ra_m, ra_s = coords["ra"]
             dec_d, dec_m, dec_s = coords["dec"]
-            mag = coords.get("vmag", 30)
+            mag = _celestial_magnitude(obj_name, coords)
 
             ra_deg = convert.HrMinSecToDegrees(ra_h, ra_m, ra_s) * 15
             if dec_d < 0:
@@ -215,7 +230,7 @@ def get_planets():
     for obj_name, coords in celestial_data.items():
         ra_h, ra_m, ra_s = coords["ra"]
         dec_d, dec_m, dec_s = coords["dec"]
-        mag = coords.get("vmag", 30)
+        mag = _celestial_magnitude(obj_name, coords)
 
         ra_deg = convert.HrMinSecToDegrees(ra_h, ra_m, ra_s) * 15
         if dec_d < 0:
@@ -265,7 +280,7 @@ def star_info(star_name):
         coords = celestial_data[obj_name_lower]
         ra_h, ra_m, ra_s = coords["ra"]
         dec_d, dec_m, dec_s = coords["dec"]
-        mag = coords.get("vmag", 30)
+        mag = _celestial_magnitude(obj_name_lower, coords)
 
         ra_deg = convert.HrMinSecToDegrees(ra_h, ra_m, ra_s) * 15
         if dec_d < 0:

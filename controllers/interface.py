@@ -12,6 +12,11 @@ from app.telescopeLink import Telescope, current_telescope  # Updated import
 
 interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
+_CELESTIAL_DEFAULT_VMAGS = {
+    "sun": -26.74,
+    "moon": -12.70,
+}
+
 @interface_bp.route("/")
 def interface():
     from flask_login import current_user
@@ -182,12 +187,15 @@ def format_celestial_data(name, data):
     ra_degrees = ra_hours * 15  # Convert hours to degrees (360/24h = 15/h)
     
     dec_degrees = convert.HrMinSecToDegrees(data['dec'][0], data['dec'][1], data['dec'][2])
+    vmag = data.get("vmag")
+    if vmag is None:
+        vmag = _CELESTIAL_DEFAULT_VMAGS.get(name.lower(), 30)
     
     return {
         "Name": name.capitalize(),
         "RA": ra_degrees,
         "DEC": dec_degrees,
-        "V-Mag": data["vmag"]
+        "V-Mag": vmag
     }
 
 @interface_bp.route("/get_camera_choices")
