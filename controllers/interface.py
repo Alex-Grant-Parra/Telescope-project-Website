@@ -191,12 +191,37 @@ def format_celestial_data(name, data):
     if vmag is None:
         vmag = _CELESTIAL_DEFAULT_VMAGS.get(name.lower(), 30)
     
-    return {
+    formatted = {
         "Name": name.capitalize(),
         "RA": ra_degrees,
         "DEC": dec_degrees,
         "V-Mag": vmag
     }
+
+    if data.get("phase_name"):
+        formatted["phase_name"] = data.get("phase_name")
+    phase_angle = data.get("phase_angle_deg")
+    if phase_angle is not None:
+        try:
+            formatted["phase_angle_deg"] = float(phase_angle)
+        except Exception:
+            pass
+
+    moon_illum = data.get("moon_illumination_fraction")
+    if moon_illum is not None:
+        try:
+            formatted["moon_illumination_fraction"] = float(moon_illum)
+        except Exception:
+            pass
+
+    moon_elong = data.get("moon_elongation_deg")
+    if moon_elong is not None:
+        try:
+            formatted["moon_elongation_deg"] = float(moon_elong)
+        except Exception:
+            pass
+
+    return formatted
 
 @interface_bp.route("/get_camera_choices")
 def get_camera_choices():

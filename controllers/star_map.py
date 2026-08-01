@@ -26,6 +26,35 @@ def _celestial_magnitude(obj_name, coords, default=30):
             pass
     return _CELESTIAL_DEFAULT_VMAGS.get(obj_name.lower(), default)
 
+
+def _add_celestial_phase_fields(payload, coords):
+    phase_name = coords.get("phase_name")
+    if phase_name:
+        payload["phase_name"] = phase_name
+
+    phase_angle = coords.get("phase_angle_deg")
+    if phase_angle is not None:
+        try:
+            payload["phase_angle_deg"] = float(phase_angle)
+        except Exception:
+            pass
+
+    moon_illum = coords.get("moon_illumination_fraction")
+    if moon_illum is not None:
+        try:
+            payload["moon_illumination_fraction"] = float(moon_illum)
+        except Exception:
+            pass
+
+    moon_elong = coords.get("moon_elongation_deg")
+    if moon_elong is not None:
+        try:
+            payload["moon_elongation_deg"] = float(moon_elong)
+        except Exception:
+            pass
+
+    return payload
+
 def loadStarsFromTables(tables):
     all_stars = []
     for table in tables:
@@ -69,14 +98,15 @@ def get_all_celestial_objects(_dt: Optional[datetime] = None):
         else:
             dec_deg = dec_d + dec_m / 60 + dec_s / 3600
 
-        all_objects.append({
+        obj_payload = {
             "name": obj_name.capitalize(),
             "ra": ra_deg,
             "dec": dec_deg,
             "mag": mag,
             "icon": f"/static/icons/planets/{obj_name.lower()}.png",
             "type": "planet"
-        })
+        }
+        all_objects.append(_add_celestial_phase_fields(obj_payload, coords))
 
     return all_objects
 
@@ -133,14 +163,15 @@ def get_stars():
             else:
                 dec_deg = dec_d + dec_m / 60 + dec_s / 3600
 
-            planets.append({
+            obj_payload = {
                 "name": obj_name.capitalize(),
                 "ra": ra_deg,
                 "dec": dec_deg,
                 "mag": mag,
                 "icon": f"/static/icons/planets/{obj_name.lower()}.png",
                 "type": "planet"
-            })
+            }
+            planets.append(_add_celestial_phase_fields(obj_payload, coords))
 
     # Build stars result, using DB-side filters when possible
     def query_table_stars(table, limit_override: Optional[int] = None):
@@ -238,14 +269,15 @@ def get_planets():
         else:
             dec_deg = dec_d + dec_m / 60 + dec_s / 3600
 
-        planets.append({
+        obj_payload = {
             "name": obj_name.capitalize(),
             "ra": ra_deg,
             "dec": dec_deg,
             "mag": mag,
             "icon": f"/static/icons/planets/{obj_name.lower()}.png",
             "type": "planet"
-        })
+        }
+        planets.append(_add_celestial_phase_fields(obj_payload, coords))
     return jsonify(planets)
 
 @star_map_bp.route("/StarMap")
@@ -288,13 +320,14 @@ def star_info(star_name):
         else:
             dec_deg = dec_d + dec_m / 60 + dec_s / 3600
 
-        return jsonify({
+        obj_payload = {
             "name": star_name.capitalize(),
             "ra": ra_deg,
             "dec": dec_deg,
             "mag": mag,
             "type": "planet"
-        })
+        }
+        return jsonify(_add_celestial_phase_fields(obj_payload, coords))
 
     tables = [HDSTARtable, IndexTable, NGCtable]
 

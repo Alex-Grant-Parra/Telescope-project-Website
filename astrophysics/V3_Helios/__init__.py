@@ -3,6 +3,21 @@ from datetime import datetime
 from .convert import getRaDecAtTime
 
 
+def _phase_name_from_angle(phase_angle_deg):
+    # Generic phase naming using Sun-Body-Earth phase angle.
+    # 0 deg = full, 180 deg = new.
+    angle = abs(float(phase_angle_deg))
+    if angle < 22.5:
+        return "Full"
+    if angle < 67.5:
+        return "Gibbous"
+    if angle < 112.5:
+        return "Quarter"
+    if angle < 157.5:
+        return "Crescent"
+    return "New"
+
+
 def _degrees_to_hms(ra_deg):
     total_hours = (ra_deg / 15.0) % 24.0
     hours = int(total_hours)
@@ -60,6 +75,24 @@ def getAllCelestialData(year, month, day, hour: int = 0, minute: int = 0, second
         visual_mag = values.get("visual_mag")
         if visual_mag is not None:
             body_data["vmag"] = float(visual_mag)
+
+        phase_angle_deg = values.get("phase_angle_deg")
+        if phase_angle_deg is not None:
+            body_data["phase_angle_deg"] = float(phase_angle_deg)
+
+        moon_phase_name = values.get("moon_phase_name")
+        if moon_phase_name:
+            body_data["phase_name"] = moon_phase_name
+        elif phase_angle_deg is not None and body_name.lower() != "sun":
+            body_data["phase_name"] = _phase_name_from_angle(phase_angle_deg)
+
+        moon_illumination_fraction = values.get("moon_illumination_fraction")
+        if moon_illumination_fraction is not None:
+            body_data["moon_illumination_fraction"] = float(moon_illumination_fraction)
+
+        moon_elongation_deg = values.get("moon_elongation_deg")
+        if moon_elongation_deg is not None:
+            body_data["moon_elongation_deg"] = float(moon_elongation_deg)
 
         formatted[body_name.lower()] = body_data
 

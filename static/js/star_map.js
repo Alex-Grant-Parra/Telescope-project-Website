@@ -1711,6 +1711,10 @@ function generateAdvancedInfo(star) {
         'dec': 'DEC (decimal degrees)',
         'DEC': 'DEC (decimal degrees)',
         'hourAngle': 'Hour Angle (degrees)',
+        'phase_name': 'Phase Name',
+        'phase_angle_deg': 'Phase Angle (degrees)',
+        'moon_illumination_fraction': 'Moon Illumination Fraction',
+        'moon_elongation_deg': 'Moon Elongation (degrees)',
         'mag': 'Visual Magnitude',
         'V-Mag': 'Visual Magnitude', 
         'B-Mag': 'Blue Magnitude',
@@ -2470,7 +2474,17 @@ function searchObject() {
                     dec: parseFloat(objData.DEC) || 0,
                     mag: objData['V-Mag'] || 30,
                     type: objData.type || 'star',
-                    friendlyName: objData.friendlyName || null
+                    friendlyName: objData.friendlyName || null,
+                    phase_name: objData.phase_name || null,
+                    phase_angle_deg: (objData.phase_angle_deg !== undefined && objData.phase_angle_deg !== null)
+                        ? parseFloat(objData.phase_angle_deg)
+                        : null,
+                    moon_illumination_fraction: (objData.moon_illumination_fraction !== undefined && objData.moon_illumination_fraction !== null)
+                        ? parseFloat(objData.moon_illumination_fraction)
+                        : null,
+                    moon_elongation_deg: (objData.moon_elongation_deg !== undefined && objData.moon_elongation_deg !== null)
+                        ? parseFloat(objData.moon_elongation_deg)
+                        : null
                 };
                 // Precompute xyz for transient search result
                 // Note: Do NOT invert Y here; projection already handles canvas Y direction
