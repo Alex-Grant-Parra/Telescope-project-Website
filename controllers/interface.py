@@ -15,6 +15,7 @@ interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 _CELESTIAL_DEFAULT_VMAGS = {
     "sun": -26.74,
     "moon": -12.70,
+    "pluto": 14.0,
 }
 
 @interface_bp.route("/")
@@ -94,7 +95,7 @@ def search_object():
 
     result = None
 
-    searchableCelestials = ["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"]
+    searchableCelestials = ["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto"]
     try:
         # Normalize search for robust matching
         raw = search_value

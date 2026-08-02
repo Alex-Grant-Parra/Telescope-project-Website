@@ -17,6 +17,7 @@ kernelPaths = [
     dataPath / "sat459.bsp",
     dataPath / "ura184_part-3.bsp",
     dataPath / "nep105.bsp",
+    dataPath / "plu060.bsp",
 ]
 
 print("TLS exists:", tlsPath.exists())
@@ -54,7 +55,8 @@ bodies = {
     "jupiter": "JUPITER",
     "saturn": "SATURN",
     "uranus": "URANUS",
-    "neptune": "NEPTUNE"
+    "neptune": "NEPTUNE",
+    "pluto": "PLUTO",
 }
 
 frame = "ECLIPJ2000"

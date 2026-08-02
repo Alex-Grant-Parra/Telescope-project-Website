@@ -140,6 +140,9 @@ def _planetVisualMagnitude(body, rAu, deltaAu, phaseDeg):
     if body == "neptune":
         mag = -6.87
         return float(mag + commonTerm)
+    if body == "pluto":
+        mag = -1.0 + 0.041 * phase
+        return float(mag + commonTerm)
 
     return None
 
@@ -199,7 +202,7 @@ def _visualMagnitudePayload(body, positions, observer):
         payload.update(_moonPhaseFromGeometry(sunPos, earthPos, bodyPos))
         return payload
 
-    if body in {"mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"}:
+    if body in {"mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto"}:
         phaseDeg = _phaseAngleDeg(bodyPos, sunPos, earthPos)
         rAu = float(np.linalg.norm(bodyPos - sunPos) / AU_M)
         deltaAu = float(np.linalg.norm(bodyPos - earthPos) / AU_M)

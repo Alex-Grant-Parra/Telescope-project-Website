@@ -89,7 +89,8 @@ def getMasses(names):
         "jupiter": 1.898e27,
         "saturn": 5.683e26,
         "uranus": 8.681e25,
-        "neptune": 1.024e26
+        "neptune": 1.024e26,
+        "pluto": 1.309e22,
     }
 
     missing = [name for name in names if name not in massMap]

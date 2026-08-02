@@ -14,6 +14,7 @@ star_map_bp = Blueprint("star_map", __name__)
 _CELESTIAL_DEFAULT_VMAGS = {
     "sun": -26.74,
     "moon": -12.70,
+    "pluto": 14.0,
 }
 
 
