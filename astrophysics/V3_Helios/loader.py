@@ -9,14 +9,27 @@ outputPath = base / "initial_conditions.json"
 
 # Local SPICE kernel files bundled with the project.
 tlsPath = dataPath / "naif0012.tls"
-bspPath = dataPath / "de440.bsp"
+kernelPaths = [
+    tlsPath,
+    dataPath / "de440.bsp",
+    dataPath / "mar099s.bsp",
+    dataPath / "jup349.bsp",
+    dataPath / "sat459.bsp",
+    dataPath / "ura184_part-3.bsp",
+    dataPath / "nep105.bsp",
+]
 
 print("TLS exists:", tlsPath.exists())
-print("BSP exists:", bspPath.exists())
+
+missingKernels = [path.name for path in kernelPaths if not path.exists()]
+if missingKernels:
+    raise FileNotFoundError(
+        "Missing required SPICE kernels: " + ", ".join(missingKernels)
+    )
 
 spice.kclear()
-spice.furnsh(str(tlsPath))
-spice.furnsh(str(bspPath))
+for kernelPath in kernelPaths:
+    spice.furnsh(str(kernelPath))
 
 print("Loaded kernels:", spice.ktotal("ALL"))
 
@@ -30,19 +43,18 @@ print("Epoch ET:", et)
 metersPerKilometer = 1000.0
 
 # Bodies to sample from the Solar System barycenter in the chosen frame.
-# Earth and Moon are queried separately so the N-body engine can integrate
-# their mutual gravitational interaction explicitly.
+# Earth and Moon are kept as-is; the other planets now use body-center SPKs.
 bodies = {
     "sun": "SUN",
-    "mercury": "MERCURY BARYCENTER",
-    "venus": "VENUS BARYCENTER",
+    "mercury": "MERCURY",
+    "venus": "VENUS",
     "earth": "EARTH",
     "moon": "MOON",
-    "mars": "MARS BARYCENTER",
-    "jupiter": "JUPITER BARYCENTER",
-    "saturn": "SATURN BARYCENTER",
-    "uranus": "URANUS BARYCENTER",
-    "neptune": "NEPTUNE BARYCENTER"
+    "mars": "MARS",
+    "jupiter": "JUPITER",
+    "saturn": "SATURN",
+    "uranus": "URANUS",
+    "neptune": "NEPTUNE"
 }
 
 frame = "ECLIPJ2000"
