@@ -289,15 +289,13 @@ def _loadTable(forceReload: bool = False):
     global _TABLE_CACHE, _TABLE_CACHE_KEY
 
     if not _CHEB_TABLE_PATH.exists():
-        raise FileNotFoundError(
-            "Chebyshev table not found. Build it first:\n"
-            "    python astrophysics/V3_Helios/chebyshev.py"
-        )
-    if not _isNewer(_CHEB_TABLE_PATH, _IC_PATH):
-        raise RuntimeError(
-            "Chebyshev table is stale — initial_conditions.json is newer. "
-            "Rebuild with:\n    python astrophysics/V3_Helios/chebyshev.py"
-        )
+        print("Chebyshev table not found; building it now …")
+        buildTable()
+        clearTableCache()
+    elif not _isNewer(_CHEB_TABLE_PATH, _IC_PATH):
+        print("Chebyshev table is stale; rebuilding it now …")
+        buildTable()
+        clearTableCache()
 
     cacheKey = _tableCacheKey()
     if not forceReload and _TABLE_CACHE is not None and _TABLE_CACHE_KEY == cacheKey:
@@ -306,7 +304,15 @@ def _loadTable(forceReload: bool = False):
     with np.load(_CHEB_TABLE_PATH, allow_pickle=True) as data:
         table = {key: data[key] for key in data.files}
 
-    _validateMetadata(table)
+    try:
+        _validateMetadata(table)
+    except RuntimeError:
+        print("Chebyshev table metadata is out of date; rebuilding it now …")
+        buildTable()
+        clearTableCache()
+        with np.load(_CHEB_TABLE_PATH, allow_pickle=True) as data:
+            table = {key: data[key] for key in data.files}
+        _validateMetadata(table)
     _TABLE_CACHE = table
     _TABLE_CACHE_KEY = cacheKey
     return table
