@@ -2,4 +2,6 @@
 	(version 7)
 	(lib (name "ASTRAfootprints") (type "KiCad") (uri "${KIPRJMOD}/ASTRAfootprints.pretty") (options "") (descr ""))
 	(lib (name "ASTRAfootprints") (type "KiCad") (uri "${KIPRJMOD}/ASTRAfootprints.pretty") (options "") (descr ""))
+	(lib (name "ASTRAfootprints") (type "KiCad") (uri "${KIPRJMOD}/ASTRAfootprints.pretty") (options "") (descr ""))
+	(lib (name "ASTRAfootprints") (type "KiCad") (uri "${KIPRJMOD}/ASTRAfootprints.pretty") (options "") (descr ""))
 )
