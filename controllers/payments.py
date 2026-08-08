@@ -12,6 +12,7 @@ from flask_login import current_user, login_required
 from app.db import db
 from app.sumup_service import (
     SumUpAPIError,
+    current_sumup_mode,
     create_checkout,
     deactivate_checkout,
     get_available_payment_methods,
@@ -631,6 +632,118 @@ def admin_payment_detail_page(checkout_row_id):
         events=event_rows,
         transactions=tx_rows,
     )
+
+
+@payments_bp.route('/admin/payments/sandbox', methods=['GET'])
+@login_required
+def admin_sandbox_payments_page():
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    mode = 'unknown'
+    try:
+        mode = current_sumup_mode()
+    except Exception:
+        pass
+
+    recent = (
+        SumupCheckout.query
+        .filter(SumupCheckout.is_test_mode.is_(True))
+        .order_by(SumupCheckout.created_at.desc())
+        .limit(20)
+        .all()
+    )
+
+    return render_template('admin_payment_sandbox.html', sumup_mode=mode, recent_checkouts=recent)
+
+
+@payments_bp.route('/admin/payments/sandbox/create', methods=['POST'])
+@login_required
+def admin_sandbox_create_payment():
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    if not is_sumup_feature_enabled():
+        flash('Payments feature is currently disabled.', 'danger')
+        return redirect(url_for('payments.admin_sandbox_payments_page'))
+
+    try:
+        mode = current_sumup_mode()
+    except SumUpAPIError as exc:
+        flash(exc.message, 'danger')
+        return redirect(url_for('payments.admin_sandbox_payments_page'))
+
+    if mode != 'sandbox':
+        flash("Sandbox lab requires SUMUP_MODE='sandbox' in app/sumup_service.py.", 'warning')
+        return redirect(url_for('payments.admin_sandbox_payments_page'))
+
+    amount_raw = (request.form.get('amount') or '').strip()
+    currency = (request.form.get('currency') or 'EUR').strip().upper()
+    description = (request.form.get('description') or 'Admin sandbox payment test').strip()
+
+    try:
+        amount = _parse_amount(amount_raw)
+    except ValueError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('payments.admin_sandbox_payments_page'))
+
+    if currency not in SUPPORTED_CURRENCIES:
+        flash('Unsupported currency for SumUp checkout.', 'danger')
+        return redirect(url_for('payments.admin_sandbox_payments_page'))
+
+    checkout_reference = f"admin-sandbox-{uuid.uuid4()}"
+    redirect_url = _build_checkout_return_url(checkout_reference)
+
+    try:
+        creds = resolve_sumup_credentials()
+        request_payload = {
+            'checkout_reference': checkout_reference,
+            'amount': float(amount),
+            'currency': currency,
+            'merchant_code': creds['merchant_code'],
+            'description': description,
+            'purpose': 'CHECKOUT',
+            'return_url': _build_webhook_return_url(),
+            'redirect_url': redirect_url,
+            'hosted_checkout': {'enabled': True},
+        }
+
+        remote = create_checkout(creds['api_key'], request_payload)
+        row = SumupCheckout.upsert_from_sumup(
+            remote,
+            user_id=current_user.id,
+            metadata={'adminSandboxLab': True, 'createdByAdminId': current_user.id},
+            request_payload=request_payload,
+            is_test_mode=True,
+            idempotency_key=None,
+        )
+        _log_event(
+            checkout_record_id=row.id,
+            event_source='api',
+            event_type='ADMIN_SANDBOX_CHECKOUT_CREATED',
+            verification_status='created',
+            remote_ip=_get_client_ip(),
+            request_payload=request_payload,
+            response_payload=remote,
+        )
+        db.session.commit()
+
+        hosted_url = (remote or {}).get('hosted_checkout_url')
+        if not hosted_url:
+            flash('Checkout created, but SumUp did not return hosted_checkout_url.', 'warning')
+            return redirect(url_for('payments.admin_payment_detail_page', checkout_row_id=row.id))
+
+        return redirect(hosted_url)
+    except SumUpAPIError as exc:
+        db.session.rollback()
+        flash(f"SumUp request failed ({exc.status_code or 'n/a'}).", 'danger')
+        return redirect(url_for('payments.admin_sandbox_payments_page'))
+    except Exception as exc:
+        db.session.rollback()
+        flash(f'Failed to create sandbox checkout: {exc}', 'danger')
+        return redirect(url_for('payments.admin_sandbox_payments_page'))
 
 
 @payments_bp.route('/payments/sumup/webhook', methods=['POST'])

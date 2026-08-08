@@ -9,7 +9,10 @@
             <h1 class="h4 mb-1">Payment Review</h1>
             <p class="text-muted mb-0">Monitor SumUp Hosted Checkout outcomes, sync status, and transaction history.</p>
         </div>
-        <a class="btn btn-outline-secondary" href="{{ url_for('admin.admin') }}">Back to Admin</a>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-primary" href="{{ url_for('payments.admin_sandbox_payments_page') }}">Sandbox Lab</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('admin.admin') }}">Back to Admin</a>
+        </div>
     </div>
 
     <form class="row g-2 mb-3" method="GET" action="{{ url_for('payments.admin_payments_page') }}">

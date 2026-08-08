@@ -30,6 +30,10 @@ def _resolve_mode():
     return mode
 
 
+def current_sumup_mode():
+    return _resolve_mode()
+
+
 def resolve_sumup_credentials():
     if not is_sumup_feature_enabled():
         raise SumUpAPIError('SumUp feature is disabled in code toggle.')
