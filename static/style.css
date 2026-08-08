@@ -106,17 +106,17 @@ a:hover {
     border-bottom: 1px solid var(--line);
 }
 
-.astra-nav {
+.seleno-nav {
     padding: 0.35rem 0;
 }
 
-.astra-nav-inner {
+.seleno-nav-inner {
     max-width: var(--page-max);
     margin: 0 auto;
     padding: 0.25rem var(--space-4);
 }
 
-.astra-brand {
+.seleno-brand {
     font-weight: 700;
     font-size: 1.08rem;
     color: var(--text);
@@ -726,7 +726,7 @@ body.night-mode .modal-content {
 }
 
 @media (max-width: 768px) {
-    .astra-nav-inner,
+    .seleno-nav-inner,
     .app-container,
     .footer-inner {
         padding-left: var(--space-3);

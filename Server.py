@@ -484,7 +484,7 @@ def admin_ws_disconnect(client_id):
 @app.route("/wiki")
 def wikiRedirect():
     return redirect(
-        "https://github.com/Alex-Grant-Parra/ASTRA/wiki",
+        "https://github.com/Alex-Grant-Parra/SELENO/wiki",
         code=301
     )
 

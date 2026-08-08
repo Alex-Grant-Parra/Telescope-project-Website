@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{% block title %}ASTRA{% endblock %}</title>
+    <title>{% block title %}SELENO{% endblock %}</title>
     <script>
         // One-time cleanup: an older build registered a service worker that intercepted
         // <video> range requests and broke playback (infinite net::ERR_ABORTED loop).
@@ -55,9 +55,9 @@
 
     <div class="site-shell">
         <header class="site-header">
-            <nav class="navbar navbar-expand-lg astra-nav">
-                <div class="container-fluid astra-nav-inner">
-                    <a class="navbar-brand astra-brand" href="{{ url_for('home.home') }}">ASTRA</a>
+            <nav class="navbar navbar-expand-lg seleno-nav">
+                <div class="container-fluid seleno-nav-inner">
+                    <a class="navbar-brand seleno-brand" href="{{ url_for('home.home') }}">SELENO</a>
                     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                         <span class="navbar-toggler-icon"></span>
                     </button>
@@ -148,7 +148,7 @@
                     <span>•</span>
                     <a href="{{ url_for('contact.support_home') }}">Support</a>
                 </p>
-                <small>ASTRA observatory platform</small>
+                <small>SELENO observatory platform</small>
             </div>
         </footer>
     </div>

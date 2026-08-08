@@ -104,7 +104,7 @@ def book_request():
                 current_app,
                 'support',
                 [owner.get_email()],
-                'ASTRA Booking Request Pending Approval',
+                'SELENO Booking Request Pending Approval',
                 body,
             )
         except Exception:
@@ -161,7 +161,7 @@ def owner_booking_decision(booking_id):
                 current_app,
                 'support',
                 [requester.get_email()],
-                f"ASTRA Booking {updated.status.title()}",
+                f"SELENO Booking {updated.status.title()}",
                 (
                     f"Your booking #{updated.id} has been {verb}.\n"
                     f"Telescope ID: {updated.telescope_id}\n"

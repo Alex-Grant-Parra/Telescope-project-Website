@@ -1,4 +1,4 @@
-# ASTRA \- Automated Sidereal Tracking and Remote Astronomy
+# SELENO - Automated Sidereal Tracking and Remote Astronomy
 
 ## A modern telescope automation system for remote observation, object tracking and astrophotography with a web-based observatory management platform.
 
@@ -22,11 +22,11 @@
 
 ## System Architecture
 
-ASTRA uses a web-based control server connected to distributed Raspberry Pi \+ ESP32 telescope nodes. Commands, live view camera frames, and tracking data flow through WebSocket channels, while each node handles its own motor control, sensors, and imaging pipeline.
+SELENO uses a web-based control server connected to distributed Raspberry Pi \+ ESP32 telescope nodes. Commands, live view camera frames, and tracking data flow through WebSocket channels, while each node handles its own motor control, sensors, and imaging pipeline.
 
-![System Architecture](https://raw.githubusercontent.com/Alex-Grant-Parra/ASTRA/Server/canary/docs/System%20Architecture.drawio.png)
+![System Architecture](https://raw.githubusercontent.com/Alex-Grant-Parra/SELENO/Server/canary/docs/System%20Architecture.drawio.png)
 
-## Client Setup (For running ASTRA on your telescope system)
+## Client Setup (For running SELENO on your telescope system)
 
 * In the email you were sent when you purchased the telescope system, select register. This will give you a client ID, API token and server URL.  
 * Create an account, and link your client ID and API key to it, following the on screen directions.  
@@ -38,7 +38,7 @@ ASTRA uses a web-based control server connected to distributed Raspberry Pi \+
 ## ADVANCED - Server Setup (For running your own control server)
 
  * Follow this guide to learn how to do this:
- https://github.com/Alex-Grant-Parra/ASTRA/wiki/Server-Setup-(For-running-your-own-control-server)
+ https://github.com/Alex-Grant-Parra/SELENO/wiki/Server-Setup-(For-running-your-own-control-server)
 
  ## Core Runtime Behavior
 
@@ -64,7 +64,7 @@ ASTRA uses a web-based control server connected to distributed Raspberry Pi \+
 
 ## Planetary Models
 
-ASTRA includes a few different planetary models under the astrophysics folder, each with varying precision.
+SELENO includes a few different planetary models under the astrophysics folder, each with varying precision.
 - V1_Keplarian is a traditional keplarian algorithm
 - V2_VSOP87A is an iterative solution, taking the sum of a large number of orbital parameters
 - V3_Helios is a custom N-body engine, with a local integrator and engine, with initial parameters provided by JPL SPICE data
