@@ -25,9 +25,11 @@ from models.payment import SumupCheckout, SumupEvent, SumupTransaction
 
 payments_bp = Blueprint('payments', __name__)
 
+# SumUp countries/currencies glossary + compatibility codes seen in Checkouts docs.
+# SumUp remains the source of truth and can still reject unsupported product/country combos.
 SUPPORTED_CURRENCIES = {
-    'BGN', 'BRL', 'CHF', 'CLP', 'COP', 'CZK', 'DKK', 'EUR', 'GBP', 'HRK',
-    'HUF', 'NOK', 'PLN', 'RON', 'SEK', 'USD'
+    'AUD', 'BGN', 'BRL', 'CAD', 'CHF', 'CLP', 'COP', 'CZK', 'DKK', 'EUR',
+    'GBP', 'HRK', 'HUF', 'MXN', 'NOK', 'PEN', 'PLN', 'RON', 'SEK', 'USD'
 }
 
 MAX_HISTORY_LIMIT = 200

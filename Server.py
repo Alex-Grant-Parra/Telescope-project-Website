@@ -103,7 +103,7 @@ login_manager.init_app(app)
 mail = Mail(app)
 
 # Site domain
-app.config["APP_DOMAIN"] = os.getenv("APP_DOMAIN", "telescopes.dev")
+app.config["APP_DOMAIN"] = os.getenv("APP_DOMAIN", "seleno.org")
 
 # Contact form CAPTCHA (Cloudflare Turnstile)
 app.config["TURNSTILE_SITE_KEY"] = os.getenv("TURNSTILE_SITE_KEY", "")
