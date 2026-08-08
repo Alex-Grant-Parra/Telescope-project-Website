@@ -25,12 +25,8 @@ from models.payment import SumupCheckout, SumupEvent, SumupTransaction
 
 payments_bp = Blueprint('payments', __name__)
 
-# SumUp countries/currencies glossary + compatibility codes seen in Checkouts docs.
-# SumUp remains the source of truth and can still reject unsupported product/country combos.
-SUPPORTED_CURRENCIES = {
-    'AUD', 'BGN', 'BRL', 'CAD', 'CHF', 'CLP', 'COP', 'CZK', 'DKK', 'EUR',
-    'GBP', 'HRK', 'HUF', 'MXN', 'NOK', 'PEN', 'PLN', 'RON', 'SEK', 'USD'
-}
+# Currency is intentionally fixed for all checkouts in this deployment.
+CHECKOUT_CURRENCY = 'GBP'
 
 MAX_HISTORY_LIMIT = 200
 
@@ -214,9 +210,7 @@ def sumup_create_checkout():
     except ValueError as exc:
         return jsonify({'status': 'error', 'message': str(exc)}), 400
 
-    currency = str(payload.get('currency') or 'EUR').strip().upper()
-    if currency not in SUPPORTED_CURRENCIES:
-        return jsonify({'status': 'error', 'message': 'currency is not supported by this SumUp integration'}), 400
+    currency = CHECKOUT_CURRENCY
 
     checkout_reference = (payload.get('checkoutReference') or payload.get('checkout_reference') or str(uuid.uuid4())).strip()
     if len(checkout_reference) > 90:
@@ -416,7 +410,7 @@ def sumup_payment_methods():
         return _feature_disabled_response()
 
     amount_raw = request.args.get('amount')
-    currency = (request.args.get('currency') or '').strip().upper() or None
+    currency = CHECKOUT_CURRENCY
 
     amount = None
     if amount_raw:
@@ -424,12 +418,6 @@ def sumup_payment_methods():
             amount = float(_parse_amount(amount_raw))
         except ValueError as exc:
             return jsonify({'status': 'error', 'message': str(exc)}), 400
-
-    if amount is not None and not currency:
-        return jsonify({'status': 'error', 'message': 'currency is required when amount is provided'}), 400
-
-    if currency and currency not in SUPPORTED_CURRENCIES:
-        return jsonify({'status': 'error', 'message': 'currency is not supported by this SumUp integration'}), 400
 
     try:
         creds = resolve_sumup_credentials()
@@ -682,17 +670,13 @@ def admin_sandbox_create_payment():
         return redirect(url_for('payments.admin_sandbox_payments_page'))
 
     amount_raw = (request.form.get('amount') or '').strip()
-    currency = (request.form.get('currency') or 'EUR').strip().upper()
+    currency = CHECKOUT_CURRENCY
     description = (request.form.get('description') or 'Admin sandbox payment test').strip()
 
     try:
         amount = _parse_amount(amount_raw)
     except ValueError as exc:
         flash(str(exc), 'danger')
-        return redirect(url_for('payments.admin_sandbox_payments_page'))
-
-    if currency not in SUPPORTED_CURRENCIES:
-        flash('Unsupported currency for SumUp checkout.', 'danger')
         return redirect(url_for('payments.admin_sandbox_payments_page'))
 
     checkout_reference = f"admin-sandbox-{uuid.uuid4()}"
