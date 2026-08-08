@@ -8,6 +8,7 @@ import os
 import threading
 import secrets
 import logging
+import ipaddress
 from flask import jsonify, request, Response
 from flask_login import current_user
 
@@ -150,13 +151,117 @@ def _security_log(event, **kwargs):
 
 # Resolve client IP for WebSocket connections using forwarded headers when available
 def get_ws_client_ip(ws):
-    
+    def _ws_headers(ws_obj):
+        # Support both websockets APIs:
+        # - legacy: ws.request_headers
+        # - modern: ws.request.headers
+        try:
+            legacy = getattr(ws_obj, 'request_headers', None)
+            if legacy is not None:
+                return legacy
+        except Exception:
+            pass
+
+        try:
+            request_obj = getattr(ws_obj, 'request', None)
+            headers = getattr(request_obj, 'headers', None) if request_obj is not None else None
+            if headers is not None:
+                return headers
+        except Exception:
+            pass
+
+        return None
+
+    def _get_header_ci(headers_obj, header_name):
+        if headers_obj is None:
+            return None
+
+        # `websockets` headers should be case-insensitive, but normalize manually
+        # to handle version differences and proxy edge-cases reliably.
+        try:
+            direct = headers_obj.get(header_name)
+            if direct:
+                return direct
+        except Exception:
+            pass
+
+        try:
+            target = header_name.lower()
+            for key, value in headers_obj.items():
+                if str(key).lower() == target and value:
+                    return value
+        except Exception:
+            pass
+
+        return None
+
+    def _clean_ip_token(token):
+        value = (token or '').strip().strip('"').strip("'")
+        if not value:
+            return None
+
+        # RFC 7239 Forwarded header values can be like: for=1.2.3.4 or for="[2001:db8::1]:1234"
+        if value.lower().startswith('for='):
+            value = value[4:].strip().strip('"').strip("'")
+
+        # Forwarded entries often include params: for=1.2.3.4;proto=https
+        if ';' in value:
+            value = value.split(';', 1)[0].strip().strip('"').strip("'")
+
+        # Bracketed IPv6 with optional port: [2001:db8::1]:443
+        if value.startswith('['):
+            end = value.find(']')
+            if end > 1:
+                return value[1:end]
+
+        # IPv4 with port: 203.0.113.9:443
+        if value.count(':') == 1 and value.rsplit(':', 1)[1].isdigit():
+            return value.rsplit(':', 1)[0]
+
+        return value
+
+    def _collect_ips(raw_value):
+        if not raw_value:
+            return []
+        parts = [part.strip() for part in str(raw_value).split(',') if part.strip()]
+        cleaned = []
+        for part in parts:
+            token = _clean_ip_token(part)
+            if token:
+                cleaned.append(token)
+        return cleaned
+
+    def _pick_best_ip(candidates):
+        valid_ips = []
+        for candidate in candidates:
+            try:
+                valid_ips.append(ipaddress.ip_address(candidate))
+            except ValueError:
+                continue
+
+        for ip_obj in valid_ips:
+            if not ip_obj.is_loopback:
+                return str(ip_obj)
+
+        if valid_ips:
+            return str(valid_ips[0])
+
+        return None
+
+    # Prefer forwarded client IP headers, then fall back to the socket peer address.
     try:
-        xff = ws.request_headers.get('X-Forwarded-For') or ws.request_headers.get('X-Real-IP')
-        if xff:
-            return xff.split(',')[0].strip()
+        headers = _ws_headers(ws)
+        candidate_ips = []
+
+        for header in ('CF-Connecting-IP', 'True-Client-IP', 'X-Real-IP', 'X-Client-IP', 'X-Forwarded-For', 'Forwarded'):
+            candidate_ips.extend(_collect_ips(_get_header_ci(headers, header)))
+
+        selected = _pick_best_ip(candidate_ips)
+        if selected:
+            return selected
     except Exception:
         pass
+
     return ws.remote_address[0] if ws.remote_address else "unknown"
 
 def check_rate_limit(client_ip):
@@ -805,6 +910,32 @@ def admin_disconnect_ws_client_handler(client_id):
         return jsonify({'status': 'success', 'message': f"Disconnected '{client_id}'"})
     except Exception as e:
         return jsonify({'status': 'error', 'error': str(e)}), 500
+
+
+def disconnect_client_by_id(client_id, reason='admin_disconnect'):
+    """
+    Programmatic helper to disconnect a connected websocket client by client_id.
+    Returns True if a client was disconnected, False otherwise.
+    """
+    try:
+        existing = client_manager.get_client(client_id)
+        if not existing:
+            return False
+
+        global ws_event_loop
+        if ws_event_loop is None:
+            return False
+
+        fut = asyncio.run_coroutine_threadsafe(
+            existing.ws.close(code=4011, reason=reason),
+            ws_event_loop,
+        )
+        fut.result(timeout=5)
+        client_manager.remove_client(client_id)
+        _security_log('ws_command_programmatic_disconnect', client_id=client_id, reason=reason)
+        return True
+    except Exception:
+        return False
     
 # Handler for /liveview/<client_id> route
 def liveview_handler(client_id):

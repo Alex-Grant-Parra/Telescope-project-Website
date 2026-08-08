@@ -2,63 +2,339 @@
 
 {% block title %}Admin Security - Telescope{% endblock %}
 
+{% block extra_css %}
+<style>
+.security-grid {
+    display: grid;
+    grid-template-columns: 340px minmax(0, 1fr);
+    gap: 1rem;
+}
+
+.security-panel {
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 12px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+}
+
+.security-panel-header {
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.security-panel-body {
+    padding: 1rem;
+}
+
+.log-toolbar {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+}
+
+.log-toolbar .span-2 {
+    grid-column: span 2;
+}
+
+.quick-range {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.quick-range .btn {
+    padding: 0.2rem 0.5rem;
+}
+
+.log-layout {
+    display: grid;
+    grid-template-rows: auto minmax(250px, 1fr) minmax(180px, auto);
+    gap: 0.75rem;
+}
+
+.log-table-wrap {
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 10px;
+    overflow: auto;
+    max-height: 420px;
+    background: #ffffff;
+}
+
+#logs-table tbody tr {
+    cursor: pointer;
+}
+
+#logs-table tbody tr.active-row {
+    background: rgba(30, 64, 175, 0.08);
+}
+
+.log-pill {
+    display: inline-block;
+    min-width: 58px;
+    text-align: center;
+    border-radius: 999px;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.log-pill.level-info {
+    background: #dbeafe;
+    color: #1e3a8a;
+}
+
+.log-pill.level-warning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.log-pill.level-error,
+.log-pill.level-critical,
+.log-pill.level-danger {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.details-panel {
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 10px;
+    background: #0b1220;
+    color: #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    min-height: 180px;
+}
+
+.details-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+#log-details {
+    margin: 0;
+    padding: 0.75rem;
+    white-space: pre-wrap;
+    overflow: auto;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    max-height: 260px;
+}
+
+.status-text {
+    font-size: 0.9rem;
+    color: #475569;
+}
+
+@media (max-width: 1100px) {
+    .security-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .log-toolbar {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .log-toolbar .span-2 {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 640px) {
+    .log-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .log-toolbar .span-2 {
+        grid-column: span 1;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
-    <h2>Security Management</h2>
-
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card mb-3">
-                <div class="card-header bg-dark text-white">IP Blacklist</div>
-                <div class="card-body">
-                    <p><strong>Total entries:</strong> {{ blacklist_stats.total_entries }}</p>
-                    <p><strong>Last update:</strong> {{ blacklist_stats.last_update }}</p>
-
-                    <form id="blacklist-add-form" class="row g-2">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                        <div class="col-8">
-                            <input name="ip" id="blacklist-ip" class="form-control" placeholder="IP or CIDR" />
-                        </div>
-                        <div class="col-4">
-                            <button id="blacklist-add" class="btn btn-danger">Add to blacklist</button>
-                        </div>
-                    </form>
-
-                    <hr />
-                    <h6>Current manual entries (partial)</h6>
-                    <div style="max-height:240px; overflow:auto;" id="blacklist-entries">
-                        {% for ip in blacklisted[:200] %}
-                        <div class="d-flex justify-content-between align-items-center py-1">
-                            <div><code>{{ ip }}</code></div>
-                            <div>
-                                <button class="btn btn-sm btn-outline-secondary btn-unban" data-ip="{{ ip }}">Unban</button>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-6">
-            <div class="card mb-3">
-                <div class="card-header bg-dark text-white">Security Logs</div>
-                <div class="card-body">
-                    <p>Available log files:</p>
-                    <ul id="log-files" class="list-group mb-2">
-                        {% for f in log_files %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>{{ f }}</span>
-                            <button class="btn btn-sm btn-outline-primary btn-view-log" data-file="{{ f }}">View</button>
-                        </li>
-                        {% endfor %}
-                    </ul>
-
-                    <div id="log-output" style="white-space:pre-wrap; max-height:400px; overflow:auto; background:#111; color:#eee; padding:10px; border-radius:4px;"></div>
-                </div>
-            </div>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="mb-0">Security Management</h2>
+            <small class="text-muted">Search, filter, and inspect logs without scrolling raw files.</small>
         </div>
     </div>
+
+    <div class="security-grid">
+        <section class="security-panel">
+            <div class="security-panel-header">
+                <strong>Filters</strong>
+                <button class="btn btn-sm btn-outline-secondary" id="btn-reset-filters">Reset</button>
+            </div>
+            <div class="security-panel-body">
+                <div class="log-toolbar">
+                    <div class="span-2">
+                        <label for="log-source" class="form-label mb-1">Log Source</label>
+                        <select id="log-source" class="form-select form-select-sm">
+                            {% for f in log_files %}
+                            <option value="{{ f }}" {% if f == 'security.log' %}selected{% endif %}>{{ f }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="log-level" class="form-label mb-1">Level</label>
+                        <select id="log-level" class="form-select form-select-sm">
+                            <option value="ALL" selected>All</option>
+                            <option value="INFO">INFO</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="ERROR">ERROR</option>
+                            <option value="CRITICAL">CRITICAL</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="page-size" class="form-label mb-1">Rows</label>
+                        <select id="page-size" class="form-select form-select-sm">
+                            <option value="25">25</option>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="200">200</option>
+                        </select>
+                    </div>
+
+                    <div class="span-2">
+                        <label for="search-q" class="form-label mb-1">Search</label>
+                        <input id="search-q" class="form-control form-control-sm" placeholder="Search message, URL, payload, event..." />
+                    </div>
+
+                    <div>
+                        <label for="search-ip" class="form-label mb-1">IP</label>
+                        <input id="search-ip" class="form-control form-control-sm" placeholder="192.168.1.10" />
+                    </div>
+
+                    <div>
+                        <label for="search-method" class="form-label mb-1">Method</label>
+                        <input id="search-method" class="form-control form-control-sm" placeholder="GET" />
+                    </div>
+
+                    <div>
+                        <label for="search-path" class="form-label mb-1">Path</label>
+                        <input id="search-path" class="form-control form-control-sm" placeholder="/admin/security" />
+                    </div>
+
+                    <div>
+                        <label for="search-event" class="form-label mb-1">Event</label>
+                        <input id="search-event" class="form-control form-control-sm" placeholder="blocked_ip" />
+                    </div>
+
+                    <div>
+                        <label for="search-start" class="form-label mb-1">Start</label>
+                        <input id="search-start" type="datetime-local" class="form-control form-control-sm" />
+                    </div>
+
+                    <div>
+                        <label for="search-end" class="form-label mb-1">End</label>
+                        <input id="search-end" type="datetime-local" class="form-control form-control-sm" />
+                    </div>
+                </div>
+
+                <div class="quick-range mt-2 mb-2">
+                    <button class="btn btn-sm btn-outline-secondary quick-range-btn" data-minutes="15">Last 15m</button>
+                    <button class="btn btn-sm btn-outline-secondary quick-range-btn" data-minutes="60">Last 1h</button>
+                    <button class="btn btn-sm btn-outline-secondary quick-range-btn" data-minutes="360">Last 6h</button>
+                    <button class="btn btn-sm btn-outline-secondary quick-range-btn" data-minutes="1440">Last 24h</button>
+                    <button class="btn btn-sm btn-outline-secondary" id="btn-clear-range">Clear Range</button>
+                </div>
+
+                <div class="d-flex gap-2 mt-2">
+                    <button class="btn btn-primary btn-sm" id="btn-apply-filters">Apply</button>
+                    <button class="btn btn-outline-primary btn-sm" id="btn-refresh">Refresh</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="security-panel">
+            <div class="security-panel-header">
+                <div>
+                    <strong>Log Explorer</strong>
+                    <div class="status-text" id="log-status">Idle</div>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="auto-refresh">
+                    <label class="form-check-label" for="auto-refresh">Auto refresh (8s)</label>
+                </div>
+            </div>
+            <div class="security-panel-body log-layout">
+                <div class="log-table-wrap">
+                    <table class="table table-sm table-hover mb-0" id="logs-table">
+                        <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                            <tr>
+                                <th style="min-width: 165px;">Time</th>
+                                <th style="min-width: 85px;">Level</th>
+                                <th style="min-width: 120px;">Event</th>
+                                <th style="min-width: 130px;">IP</th>
+                                <th style="min-width: 90px;">Method</th>
+                                <th style="min-width: 220px;">Path</th>
+                                <th style="min-width: 260px;">Message</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-tbody">
+                            <tr><td colspan="7" class="text-center text-muted py-3">No log data loaded yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center">
+                    <div id="page-indicator" class="status-text">Page 1 of 1</div>
+                    <div class="d-flex gap-2">
+                        <button id="btn-prev-page" class="btn btn-outline-secondary btn-sm">Previous</button>
+                        <button id="btn-next-page" class="btn btn-outline-secondary btn-sm">Next</button>
+                    </div>
+                </div>
+
+                <div class="details-panel">
+                    <div class="details-panel-header">
+                        <strong>Selected Log Entry</strong>
+                        <button id="btn-copy-details" class="btn btn-outline-light btn-sm">Copy JSON</button>
+                    </div>
+                    <pre id="log-details">Select a row to inspect full details.</pre>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <section class="security-panel mt-3">
+        <div class="security-panel-header">
+            <strong>IP Blacklist</strong>
+            <small class="text-muted">Total entries: {{ blacklist_stats.total_entries }} | Last update: {{ blacklist_stats.last_update }}</small>
+        </div>
+        <div class="security-panel-body">
+            <form id="blacklist-add-form" class="row g-2 mb-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <div class="col-md-8">
+                    <input name="ip" id="blacklist-ip" class="form-control" placeholder="IP or CIDR" />
+                </div>
+                <div class="col-md-4 d-grid">
+                    <button id="blacklist-add" class="btn btn-danger">Add to blacklist</button>
+                </div>
+            </form>
+
+            <h6>Current manual entries (partial)</h6>
+            <div style="max-height:240px; overflow:auto;" id="blacklist-entries">
+                {% for ip in blacklisted[:200] %}
+                <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                    <div><code>{{ ip }}</code></div>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary btn-unban" data-ip="{{ ip }}">Unban</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
 </div>
 {% endblock %}
 
@@ -69,8 +345,304 @@ document.addEventListener('DOMContentLoaded', function(){
     const urls = {
         addBlacklist: "{{ url_for('admin.admin_blacklist_add') }}",
         removeBlacklist: "{{ url_for('admin.admin_blacklist_remove') }}",
-        logfileBase: "{{ url_for('admin.admin_security_logfile', filename='') }}"
+        queryLogs: "{{ url_for('admin.admin_security_query_logs') }}"
     };
+
+    const state = {
+        page: 1,
+        pageSize: 50,
+        totalPages: 1,
+        selectedRowId: null,
+        currentItems: [],
+        abortController: null,
+        autoRefreshTimer: null,
+    };
+
+    const refs = {
+        source: document.getElementById('log-source'),
+        level: document.getElementById('log-level'),
+        pageSize: document.getElementById('page-size'),
+        q: document.getElementById('search-q'),
+        ip: document.getElementById('search-ip'),
+        method: document.getElementById('search-method'),
+        path: document.getElementById('search-path'),
+        event: document.getElementById('search-event'),
+        start: document.getElementById('search-start'),
+        end: document.getElementById('search-end'),
+        tbody: document.getElementById('logs-tbody'),
+        details: document.getElementById('log-details'),
+        status: document.getElementById('log-status'),
+        pageIndicator: document.getElementById('page-indicator'),
+        btnPrev: document.getElementById('btn-prev-page'),
+        btnNext: document.getElementById('btn-next-page'),
+        autoRefresh: document.getElementById('auto-refresh')
+    };
+
+    function escapeHtml(text) {
+        return (text || '').replace(/[&<>'"]/g, function(ch){
+            return ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'})[ch];
+        });
+    }
+
+    function formatCell(value) {
+        return value === null || value === undefined || value === '' ? '<span class="text-muted">-</span>' : escapeHtml(String(value));
+    }
+
+    function levelClass(level) {
+        const normalized = String(level || 'INFO').toLowerCase();
+        if (normalized === 'warning') return 'level-warning';
+        if (normalized === 'error' || normalized === 'critical' || normalized === 'danger') return 'level-error';
+        return 'level-info';
+    }
+
+    function setStatus(message, isError=false) {
+        refs.status.textContent = message;
+        refs.status.style.color = isError ? '#b91c1c' : '#475569';
+    }
+
+    function collectFilters() {
+        return {
+            source: refs.source.value,
+            page: state.page,
+            page_size: parseInt(refs.pageSize.value || '50', 10),
+            level: refs.level.value,
+            q: refs.q.value.trim(),
+            ip: refs.ip.value.trim(),
+            method: refs.method.value.trim(),
+            path: refs.path.value.trim(),
+            event: refs.event.value.trim(),
+            start: refs.start.value,
+            end: refs.end.value,
+        };
+    }
+
+    function toQueryString(filters) {
+        const params = new URLSearchParams();
+        Object.keys(filters).forEach(key => {
+            const value = filters[key];
+            if (value !== null && value !== undefined && String(value).trim() !== '') {
+                params.set(key, value);
+            }
+        });
+        return params.toString();
+    }
+
+    function renderRows(items) {
+        state.currentItems = items || [];
+        state.selectedRowId = null;
+
+        if (!items || !items.length) {
+            refs.tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No logs matched the current filters.</td></tr>';
+            refs.details.textContent = 'No record selected.';
+            return;
+        }
+
+        refs.tbody.innerHTML = items.map(item => {
+            const msg = item.message ? String(item.message) : '';
+            const compactMsg = msg.length > 120 ? msg.slice(0, 117) + '...' : msg;
+            return `
+                <tr data-row-id="${escapeHtml(String(item.id))}">
+                    <td>${formatCell(item.timestamp)}</td>
+                    <td><span class="log-pill ${levelClass(item.level)}">${formatCell(item.level)}</span></td>
+                    <td>${formatCell(item.event)}</td>
+                    <td>${formatCell(item.ip)}</td>
+                    <td>${formatCell(item.method)}</td>
+                    <td>${formatCell(item.path)}</td>
+                    <td>${formatCell(compactMsg)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        refs.tbody.querySelectorAll('tr[data-row-id]').forEach(row => {
+            row.addEventListener('click', function(){
+                refs.tbody.querySelectorAll('tr').forEach(r => r.classList.remove('active-row'));
+                row.classList.add('active-row');
+                const rowId = row.getAttribute('data-row-id');
+                const selected = state.currentItems.find(item => String(item.id) === rowId);
+                state.selectedRowId = rowId;
+                refs.details.textContent = JSON.stringify(selected || {}, null, 2);
+            });
+        });
+    }
+
+    async function loadLogs() {
+        if (state.abortController) {
+            state.abortController.abort();
+        }
+
+        state.pageSize = parseInt(refs.pageSize.value || '50', 10);
+        const filters = collectFilters();
+        const query = toQueryString(filters);
+        const url = `${urls.queryLogs}?${query}`;
+
+        setStatus('Loading logs...');
+        refs.btnPrev.disabled = true;
+        refs.btnNext.disabled = true;
+
+        const controller = new AbortController();
+        state.abortController = controller;
+
+        try {
+            const resp = await fetch(url, {
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                signal: controller.signal
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                throw new Error(data.error || 'Failed to fetch logs');
+            }
+
+            renderRows(data.items || []);
+            const pageInfo = data.pagination || {};
+            state.totalPages = Math.max(pageInfo.total_pages || 1, 1);
+            state.page = pageInfo.page || 1;
+
+            refs.pageIndicator.textContent = `Page ${state.page} of ${state.totalPages} | Total ${pageInfo.total || 0}`;
+            refs.btnPrev.disabled = state.page <= 1;
+            refs.btnNext.disabled = state.page >= state.totalPages;
+            setStatus(`Loaded ${data.items ? data.items.length : 0} records from ${data.source}`);
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                return;
+            }
+            setStatus(err.message || 'Failed to load logs', true);
+            refs.tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-3">${escapeHtml(err.message || 'Error')}</td></tr>`;
+        }
+    }
+
+    function setRangeFromNow(minutes) {
+        const end = new Date();
+        const start = new Date(end.getTime() - (minutes * 60 * 1000));
+        refs.end.value = end.toISOString().slice(0, 16);
+        refs.start.value = start.toISOString().slice(0, 16);
+    }
+
+    function clearRange() {
+        refs.start.value = '';
+        refs.end.value = '';
+    }
+
+    function resetFilters() {
+        refs.level.value = 'ALL';
+        refs.pageSize.value = '50';
+        refs.q.value = '';
+        refs.ip.value = '';
+        refs.method.value = '';
+        refs.path.value = '';
+        refs.event.value = '';
+        clearRange();
+        state.page = 1;
+    }
+
+    function installDebouncedSearch() {
+        const ids = ['search-q', 'search-ip', 'search-method', 'search-path', 'search-event'];
+        let timer = null;
+        ids.forEach(id => {
+            const input = document.getElementById(id);
+            input.addEventListener('input', function(){
+                state.page = 1;
+                if (timer) {
+                    clearTimeout(timer);
+                }
+                timer = setTimeout(loadLogs, 300);
+            });
+        });
+    }
+
+    function updateAutoRefresh() {
+        if (state.autoRefreshTimer) {
+            clearInterval(state.autoRefreshTimer);
+            state.autoRefreshTimer = null;
+        }
+        if (refs.autoRefresh.checked) {
+            state.autoRefreshTimer = setInterval(function(){
+                loadLogs();
+            }, 8000);
+        }
+    }
+
+    document.getElementById('btn-apply-filters').addEventListener('click', function(){
+        state.page = 1;
+        loadLogs();
+    });
+
+    document.getElementById('btn-reset-filters').addEventListener('click', function(){
+        resetFilters();
+        loadLogs();
+    });
+
+    document.getElementById('btn-refresh').addEventListener('click', function(){
+        loadLogs();
+    });
+
+    document.getElementById('btn-prev-page').addEventListener('click', function(){
+        if (state.page > 1) {
+            state.page -= 1;
+            loadLogs();
+        }
+    });
+
+    document.getElementById('btn-next-page').addEventListener('click', function(){
+        if (state.page < state.totalPages) {
+            state.page += 1;
+            loadLogs();
+        }
+    });
+
+    document.getElementById('btn-copy-details').addEventListener('click', async function(){
+        const text = refs.details.textContent || '';
+        if (!text.trim()) return;
+        try {
+            await navigator.clipboard.writeText(text);
+            setStatus('Copied selected log JSON to clipboard.');
+        } catch (err) {
+            setStatus('Copy failed. Browser blocked clipboard access.', true);
+        }
+    });
+
+    refs.pageSize.addEventListener('change', function(){
+        state.page = 1;
+        loadLogs();
+    });
+
+    refs.level.addEventListener('change', function(){
+        state.page = 1;
+        loadLogs();
+    });
+
+    refs.source.addEventListener('change', function(){
+        state.page = 1;
+        refs.details.textContent = 'Select a row to inspect full details.';
+        loadLogs();
+    });
+
+    refs.start.addEventListener('change', function(){
+        state.page = 1;
+        loadLogs();
+    });
+
+    refs.end.addEventListener('change', function(){
+        state.page = 1;
+        loadLogs();
+    });
+
+    refs.autoRefresh.addEventListener('change', updateAutoRefresh);
+
+    document.querySelectorAll('.quick-range-btn').forEach(btn => {
+        btn.addEventListener('click', function(){
+            const minutes = parseInt(btn.getAttribute('data-minutes') || '0', 10);
+            if (!minutes) return;
+            setRangeFromNow(minutes);
+            state.page = 1;
+            loadLogs();
+        });
+    });
+
+    document.getElementById('btn-clear-range').addEventListener('click', function(){
+        clearRange();
+        state.page = 1;
+        loadLogs();
+    });
 
     document.getElementById('blacklist-add-form').addEventListener('submit', async function(e){
         e.preventDefault();
@@ -86,7 +658,7 @@ document.addEventListener('DOMContentLoaded', function(){
             body: JSON.stringify({ip})
         });
         const data = await resp.json();
-        alert(data.message || data.error || 'Done');
+        setStatus(data.message || data.error || 'Done');
         location.reload();
     });
 
@@ -104,23 +676,14 @@ document.addEventListener('DOMContentLoaded', function(){
                 body: JSON.stringify({ip})
             });
             const data = await resp.json();
-            alert(data.message || data.error || 'Done');
+            setStatus(data.message || data.error || 'Done');
             location.reload();
         });
     });
 
-    document.querySelectorAll('.btn-view-log').forEach(btn => {
-        btn.addEventListener('click', async function(){
-            const f = btn.dataset.file;
-            const resp = await fetch(urls.logfileBase + encodeURIComponent(f), {headers: {'X-Requested-With': 'XMLHttpRequest'}});
-            const data = await resp.json();
-            if(data.lines){
-                document.getElementById('log-output').textContent = data.lines.join('');
-            } else {
-                document.getElementById('log-output').textContent = data.error || 'No content';
-            }
-        });
-    });
+    installDebouncedSearch();
+    updateAutoRefresh();
+    loadLogs();
 });
 </script>
 {% endblock %}

@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Telescope Booking Settings{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Telescope Booking Settings</h2>
+    <p class="text-muted">Manage metadata, booking constraints, and availability rules.</p>
+
+    <div class="card mb-3">
+        <div class="card-header"><strong>Metadata</strong></div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('book.telescope_booking_settings', telescope_id=telescope.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" class="form-control" rows="2">{{ telescope.description or '' }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Aperture</label>
+                        <input name="aperture" class="form-control" value="{{ telescope.aperture or '' }}" placeholder="e.g. 200mm" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Latitude</label>
+                        <input name="latitude" class="form-control" value="{{ telescope.latitude or '' }}" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Longitude</label>
+                        <input name="longitude" class="form-control" value="{{ telescope.longitude or '' }}" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Camera</label>
+                        <input name="camera" class="form-control" value="{{ telescope.camera or '' }}" placeholder="e.g. ASI2600MC" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Min Minutes</label>
+                        <input type="number" name="min_booking_minutes" class="form-control" value="{{ telescope.min_booking_minutes or 30 }}" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Max Minutes</label>
+                        <input type="number" name="max_booking_minutes" class="form-control" value="{{ telescope.max_booking_minutes or 720 }}" />
+                    </div>
+                    <div class="col-md-9">
+                        <label class="form-label">Allowed Windows JSON (UTC, optional)</label>
+                        <input name="allowed_windows" class="form-control" value="{{ telescope.allowed_windows_json or '' }}" placeholder='[{"start":"20:00","end":"05:00"}]' />
+                    </div>
+                </div>
+                <button class="btn btn-primary mt-3" type="submit">Save Settings</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header"><strong>Add Availability Block (UTC)</strong></div>
+        <div class="card-body">
+            <form id="availabilityForm" class="row g-2">
+                <input type="hidden" id="csrfToken" value="{{ csrf_token() }}" />
+                <div class="col-md-2">
+                    <select id="blockType" class="form-select">
+                        <option value="available">Available</option>
+                        <option value="unavailable">Unavailable</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <input id="startUtc" type="datetime-local" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                    <input id="endUtc" type="datetime-local" class="form-control" />
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button class="btn btn-outline-primary" type="submit">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><strong>Existing Availability Blocks</strong></div>
+        <div class="card-body">
+            {% if availability_blocks %}
+            <ul class="list-group">
+                {% for a in availability_blocks %}
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>#{{ a.id }} {{ a.block_type }}: {{ a.start_utc }} -> {{ a.end_utc }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-muted mb-0">No availability blocks yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('availabilityForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    const csrf = document.getElementById('csrfToken').value;
+    const block_type = document.getElementById('blockType').value;
+    const start_utc = new Date(document.getElementById('startUtc').value).toISOString();
+    const end_utc = new Date(document.getElementById('endUtc').value).toISOString();
+
+    const resp = await fetch('{{ url_for("book.add_telescope_availability", telescope_id=telescope.id) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrf,
+        },
+        body: JSON.stringify({block_type, start_utc, end_utc}),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.status !== 'success') {
+        alert(data.message || 'Failed to add availability block');
+        return;
+    }
+    window.location.reload();
+});
+</script>
+{% endblock %}

@@ -1,8 +1,8 @@
-# ASTRA Personal Use License (APUL) v1.0
+# SELENO Personal Use License (APUL) v1.0
 
 Copyright (c) 2026 Alex Grant-Parra
 
-Last Updated: 11th of April 2026
+Last Updated: 8th of August 2026
 
 ---
 

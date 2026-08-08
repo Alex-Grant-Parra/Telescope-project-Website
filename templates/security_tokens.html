@@ -26,40 +26,68 @@
                 Copy and store this now — it won't be shown again.
             </p>
             <div class="input-group">
-                <input id="new-token-value" type="text" class="form-control" readonly value="{{ generated_token }}" />
+                <input id="new-token-value" type="text" class="form-control font-monospace" readonly value="{{ generated_token }}" />
                 <button class="btn btn-outline-success" type="button" onclick="copyGeneratedToken()">Copy</button>
             </div>
         </div>
     </div>
     {% endif %}
 
-    <div class="card mb-3">
+    <!-- New Telescope Approvals -->
+    <div class="card mb-4">
+        <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+            <strong>New Telescope Approvals</strong>
+            <span class="badge bg-dark">{{ pending_approvals | length }} pending</span>
+        </div>
         <div class="card-body">
-            <form method="post" action="{{ url_for('admin.admin_generate_telescope_token') }}" class="row g-2" id="tokenForm">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                <div class="col-sm-4">
-                    <input name="name" class="form-control" placeholder="Telescope/client name" required />
-                </div>
-                <div class="col-sm-3">
-                    <select name="client_type" class="form-select" id="clientTypeSelect">
-                        <option value="observer">Observer</option>
-                        <option value="telescope">Telescope</option>
-                        <option value="developer">Developer</option>
-                    </select>
-                </div>
-                <div class="col-sm-2">
-                    <button class="btn btn-primary">Generate Token</button>
-                </div>
-            </form>
+            {% if pending_approvals %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Owner (User ID)</th>
+                            <th>Submitted</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in pending_approvals %}
+                        <tr>
+                            <td>{{ p.name }}</td>
+                            <td><span class="badge bg-primary">{{ p.type }}</span></td>
+                            <td>{{ p.user_id if p.user_id else '—' }}</td>
+                            <td><small>{{ p.created }}</small></td>
+                            <td>
+                                <form method="post" action="{{ url_for('admin.admin_approve_telescope', telescope_id=p.id) }}" style="display:inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <button class="btn btn-sm btn-success">Approve</button>
+                                </form>
+                                <form method="post" action="{{ url_for('admin.admin_revoke_telescope_token') }}" style="display:inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <input type="hidden" name="token" value="{{ p.id }}" />
+                                    <button class="btn btn-sm btn-outline-danger ms-1">Reject &amp; Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <p class="text-muted mb-0">No telescopes awaiting approval.</p>
+            {% endif %}
         </div>
     </div>
 
+    <!-- Existing Telescope Tokens -->
     <div class="card">
         <div class="card-header bg-dark text-white">Existing Telescope Tokens</div>
         <div class="card-body">
             {% if tokens %}
             <div class="table-responsive">
-                <table class="table table-sm table-striped">
+                <table class="table table-sm table-striped align-middle">
                     <thead>
                         <tr>
                             <th>Token</th>
@@ -67,14 +95,15 @@
                             <th>Type</th>
                             <th>Details</th>
                             <th>Created</th>
+                            <th>Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for t in tokens %}
-                            <tr>
+                            <tr class="{{ 'table-secondary opacity-75' if t.is_disabled else '' }}">
                                 <td>
-                                    <code id="token-{{ loop.index }}">{{ t.truncated }}</code>
+                                    <code>{{ t.truncated }}</code>
                                     <small class="text-muted ms-2">(stored hashed)</small>
                                 </td>
                                 <td>{{ t.name }}</td>
@@ -82,6 +111,7 @@
                                     <span class="badge bg-{{ 'primary' if t.client_type == 'telescope' else ('warning text-dark' if t.client_type == 'developer' else 'secondary') }}">
                                         {{ t.client_type }}
                                     </span>
+                                    <!-- Admins only: change type -->
                                     <form method="post" action="{{ url_for('admin.admin_update_telescope_type', telescope_id=t.id) }}" class="mt-1 d-flex gap-1">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                                         <select name="client_type" class="form-select form-select-sm">
@@ -95,9 +125,8 @@
                                 <td>
                                     {% if t.db_info %}
                                         <small>
-                                            {% if t.db_info.type %}<strong>Type:</strong> {{ t.db_info.type }}<br>{% endif %}
                                             {% if t.db_info.ip_address %}<strong>IP:</strong> {{ t.db_info.ip_address }}<br>{% endif %}
-                                            <strong>Status:</strong> 
+                                            <strong>Connection:</strong>
                                             <span class="badge bg-{{ 'success' if t.db_info.online else 'secondary' }}">
                                                 {{ 'Online' if t.db_info.online else 'Offline' }}
                                             </span>
@@ -108,11 +137,27 @@
                                 </td>
                                 <td><small>{{ t.created }}</small></td>
                                 <td>
-                                    <form method="post" action="{{ url_for('admin.admin_revoke_telescope_token') }}" style="display:inline">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                                        <input type="hidden" name="token" value="{{ t.id }}" />
-                                        <button class="btn btn-sm btn-outline-danger">Revoke</button>
-                                    </form>
+                                    {% if t.is_disabled %}
+                                        <span class="badge bg-danger">Disabled</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Enabled</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-nowrap">
+                                    <div class="btn-group" role="group" aria-label="Telescope actions">
+                                        <form class="m-0" method="post" action="{{ url_for('admin.admin_toggle_telescope_disabled', telescope_id=t.id) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                            <button type="submit" class="btn btn-sm {{ 'btn-outline-success' if t.is_disabled else 'btn-outline-warning' }}">
+                                                {{ 'Enable' if t.is_disabled else 'Disable' }}
+                                            </button>
+                                        </form>
+
+                                        <form class="m-0" method="post" action="{{ url_for('admin.admin_revoke_telescope_token') }}" onsubmit="return confirm('Permanently revoke telescope &quot;{{ t.name }}&quot;?');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                            <input type="hidden" name="token" value="{{ t.id }}" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger ms-1">Revoke</button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -127,10 +172,6 @@
 </div>
 
 <script>
-function showToken(button) {
-    alert('Full token display is unavailable after creation (stored hashed).');
-}
-
 function copyGeneratedToken() {
     const el = document.getElementById('new-token-value');
     if (!el) return;
@@ -142,3 +183,4 @@ function copyGeneratedToken() {
 }
 </script>
 {% endblock %}
+

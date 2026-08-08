@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+
+{% block title %}Book Telescope{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <style>
+    /* Month calendar styles */
+    #calendarHeader {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+    #calendarGrid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        grid-template-rows: repeat(5, minmax(88px, 1fr));
+        min-height: 440px;
+    }
+    .calendar-cell { min-height: 88px; border: 1px solid rgba(0,0,0,0.04); }
+    .calendar-day { border-radius: 0; background: transparent; min-height: 86px; padding: 6px; position: relative; }
+    .calendar-day:hover { background: rgba(0,0,0,0.02); cursor: pointer; }
+    .calendar-day .date-number { font-weight: 600; font-size: 0.85rem; color: #202124; }
+    .calendar-day .date-number.small-muted { color: #5f6368; font-weight: 400; }
+    .selected-badge { position: absolute; top: 6px; left: 6px; width: 28px; height: 28px; border-radius: 50%; background: #1a73e8; color: #fff; display:flex;align-items:center;justify-content:center;font-weight:600;font-size:0.85rem; }
+    .calendar-day.today { box-shadow: inset 0 0 0 2px rgba(251,188,5,0.18); }
+    .today-badge { position: absolute; top: 6px; right: 6px; width:10px; height:10px; border-radius:50%; background:#fbbc05; box-shadow:0 0 6px rgba(251,188,5,0.6); }
+    .calendar-day .availability-indicator { font-size: 0.75rem; color: #70757a; }
+    .calendar-header-cell { padding: 6px 4px; text-align: center; }
+    .calendar-controls { position: relative; width: 320px; min-width: 220px; }
+    .calendar-controls .prev-btn, .calendar-controls .next-btn { position: absolute; top: 50%; transform: translateY(-50%); }
+    .calendar-controls .prev-btn { left: 4px; }
+    .calendar-controls .next-btn { right: 4px; }
+    #monthLabel { display: block; text-align: center; width: 100%; font-weight: 600; }
+    @media (max-width: 576px){ .calendar-cell{ min-height: 64px; } }
+    </style>
+    <h2>Book Telescope</h2>
+    <p class="text-muted">Select one or more dates (shift-click for a continuous range), then choose a time window.</p>
+
+    <input type="hidden" id="csrfToken" value="{{ csrf_token() }}" />
+
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Date Selection</strong>
+            <div class="calendar-controls">
+                <button class="btn btn-sm btn-outline-secondary prev-btn" type="button" id="prevMonth">Prev</button>
+                <span id="monthLabel"></span>
+                <button class="btn btn-sm btn-outline-secondary next-btn" type="button" id="nextMonth">Next</button>
+            </div>
+        </div>
+        <div class="card-body">
+                <div id="calendarHeader" class="small text-uppercase text-muted mb-1"></div>
+                <div id="calendarGrid"></div>
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                <div id="selectedSummary" class="text-muted"></div>
+                </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header"><strong>Time + Filter</strong></div>
+        <div class="card-body row g-2">
+            <div class="col-md-2">
+                <label class="form-label">Start</label>
+                <input id="startTime" type="time" class="form-control" value="" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">End</label>
+                <input id="endTime" type="time" class="form-control" value="" required>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Location query</label>
+                <input id="locationQuery" type="text" class="form-control" placeholder="City, observatory, or coordinates">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Timezone</label>
+                <input id="timezone" type="text" class="form-control" value="{{ 'UTC' }}">
+            </div>
+            <div class="col-md-1 d-grid">
+                <label class="form-label">&nbsp;</label>
+                <button id="searchBtn" class="btn btn-primary">Search</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><strong>Available Telescopes</strong></div>
+        <div class="card-body">
+            <div id="results" class="text-muted">Run a search to view availability.</div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    document.getElementById('timezone').value = tz;
+
+    const state = {
+        year: new Date().getFullYear(),
+        month: new Date().getMonth(),
+        selected: new Set(),
+        lastClicked: null,
+        dragging: false,
+        didDrag: false,
+    };
+
+    function fmtDate(y,m,d){
+        const mm = String(m+1).padStart(2, '0');
+        const dd = String(d).padStart(2, '0');
+        return `${y}-${mm}-${dd}`;
+    }
+
+    function parseIsoToUTC(iso) {
+        const parts = iso.split('-').map(Number);
+        return new Date(Date.UTC(parts[0], parts[1]-1, parts[2]));
+    }
+
+    function isoFromUTCDate(dt) {
+        return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-${String(dt.getUTCDate()).padStart(2,'0')}`;
+    }
+
+    function updateSelectedText(){
+        const arr = Array.from(state.selected).sort();
+        const summary = document.getElementById('selectedSummary');
+        if (!arr.length) {
+            summary.textContent = 'No dates selected';
+            return;
+        }
+        // If selection is contiguous, show range otherwise show count
+        const first = arr[0];
+        const last = arr[arr.length-1];
+        if (isContiguous(arr)) {
+            summary.textContent = `${first} → ${last} (${arr.length} day${arr.length>1?'s':''})`;
+        } else {
+            summary.textContent = `${arr.length} selected`;
+        }
+    }
+
+    function isContiguous(arr){
+        if (arr.length <= 1) return true;
+        for (let i=1;i<arr.length;i++){
+            const prev = parseIsoToUTC(arr[i-1]);
+            const cur = parseIsoToUTC(arr[i]);
+            const diff = (cur.getTime() - prev.getTime()) / (1000*60*60*24);
+            if (diff !== 1) return false;
+        }
+        return true;
+    }
+
+    function renderCalendar(){
+        const grid = document.getElementById('calendarGrid');
+        const header = document.getElementById('calendarHeader');
+        grid.innerHTML = '';
+        header.innerHTML = '';
+
+        const first = new Date(state.year, state.month, 1);
+        const todayIso = new Date().toISOString().slice(0,10);
+        const days = new Date(state.year, state.month + 1, 0).getDate();
+        const label = first.toLocaleString(undefined, {month:'long', year:'numeric'});
+        document.getElementById('monthLabel').textContent = label;
+
+        // Weekday headers derived from the dates shown in the first row
+        for (let col = 0; col < 7; col++) {
+            const inCurrentMonth = col < days;
+            const d = inCurrentMonth ? (col + 1) : (col - days + 1);
+            const dateForCol = inCurrentMonth
+                ? new Date(state.year, state.month, d)
+                : new Date(state.year, state.month + 1, d);
+            const label = dateForCol.toLocaleString(undefined, { weekday: 'short' });
+            const c = document.createElement('div');
+            c.className = 'calendar-header-cell';
+            c.textContent = label;
+            header.appendChild(c);
+        }
+
+        // Fixed 7x5 grid (35 cells): day 1 is always the first cell.
+        // After month end, continue with next month day numbers.
+        for (let i = 0; i < 35; i++) {
+            const inCurrentMonth = i < days;
+            const d = inCurrentMonth ? (i + 1) : (i - days + 1);
+            const cellDate = inCurrentMonth
+                ? new Date(state.year, state.month, d)
+                : new Date(state.year, state.month + 1, d);
+            const iso = fmtDate(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
+            const cell = document.createElement('div');
+            cell.className = 'calendar-cell';
+            cell.dataset.date = iso;
+
+            const inner = document.createElement('div');
+            inner.className = 'calendar-day d-flex flex-column h-100';
+
+            // highlight today's date with a subtle badge
+            if (iso === todayIso) {
+                inner.classList.add('today');
+                const t = document.createElement('div');
+                t.className = 'today-badge';
+                inner.appendChild(t);
+            }
+
+            const dayNum = document.createElement('div');
+            dayNum.className = 'date-number';
+            dayNum.textContent = d;
+            if (!inCurrentMonth) dayNum.classList.add('small-muted');
+
+            // small availability indicator placeholder
+            const indicator = document.createElement('div');
+            indicator.className = 'mt-auto small availability-indicator';
+            indicator.textContent = '';
+
+            inner.appendChild(dayNum);
+            inner.appendChild(indicator);
+            cell.appendChild(inner);
+
+            // if selected, add small circular badge
+            if (state.selected.has(iso)) {
+                const badge = document.createElement('div');
+                badge.className = 'selected-badge';
+                badge.textContent = d;
+                inner.appendChild(badge);
+                dayNum.classList.add('small-muted');
+            }
+
+            // Mouse handlers: set drag state on mousedown (do NOT toggle here)
+            cell.addEventListener('mousedown', (e)=>{
+                e.preventDefault();
+                const clicked = cell.dataset.date;
+                state.dragging = true;
+                state.didDrag = false;
+                state.dragAdd = !state.selected.has(clicked);
+                // DO NOT set lastClicked here; mousedown should not change
+                // the shift-click anchor. lastClicked is updated on click.
+            });
+            cell.addEventListener('mouseover', (e)=>{
+                if (!state.dragging) return;
+                state.didDrag = true;
+                const over = cell.dataset.date;
+                toggleRange(state.lastClicked, over, state.dragAdd);
+                renderCalendar(); updateSelectedText();
+            });
+            cell.addEventListener('mouseup', (e)=>{
+                state.dragging = false;
+            });
+            cell.addEventListener('click', (e)=>{
+                if (state.didDrag) {
+                    state.didDrag = false;
+                    return;
+                }
+                if (e.shiftKey && state.lastClicked) {
+                    const start = parseIsoToUTC(state.lastClicked);
+                    const end = parseIsoToUTC(cell.dataset.date);
+                    const [a,b] = start <= end ? [start,end] : [end,start];
+                    for (let cur = new Date(a); cur.getTime() <= b.getTime(); cur.setUTCDate(cur.getUTCDate()+1)) {
+                        const iso2 = isoFromUTCDate(cur);
+                        state.selected.add(iso2);
+                    }
+                    // Update anchor to the end of the selection for subsequent shift-clicks
+                    state.lastClicked = cell.dataset.date;
+                } else {
+                    toggleDate(cell.dataset.date);
+                    state.lastClicked = cell.dataset.date;
+                }
+                renderCalendar(); updateSelectedText();
+            });
+
+            grid.appendChild(cell);
+        }
+    }
+
+    function toggleDate(iso, add) {
+        if (add === undefined) add = !state.selected.has(iso);
+        if (add) state.selected.add(iso);
+        else state.selected.delete(iso);
+    }
+
+    function toggleRange(aIso, bIso, add) {
+        const a = parseIsoToUTC(aIso);
+        const b = parseIsoToUTC(bIso);
+        const [start,end] = a<=b ? [a,b] : [b,a];
+        for (let cur = new Date(start); cur.getTime() <= end.getTime(); cur.setUTCDate(cur.getUTCDate()+1)) {
+            const iso2 = isoFromUTCDate(cur);
+            if (add) state.selected.add(iso2);
+            else state.selected.delete(iso2);
+        }
+    }
+
+    function selectedDates(){
+        return Array.from(state.selected).sort();
+    }
+
+    async function search(){
+        const dates = selectedDates();
+        const start_time = document.getElementById('startTime').value;
+        const end_time = document.getElementById('endTime').value;
+        const timezone = document.getElementById('timezone').value;
+        const location_query = document.getElementById('locationQuery').value;
+        const csrf = document.getElementById('csrfToken').value;
+
+        if (!dates.length) {
+            alert('Please select at least one date.');
+            return;
+        }
+
+        const resp = await fetch('{{ url_for("book.book_search") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf,
+            },
+            body: JSON.stringify({dates, start_time, end_time, timezone, location_query}),
+        });
+
+        const data = await resp.json();
+        const container = document.getElementById('results');
+        if (!resp.ok || data.status !== 'success') {
+            container.innerHTML = `<div class="alert alert-danger">${data.message || 'Search failed'}</div>`;
+            return;
+        }
+
+        if (!data.results.length) {
+            container.innerHTML = '<p class="text-muted mb-0">No telescopes matched your search.</p>';
+            return;
+        }
+
+        container.innerHTML = data.results.map((r)=>{
+            const badge = r.status === 'available' ? 'success' : 'secondary';
+            const disabled = r.status === 'available' ? '' : 'disabled';
+            return `
+                <div class="border rounded p-3 mb-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${r.name}</strong>
+                            <div class="small text-muted">${r.location || 'No location set'}</div>
+                            <div class="small">${r.description || ''}</div>
+                        </div>
+                        <div>
+                            <span class="badge bg-${badge}">${r.status}</span>
+                        </div>
+                    </div>
+                    <div class="mt-2 small text-muted">
+                        Aperture: ${r.specifications.aperture || '—'} |
+                        Type: ${r.specifications.telescope_type || '—'} |
+                        Mount: ${r.specifications.mount_type || '—'} |
+                        Camera: ${r.specifications.camera_model || '—'}
+                    </div>
+                    <button class="btn btn-sm btn-primary mt-2" ${disabled} onclick="requestBooking(${r.id})">Request Booking</button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    window.requestBooking = async function(telescope_id){
+        const dates = selectedDates();
+        const start_time = document.getElementById('startTime').value;
+        const end_time = document.getElementById('endTime').value;
+        const timezone = document.getElementById('timezone').value;
+        const csrf = document.getElementById('csrfToken').value;
+
+        const note = prompt('Optional note for the owner:', '') || '';
+
+        const resp = await fetch('{{ url_for("book.book_request") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf,
+            },
+            body: JSON.stringify({telescope_id, dates, start_time, end_time, timezone, note}),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.status !== 'success') {
+            alert(data.message || 'Booking request failed');
+            return;
+        }
+        alert('Booking request submitted successfully.');
+        search();
+    };
+
+    document.getElementById('searchBtn').addEventListener('click', search);
+    document.getElementById('prevMonth').addEventListener('click', ()=>{ state.month--; if (state.month < 0){ state.month = 11; state.year--; } renderCalendar(); });
+    document.getElementById('nextMonth').addEventListener('click', ()=>{ state.month++; if (state.month > 11){ state.month = 0; state.year++; } renderCalendar(); });
+
+    // ensure dragging stops if mouseup occurs outside cells
+    window.addEventListener('mouseup', ()=>{
+        state.dragging = false;
+        state.didDrag = false;
+    });
+
+    renderCalendar();
+    updateSelectedText();
+})();
+</script>
+{% endblock %}

@@ -1,5 +1,7 @@
 import os
 import shutil
+import json
+from collections import deque
 
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, session, send_file
 from flask_login import login_required, current_user
@@ -46,6 +48,219 @@ def _admin_guard():
         flash('Admin access required.', 'danger')
         return redirect(url_for('profile.profile'))
     return None
+
+
+def _parse_int_arg(name, default_value, min_value=None, max_value=None):
+    # Parse and clamp integer query args to keep pagination predictable.
+    raw_value = request.args.get(name, default_value)
+    try:
+        parsed_value = int(raw_value)
+    except (TypeError, ValueError):
+        parsed_value = default_value
+
+    if min_value is not None and parsed_value < min_value:
+        parsed_value = min_value
+    if max_value is not None and parsed_value > max_value:
+        parsed_value = max_value
+    return parsed_value
+
+
+def _parse_datetime_arg(name):
+    # Accept ISO timestamps for optional start/end filters.
+    raw_value = (request.args.get(name) or '').strip()
+    if not raw_value:
+        return None
+
+    candidate = raw_value.replace('Z', '+00:00')
+    try:
+        return datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+
+
+def _get_security_log_sources():
+    # Return available log stream names for DB-backed and file-backed logs.
+    logs_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'security', 'logs'))
+    files = []
+    try:
+        if os.path.exists(logs_dir):
+            for fn in sorted(os.listdir(logs_dir)):
+                if os.path.isfile(os.path.join(logs_dir, fn)):
+                    files.append(fn)
+    except Exception:
+        files = []
+
+    for db_log_name in ('requests.log', 'security.log', 'websocket_security.log'):
+        if db_log_name not in files:
+            files.append(db_log_name)
+
+    return sorted(files)
+
+
+def _normalize_request_row(row):
+    payload = {}
+    if row.headers_json:
+        try:
+            payload = json.loads(row.headers_json)
+        except Exception:
+            payload = {}
+
+    compact_message = f"{row.method} {row.path}"
+    if row.query_string:
+        compact_message += f"?{row.query_string}"
+
+    return {
+        'id': row.id,
+        'timestamp': row.created_at.isoformat() if row.created_at else None,
+        'source': 'requests.log',
+        'level': 'INFO',
+        'event': 'request',
+        'ip': row.client_ip,
+        'method': row.method,
+        'path': row.path,
+        'message': compact_message,
+        'raw': {
+            'request_timestamp': row.request_timestamp,
+            'url': row.url,
+            'query_string': row.query_string,
+            'remote_addr': row.remote_addr,
+            'scheme': row.scheme,
+            'headers': payload,
+        },
+    }
+
+
+def _normalize_security_row(row):
+    payload = {}
+    details = {}
+    if row.payload_json:
+        try:
+            payload = json.loads(row.payload_json)
+        except Exception:
+            payload = {}
+    if row.details_json:
+        try:
+            details = json.loads(row.details_json)
+        except Exception:
+            details = {}
+
+    message = row.message or ''
+    if not message and payload:
+        message = json.dumps(payload)
+
+    return {
+        'id': row.id,
+        'timestamp': row.created_at.isoformat() if row.created_at else None,
+        'source': 'security.log',
+        'level': row.level,
+        'event': row.event_type,
+        'ip': row.client_ip,
+        'method': row.method,
+        'path': row.path,
+        'message': message,
+        'raw': {
+            'event_timestamp': row.event_timestamp,
+            'url': row.url,
+            'user_agent': row.user_agent,
+            'details': details,
+            'payload': payload,
+        },
+    }
+
+
+def _normalize_websocket_row(row):
+    payload = {}
+    if row.payload_json:
+        try:
+            payload = json.loads(row.payload_json)
+        except Exception:
+            payload = {'payload_json': row.payload_json}
+
+    return {
+        'id': row.id,
+        'timestamp': row.created_at.isoformat() if row.created_at else None,
+        'source': 'websocket_security.log',
+        'level': row.level,
+        'event': row.event,
+        'ip': row.client_ip,
+        'method': None,
+        'path': None,
+        'message': json.dumps(payload) if payload else (row.event or ''),
+        'raw': payload,
+    }
+
+
+def _query_file_source(source, page, page_size, filters):
+    # Read bounded tail lines for file-based logs, then filter and paginate.
+    logs_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'security', 'logs'))
+    requested = os.path.abspath(os.path.join(logs_dir, source))
+    if not requested.startswith(logs_dir) or not os.path.exists(requested):
+        return None, 'File not found'
+
+    line_window = max(page * page_size * 4, 1500)
+    line_window = min(line_window, 10000)
+
+    try:
+        with open(requested, 'r', encoding='utf-8', errors='ignore') as fh:
+            recent_lines = list(deque(fh, maxlen=line_window))
+    except Exception as exc:
+        return None, str(exc)
+
+    filtered = []
+    q = filters['q']
+    level = filters['level']
+    ip = filters['ip']
+    method = filters['method']
+    path_filter = filters['path']
+    event_filter = filters['event']
+
+    for idx, line in enumerate(recent_lines):
+        text_line = line.rstrip('\n')
+        line_lc = text_line.lower()
+        if q and q not in line_lc:
+            continue
+        if ip and ip not in line_lc:
+            continue
+        if method and method not in line_lc:
+            continue
+        if path_filter and path_filter not in line_lc:
+            continue
+        if event_filter and event_filter not in line_lc:
+            continue
+
+        parts = text_line.split(' - ', 2)
+        timestamp = None
+        parsed_level = None
+        message = text_line
+        if len(parts) == 3:
+            timestamp, parsed_level, message = parts
+        elif len(parts) == 2:
+            timestamp, message = parts
+
+        if level and (not parsed_level or parsed_level.upper() != level.upper()):
+            continue
+
+        filtered.append({
+            'id': f"file-{idx}",
+            'timestamp': timestamp,
+            'source': source,
+            'level': parsed_level or 'INFO',
+            'event': None,
+            'ip': None,
+            'method': None,
+            'path': None,
+            'message': message,
+            'raw': {'line': text_line},
+        })
+
+    filtered.reverse()
+    total = len(filtered)
+    start = (page - 1) * page_size
+    end = start + page_size
+    return {
+        'items': filtered[start:end],
+        'total': total,
+    }, None
 
 
 @admin_bp.route('/admin/user/<int:user_id>/promote', methods=['POST'])
@@ -246,25 +461,154 @@ def admin_security_page():
         return guard
 
     blacklist = get_blacklist()
-    # List files in security/logs directory
-    import os
-    logs_dir = os.path.join(os.path.dirname(__file__), '..', 'security', 'logs')
-    logs_dir = os.path.abspath(logs_dir)
-    files = []
+    files = _get_security_log_sources()
+
+    return render_template('admin_security.html', blacklist_stats=blacklist.get_stats(), blacklisted=sorted(list(blacklist.blacklisted_ips)), log_files=files)
+
+
+@admin_bp.route('/admin/security/logs/query')
+@login_required
+def admin_security_query_logs():
+    # Query logs with filters and pagination for the admin log explorer.
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    sources = _get_security_log_sources()
+    source = (request.args.get('source') or 'security.log').strip()
+    if source not in sources:
+        return jsonify({'error': 'Invalid log source'}), 400
+
+    page = _parse_int_arg('page', 1, min_value=1, max_value=100000)
+    page_size = _parse_int_arg('page_size', 50, min_value=10, max_value=200)
+    level = (request.args.get('level') or '').strip().upper()
+    if level == 'ALL':
+        level = ''
+
+    filters = {
+        'q': (request.args.get('q') or '').strip().lower(),
+        'level': level,
+        'ip': (request.args.get('ip') or '').strip().lower(),
+        'method': (request.args.get('method') or '').strip().lower(),
+        'path': (request.args.get('path') or '').strip().lower(),
+        'event': (request.args.get('event') or '').strip().lower(),
+        'start_dt': _parse_datetime_arg('start'),
+        'end_dt': _parse_datetime_arg('end'),
+    }
+
     try:
-        if os.path.exists(logs_dir):
-            for fn in sorted(os.listdir(logs_dir)):
-                if os.path.isfile(os.path.join(logs_dir, fn)):
-                    files.append(fn)
-    except Exception:
-        files = []
+        if source == 'requests.log':
+            query = RequestLog.query
+            if filters['ip']:
+                query = query.filter(RequestLog.client_ip.ilike(f"%{filters['ip']}%"))
+            if filters['method']:
+                query = query.filter(RequestLog.method.ilike(f"%{filters['method']}%"))
+            if filters['path']:
+                query = query.filter(RequestLog.path.ilike(f"%{filters['path']}%"))
+            if filters['q']:
+                like_q = f"%{filters['q']}%"
+                query = query.filter(
+                    (RequestLog.path.ilike(like_q)) |
+                    (RequestLog.url.ilike(like_q)) |
+                    (RequestLog.client_ip.ilike(like_q)) |
+                    (RequestLog.method.ilike(like_q))
+                )
+            if filters['start_dt']:
+                query = query.filter(RequestLog.created_at >= filters['start_dt'])
+            if filters['end_dt']:
+                query = query.filter(RequestLog.created_at <= filters['end_dt'])
 
-    # Keep DB-backed log streams visible in admin UI.
-    for db_log_name in ('requests.log', 'security.log', 'websocket_security.log'):
-        if db_log_name not in files:
-            files.append(db_log_name)
+            total = query.count()
+            rows = query.order_by(RequestLog.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+            items = [_normalize_request_row(row) for row in rows]
 
-    return render_template('admin_security.html', blacklist_stats=blacklist.get_stats(), blacklisted=sorted(list(blacklist.blacklisted_ips)), log_files=sorted(files))
+        elif source == 'security.log':
+            query = SecurityLog.query
+            if filters['level']:
+                query = query.filter(SecurityLog.level == filters['level'])
+            if filters['event']:
+                query = query.filter(SecurityLog.event_type.ilike(f"%{filters['event']}%"))
+            if filters['ip']:
+                query = query.filter(SecurityLog.client_ip.ilike(f"%{filters['ip']}%"))
+            if filters['method']:
+                query = query.filter(SecurityLog.method.ilike(f"%{filters['method']}%"))
+            if filters['path']:
+                query = query.filter(SecurityLog.path.ilike(f"%{filters['path']}%"))
+            if filters['q']:
+                like_q = f"%{filters['q']}%"
+                query = query.filter(
+                    (SecurityLog.message.ilike(like_q)) |
+                    (SecurityLog.payload_json.ilike(like_q)) |
+                    (SecurityLog.path.ilike(like_q)) |
+                    (SecurityLog.url.ilike(like_q)) |
+                    (SecurityLog.event_type.ilike(like_q)) |
+                    (SecurityLog.client_ip.ilike(like_q))
+                )
+            if filters['start_dt']:
+                query = query.filter(SecurityLog.created_at >= filters['start_dt'])
+            if filters['end_dt']:
+                query = query.filter(SecurityLog.created_at <= filters['end_dt'])
+
+            total = query.count()
+            rows = query.order_by(SecurityLog.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+            items = [_normalize_security_row(row) for row in rows]
+
+        elif source == 'websocket_security.log':
+            query = WebsocketSecurityLog.query
+            if filters['level']:
+                query = query.filter(WebsocketSecurityLog.level == filters['level'])
+            if filters['event']:
+                query = query.filter(WebsocketSecurityLog.event.ilike(f"%{filters['event']}%"))
+            if filters['ip']:
+                query = query.filter(WebsocketSecurityLog.client_ip.ilike(f"%{filters['ip']}%"))
+            if filters['q']:
+                like_q = f"%{filters['q']}%"
+                query = query.filter(
+                    (WebsocketSecurityLog.event.ilike(like_q)) |
+                    (WebsocketSecurityLog.client_ip.ilike(like_q)) |
+                    (WebsocketSecurityLog.client_id.ilike(like_q)) |
+                    (WebsocketSecurityLog.payload_json.ilike(like_q))
+                )
+            if filters['start_dt']:
+                query = query.filter(WebsocketSecurityLog.created_at >= filters['start_dt'])
+            if filters['end_dt']:
+                query = query.filter(WebsocketSecurityLog.created_at <= filters['end_dt'])
+
+            total = query.count()
+            rows = query.order_by(WebsocketSecurityLog.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+            items = [_normalize_websocket_row(row) for row in rows]
+
+        else:
+            file_result, file_error = _query_file_source(source, page, page_size, filters)
+            if file_error:
+                return jsonify({'error': file_error}), 404
+            total = file_result['total']
+            items = file_result['items']
+
+        total_pages = max((total + page_size - 1) // page_size, 1)
+
+        return jsonify({
+            'source': source,
+            'filters': {
+                'q': filters['q'],
+                'level': filters['level'],
+                'ip': filters['ip'],
+                'method': filters['method'],
+                'path': filters['path'],
+                'event': filters['event'],
+                'start': request.args.get('start') or '',
+                'end': request.args.get('end') or '',
+            },
+            'pagination': {
+                'page': page,
+                'page_size': page_size,
+                'total': total,
+                'total_pages': total_pages,
+            },
+            'items': items,
+        })
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
 
 
 @admin_bp.route('/admin/security/logfile/<path:filename>')
@@ -417,7 +761,7 @@ def admin_security_tokens_legacy():
 @admin_bp.route('/admin/telescopes')
 @login_required
 def admin_manage_telescopes():
-    # Display telescope tokens and related telescope info
+    # Display telescope tokens and pending approvals
     guard = _admin_guard()
     if guard:
         return guard
@@ -434,7 +778,10 @@ def admin_manage_telescopes():
             'name': rec.name,
             'client_type': rec.client_type,
             'created': rec.created_at.isoformat() if rec.created_at else 'Unknown',
-            'db_info': None
+            'db_info': None,
+            'is_approved': getattr(rec, 'is_approved', True),
+            'is_disabled': getattr(rec, 'is_disabled', False),
+            'user_id': getattr(rec, 'user_id', None),
         }
 
         try:
@@ -452,6 +799,18 @@ def admin_manage_telescopes():
         
         view_tokens.append(token_data)
 
+    # Pending approvals: user-registered telescopes awaiting admin approval
+    pending_approvals = Telescope.query.filter_by(is_approved=False).order_by(Telescope.token_created_at.asc()).all()
+    pending_list = []
+    for rec in pending_approvals:
+        pending_list.append({
+            'id': rec.id,
+            'name': rec.telescope_id,
+            'type': rec.type,
+            'user_id': rec.user_id,
+            'created': rec.token_created_at.isoformat() if rec.token_created_at else 'Unknown',
+        })
+
     generated_token = session.pop('new_telescope_token', None)
     generated_token_name = session.pop('new_telescope_token_name', None)
 
@@ -460,6 +819,7 @@ def admin_manage_telescopes():
         tokens=view_tokens,
         generated_token=generated_token,
         generated_token_name=generated_token_name,
+        pending_approvals=pending_list,
     )
 
 
@@ -502,6 +862,60 @@ def admin_generate_telescope_token():
     return redirect(url_for('admin.admin_manage_telescopes'))
 
 
+@admin_bp.route('/admin/telescopes/<int:telescope_id>/approve', methods=['POST'])
+@login_required
+def admin_approve_telescope(telescope_id):
+    # Approve a user-registered telescope, making it active
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    from models.tables import Telescope
+    rec = db.session.get(Telescope, telescope_id)
+    if not rec:
+        flash('Telescope not found.', 'danger')
+        return redirect(url_for('admin.admin_manage_telescopes'))
+
+    rec.is_approved = True
+    db.session.commit()
+    sec_logger.info(f"telescope_approved: id={rec.id}, name={rec.telescope_id}, by={current_user.id}")
+    flash(f'Telescope "{rec.telescope_id}" approved.', 'success')
+    return redirect(url_for('admin.admin_manage_telescopes'))
+
+
+@admin_bp.route('/admin/telescopes/<int:telescope_id>/toggle_disabled', methods=['POST'])
+@login_required
+def admin_toggle_telescope_disabled(telescope_id):
+    # Force enable or disable a telescope without deleting it
+    guard = _admin_guard()
+    if guard:
+        return guard
+
+    from models.tables import Telescope
+    rec = db.session.get(Telescope, telescope_id)
+    if not rec:
+        flash('Telescope not found.', 'danger')
+        return redirect(url_for('admin.admin_manage_telescopes'))
+
+    rec.is_disabled = not rec.is_disabled
+    db.session.commit()
+    state = 'disabled' if rec.is_disabled else 'enabled'
+    sec_logger.info(f"telescope_{state}: id={rec.id}, name={rec.telescope_id}, by={current_user.id}")
+    # If the telescope was disabled, ensure any active connection is disconnected
+    if rec.is_disabled:
+        try:
+            from app.WebsocketServer import disconnect_client_by_id
+            disconnected = disconnect_client_by_id(rec.telescope_id, reason='admin_disabled')
+            disconnect_client_by_id(f"{rec.telescope_id}_liveview", reason='admin_disabled')
+            if disconnected:
+                sec_logger.info(f"Disconnected active client for disabled telescope: {rec.telescope_id}")
+        except Exception:
+            pass
+
+    flash(f'Telescope "{rec.telescope_id}" has been {state}.', 'success')
+    return redirect(url_for('admin.admin_manage_telescopes'))
+
+
 @admin_bp.route('/admin/telescopes/revoke', methods=['POST'])
 @admin_bp.route('/admin/security/tokens/revoke', methods=['POST'])
 @login_required
@@ -522,6 +936,18 @@ def admin_revoke_telescope_token():
     if rec:
         revoke_token_by_id(identifier)
         sec_logger.info(f"token_revoked: token_id={rec.id}, by={current_user.id}")
+
+        # Attempt to disconnect any active websocket clients matching this telescope name
+        try:
+            from app.WebsocketServer import disconnect_client_by_id
+            disconnected = disconnect_client_by_id(rec.name, reason='token_revoked')
+            # also try liveview client id
+            disconnect_client_by_id(f"{rec.name}_liveview", reason='token_revoked')
+            if disconnected:
+                sec_logger.info(f"Disconnected active client for revoked telescope: {rec.name}")
+        except Exception:
+            pass
+
         flash('Telescope token revoked.', 'success')
     else:
         flash('Token not found.', 'danger')

@@ -140,6 +140,7 @@ document.addEventListener("DOMContentLoaded", function() {
     loadTelescopes();
     loadSelectedTelescope();
     loadTrackingStatus();
+    initializeLiveHistogram();
     
     // Initialize draggable panels
     const trackingPanel = document.getElementById('trackingPanel');
@@ -204,7 +205,27 @@ function takePhoto() {
 let liveViewActive = false;
 let liveViewImage = null;
 let refreshInterval = null;
+let liveHistogram = null;
 const REFRESH_RATE = 1000; // Refresh every 1 second
+
+function initializeLiveHistogram() {
+    if (typeof window.HistogramPanel !== 'function' || liveHistogram) {
+        return;
+    }
+
+    liveHistogram = new window.HistogramPanel({
+        canvasId: 'liveHistogramCanvas',
+        controlsRootId: 'liveHistogramControls',
+        statsId: 'liveHistogramStats',
+        emptyMessage: 'Waiting for live frame...'
+    });
+
+    const image = document.getElementById('liveViewImage');
+    if (liveHistogram && image) {
+        image.crossOrigin = 'anonymous';
+        liveHistogram.setSourceImage(image);
+    }
+}
 
 // Function to start refreshing the live view image
 function startImageRefresh() {
@@ -795,6 +816,8 @@ function updateLiveViewSrcForTelescope(telescopeId) {
         liveViewImage = document.getElementById('liveViewImage');
     }
     if (!liveViewImage) return;
+
+    liveViewImage.crossOrigin = 'anonymous';
 
     const domain = (window.APP_DOMAIN && typeof window.APP_DOMAIN === 'string') ? window.APP_DOMAIN : 'telescopes.dev';
     const newSrc = `https://${domain}/liveview/${telescopeId}`;

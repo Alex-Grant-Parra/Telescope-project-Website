@@ -12,6 +12,7 @@ from models.user import User
 from models.trusted_device import TrustedDevice
 from app.db import db
 from utility.emailer import send_email
+from datetime import datetime
 
 
 auth_bp = Blueprint('auth', __name__)
@@ -198,7 +199,7 @@ def register():
             return redirect(url_for('auth.register'))
 
         hashed_password = hash_password(password)
-        new_user = User(username=username, email=email, password=hashed_password)
+        new_user = User(username=username, email=email, password=hashed_password, created_at=datetime.utcnow())
         new_user.set_email(email)
         new_user.set_totp_secret()  # Generate TOTP secret
 

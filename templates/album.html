@@ -247,6 +247,40 @@
         max-height: 2.3em;
     }
 
+    .album-histogram-panel {
+        margin-top: 1rem;
+        border: 1px solid var(--album-border);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 0.75rem;
+    }
+
+    .album-histogram-panel h3 {
+        font-size: 0.88rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.6rem;
+    }
+
+    .album-histogram-panel .form-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+
+    .album-histogram-canvas {
+        width: 100%;
+        height: 145px;
+        border-radius: 8px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: #0f172a;
+    }
+
+    .album-histogram-stats {
+        color: var(--album-muted);
+        font-size: 0.76rem;
+        margin-top: 0.4rem;
+    }
+
     @media (max-width: 1200px) {
         .album-layout {
             grid-template-columns: 1fr;
@@ -322,6 +356,56 @@
 
                         <div id="metadata-sections" class="metadata-sections"></div>
                         <div id="metadata-status" class="small text-muted mt-3"></div>
+
+                        <div class="album-histogram-panel">
+                            <h3 class="mb-2">Captured Photo Histogram</h3>
+                            <div class="histogram-settings" id="albumHistogramControls">
+                                <div class="row g-2 align-items-center mb-2">
+                                    <div class="col-7">
+                                        <label class="form-label mb-0">Channel</label>
+                                        <select class="form-select form-select-sm" data-hist="mode">
+                                            <option value="luminance" selected>Luminance</option>
+                                            <option value="rgb">RGB Overlay</option>
+                                            <option value="red">Red</option>
+                                            <option value="green">Green</option>
+                                            <option value="blue">Blue</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-5">
+                                        <label class="form-label mb-0">Bins <span data-hist="bins-value">128</span></label>
+                                        <input type="range" class="form-range" min="32" max="512" step="32" value="128" data-hist="bins">
+                                    </div>
+                                </div>
+                                <div class="row g-2 align-items-center mb-2">
+                                    <div class="col-6">
+                                        <label class="form-label mb-0">Black Point <span data-hist="black-point-value">0%</span></label>
+                                        <input type="range" class="form-range" min="0" max="95" step="1" value="0" data-hist="black-point">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label mb-0">White Point <span data-hist="white-point-value">100%</span></label>
+                                        <input type="range" class="form-range" min="5" max="100" step="1" value="100" data-hist="white-point">
+                                    </div>
+                                </div>
+                                <div class="row g-2 align-items-center">
+                                    <div class="col-6">
+                                        <label class="form-label mb-0">Sample Step <span data-hist="sample-step-value">2 px</span></label>
+                                        <input type="range" class="form-range" min="1" max="10" step="1" value="2" data-hist="sample-step">
+                                    </div>
+                                    <div class="col-6 d-flex gap-2 pt-3">
+                                        <div class="form-check form-check-inline mb-0">
+                                            <input class="form-check-input" type="checkbox" id="albumHistogramLogScale" data-hist="log-scale">
+                                            <label class="form-check-label" for="albumHistogramLogScale">Log</label>
+                                        </div>
+                                        <div class="form-check form-check-inline mb-0">
+                                            <input class="form-check-input" type="checkbox" id="albumHistogramSmooth" data-hist="smooth">
+                                            <label class="form-check-label" for="albumHistogramSmooth">Smooth</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <canvas id="albumHistogramCanvas" class="album-histogram-canvas" width="420" height="145"></canvas>
+                            <div id="albumHistogramStats" class="album-histogram-stats">No image loaded.</div>
+                        </div>
                     </div>
                 </div>
             </aside>
@@ -335,11 +419,32 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/histogram.js') }}?v=20260616-hist"></script>
 <script>
     let photos = [];
     let selectedNames = [];
     let activePhoto = null;
     let metadataCache = new Map();
+    let albumHistogram = null;
+
+    function initializeAlbumHistogram() {
+        if (typeof window.HistogramPanel !== 'function' || albumHistogram) {
+            return;
+        }
+
+        albumHistogram = new window.HistogramPanel({
+            canvasId: 'albumHistogramCanvas',
+            controlsRootId: 'albumHistogramControls',
+            statsId: 'albumHistogramStats',
+            emptyMessage: 'Select a photo to generate histogram.'
+        });
+
+        const previewImage = document.getElementById('preview-image');
+        if (previewImage) {
+            previewImage.crossOrigin = 'anonymous';
+            albumHistogram.setSourceImage(previewImage);
+        }
+    }
 
     function ordinalSuffix(day) {
         if (day > 3 && day < 21) return day + "th";
@@ -508,6 +613,9 @@
         document.getElementById('preview-content').classList.add('d-none');
         setStatus(message || '');
         document.getElementById('save-metadata-btn').disabled = true;
+        if (albumHistogram) {
+            albumHistogram.clear('Select a photo to generate histogram.');
+        }
     }
 
     function showPreview(photoMeta) {
@@ -521,6 +629,9 @@
         document.getElementById('save-metadata-btn').disabled = false;
         renderMetadataSections(photoMeta);
         setStatus('Metadata loaded.');
+        if (albumHistogram) {
+            albumHistogram.refresh();
+        }
     }
 
     function showStatusLoading() {
@@ -681,6 +792,7 @@
             });
     }
 
+    initializeAlbumHistogram();
     fetchPhotos();
 </script>
 

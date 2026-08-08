@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en" data-night-mode="{% if current_user.is_authenticated %}{{ current_user.get_night_mode()|tojson }}{% else %}false{% endif %}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>SELENO Landing</title>
+    <script>
+        // Cleanup any leftover service worker/cache from an older build that broke
+        // video playback with an infinite net::ERR_ABORTED loop (see base.html).
+        (function () {
+            try {
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(function (regs) {
+                        regs.forEach(function (reg) { reg.unregister(); });
+                    }).catch(function () {});
+                }
+                if ('caches' in window) {
+                    caches.keys().then(function (keys) {
+                        keys.forEach(function (key) {
+                            if (key.indexOf('video-cache') !== -1) caches.delete(key);
+                        });
+                    }).catch(function () {});
+                }
+            } catch (e) {}
+        })();
+        (function(){
+            try {
+                var saved = localStorage.getItem('night_mode');
+                var serverPref = document.documentElement.getAttribute('data-night-mode');
+                var dark = saved === 'true' || serverPref === 'true';
+                if (dark) document.documentElement.classList.add('night-mode');
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='icons/favicon.ico') }}" type="image/x-icon">
+</head>
+<body class="landing-body">
+    <main class="landing-shell" id="landingShell">
+        <header class="landing-topbar">
+            <a class="landing-brand" href="{{ url_for('home.home') }}">SELENO</a>
+            <div class="landing-topbar-actions">
+                <button id="landingThemeToggle" class="theme-toggle" aria-label="Toggle light and dark mode" type="button">
+                    <span class="theme-toggle-track">
+                        <span class="theme-toggle-thumb"></span>
+                    </span>
+                    <span class="theme-toggle-label">Theme</span>
+                </button>
+                <a class="landing-skip" href="{{ url_for('home.home') }}">Skip intro</a>
+            </div>
+        </header>
+
+        <section class="landing-panel" data-depth="0.15">
+            <video class="landing-video lazy-landing-video" muted loop playsinline preload="metadata" poster="{{ url_for('static', filename='icons/favicon.ico') }}">
+                <source data-src="{{ url_for('static', filename='videos/milkyWay.mp4') }}" type="video/mp4">
+            </video>
+            <div class="landing-gradient"></div>
+            <div class="landing-content">
+                <p class="landing-kicker">Remote astronomy, redesigned</p>
+                <h1>Command your telescope with cinematic precision.</h1>
+                <p>SELENO blends live control, deep sky planning, and instant media review in a streamlined observatory workflow.</p>
+            </div>
+        </section>
+
+        <section class="landing-panel" data-depth="0.22">
+            <video class="landing-video lazy-landing-video" muted loop playsinline preload="none" poster="{{ url_for('static', filename='icons/favicon.ico') }}">
+                <source data-src="{{ url_for('static', filename='videos/jupiter.mp4') }}" type="video/mp4">
+            </video>
+            <div class="landing-gradient"></div>
+            <div class="landing-content">
+                <p class="landing-kicker">Track and align</p>
+                <h2>Point, center, and monitor in real time.</h2>
+                <p>Switch from object search to camera feed without friction. Keep your attention on the sky, not the interface.</p>
+            </div>
+        </section>
+
+        <section class="landing-panel" data-depth="0.18">
+            <video class="landing-video lazy-landing-video" muted loop playsinline preload="none" poster="{{ url_for('static', filename='icons/favicon.ico') }}">
+                <source data-src="{{ url_for('static', filename='videos/crabNebula.mp4') }}" type="video/mp4">
+            </video>
+            <div class="landing-gradient"></div>
+            <div class="landing-content">
+                <p class="landing-kicker">Capture and curate</p>
+                <h2>Turn nightly sessions into a living gallery.</h2>
+                <p>Review your astrophotography and telescope telemetry in one coherent experience built for nightly use.</p>
+            </div>
+        </section>
+
+        <section class="landing-panel landing-finale" id="landingFinale" data-depth="0.28">
+            <video class="landing-video lazy-landing-video" muted loop playsinline preload="none" poster="{{ url_for('static', filename='icons/favicon.ico') }}">
+                <source data-src="{{ url_for('static', filename='videos/n11.mp4') }}" type="video/mp4">
+            </video>
+            <div class="landing-gradient"></div>
+            <div class="landing-content">
+                <p class="landing-kicker">Ready to launch</p>
+                <h2>Scroll to enter your control dashboard.</h2>
+                <p>When you reach the end of this sequence, we automatically move you to the main home page.</p>
+                <a class="landing-enter" href="{{ url_for('home.home') }}">Enter home now</a>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        (function(){
+            var homeUrl = "{{ url_for('home.home') }}";
+            var root = document.documentElement;
+            var body = document.body;
+            var redirected = false;
+            var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            var saveData = !!(navigator.connection && navigator.connection.saveData);
+            var videos = Array.prototype.slice.call(document.querySelectorAll('.lazy-landing-video'));
+
+            function persistTheme(isNight) {
+                try { localStorage.setItem('night_mode', isNight ? 'true' : 'false'); } catch (e) {}
+                fetch('/user/night_mode', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+                    },
+                    body: JSON.stringify({ night_mode: isNight })
+                }).catch(function(){});
+            }
+
+            var themeBtn = document.getElementById('landingThemeToggle');
+            if (themeBtn) {
+                themeBtn.addEventListener('click', function(){
+                    body.classList.toggle('night-mode');
+                    root.classList.toggle('night-mode');
+                    persistTheme(body.classList.contains('night-mode'));
+                });
+            }
+
+            function loadVideo(video) {
+                var source = video.querySelector('source[data-src]');
+                if (!source || source.src) return;
+                source.src = source.getAttribute('data-src');
+                try { video.load(); } catch (e) {}
+            }
+
+            if ('IntersectionObserver' in window) {
+                var observer = new IntersectionObserver(function(entries){
+                    entries.forEach(function(entry){
+                        var video = entry.target;
+                        if (!entry.isIntersecting) {
+                            if (!video.paused) video.pause();
+                            return;
+                        }
+                        loadVideo(video);
+                        if (!reduceMotion && !saveData) {
+                            var p = video.play();
+                            if (p && typeof p.catch === 'function') p.catch(function(){});
+                        }
+                    });
+                }, { threshold: 0.45 });
+                videos.forEach(function(v){ observer.observe(v); });
+            } else if (videos.length) {
+                loadVideo(videos[0]);
+                if (!reduceMotion && !saveData) videos[0].play().catch(function(){});
+            }
+
+            var panels = Array.prototype.slice.call(document.querySelectorAll('.landing-panel'));
+            var ticking = false;
+
+            function updateParallax() {
+                ticking = false;
+                var viewportH = window.innerHeight || 1;
+                panels.forEach(function(panel){
+                    var rect = panel.getBoundingClientRect();
+                    var center = rect.top + rect.height * 0.5;
+                    var delta = (center - viewportH * 0.5) / viewportH;
+                    var depth = Number(panel.getAttribute('data-depth') || '0.2');
+                    var media = panel.querySelector('.landing-video');
+                    var content = panel.querySelector('.landing-content');
+                    var shift = delta * depth * -80;
+                    if (media) media.style.transform = 'translate3d(0,' + shift.toFixed(2) + 'px,0) scale(1.08)';
+                    if (content) content.style.transform = 'translate3d(0,' + (shift * 0.3).toFixed(2) + 'px,0)';
+                });
+            }
+
+            function requestParallax() {
+                if (reduceMotion) return;
+                if (!ticking) {
+                    ticking = true;
+                    window.requestAnimationFrame(updateParallax);
+                }
+            }
+
+            function maybeRedirect() {
+                if (redirected) return;
+                var scrollTop = window.scrollY || root.scrollTop || body.scrollTop || 0;
+                var max = Math.max(1, root.scrollHeight - window.innerHeight);
+                if (scrollTop >= max - 8) {
+                    redirected = true;
+                    window.location.assign(homeUrl);
+                }
+            }
+
+            window.addEventListener('scroll', function(){
+                requestParallax();
+                maybeRedirect();
+            }, { passive: true });
+            window.addEventListener('resize', requestParallax);
+            requestParallax();
+        })();
+    </script>
+</body>
+</html>

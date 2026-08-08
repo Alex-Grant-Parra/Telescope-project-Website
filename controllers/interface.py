@@ -3,13 +3,20 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from flask import Blueprint, render_template, request, jsonify, session
-from Astrophysics.V1_Keplarian.convert import convert
+from astrophysics.V1_Keplarian.convert import convert
+from astrophysics.planetary_model import getAllCelestialData
 from datetime import datetime
 import time
 
 from app.telescopeLink import Telescope, current_telescope  # Updated import
 
 interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
+
+_CELESTIAL_DEFAULT_VMAGS = {
+    "sun": -26.74,
+    "moon": -12.70,
+    "pluto": 14.0,
+}
 
 @interface_bp.route("/")
 def interface():
@@ -80,7 +87,6 @@ def extract_friendly_common_name(common_names_field: str) -> str:
 
 @interface_bp.route("/search_object", methods=["POST"])
 def search_object():
-    from Astrophysics.V1_Keplarian.astroTools import getAllCelestialData
     from models.tables import HDSTARtable, IndexTable, NGCtable
     data = request.json
     search_value = data.get("searchValue", "").strip()
@@ -89,7 +95,7 @@ def search_object():
 
     result = None
 
-    searchableCelestials = ["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"]
+    searchableCelestials = ["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto"]
     try:
         # Normalize search for robust matching
         raw = search_value
@@ -121,7 +127,7 @@ def search_object():
         elif norm.lower() in searchableCelestials:
             search_value = norm.lower()
             now = datetime.utcnow()
-            CelestialData = getAllCelestialData(now.year, now.month, now.day)
+            CelestialData = getAllCelestialData(now.year, now.month, now.day, now.hour, now.minute, now.second)
 
             if search_value in CelestialData:
                 formattedData = format_celestial_data(search_value, CelestialData[search_value])
@@ -182,13 +188,41 @@ def format_celestial_data(name, data):
     ra_degrees = ra_hours * 15  # Convert hours to degrees (360/24h = 15/h)
     
     dec_degrees = convert.HrMinSecToDegrees(data['dec'][0], data['dec'][1], data['dec'][2])
+    vmag = data.get("vmag")
+    if vmag is None:
+        vmag = _CELESTIAL_DEFAULT_VMAGS.get(name.lower(), 30)
     
-    return {
+    formatted = {
         "Name": name.capitalize(),
         "RA": ra_degrees,
         "DEC": dec_degrees,
-        "V-Mag": data["vmag"]
+        "V-Mag": vmag
     }
+
+    if data.get("phase_name"):
+        formatted["phase_name"] = data.get("phase_name")
+    phase_angle = data.get("phase_angle_deg")
+    if phase_angle is not None:
+        try:
+            formatted["phase_angle_deg"] = float(phase_angle)
+        except Exception:
+            pass
+
+    moon_illum = data.get("moon_illumination_fraction")
+    if moon_illum is not None:
+        try:
+            formatted["moon_illumination_fraction"] = float(moon_illum)
+        except Exception:
+            pass
+
+    moon_elong = data.get("moon_elongation_deg")
+    if moon_elong is not None:
+        try:
+            formatted["moon_elongation_deg"] = float(moon_elong)
+        except Exception:
+            pass
+
+    return formatted
 
 @interface_bp.route("/get_camera_choices")
 def get_camera_choices():

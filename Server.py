@@ -312,6 +312,10 @@ generate_routes_file()
 
 # User Loader for Flask-Login
 from models.user import User
+# NOTE: Do NOT import `Telescope` at module import time — importing
+# models.tables previously triggered `get_app()` and caused circular
+# imports. Model reflections and booking-related migrations are run
+# explicitly below after `db.create_all()`.
 from models.trusted_device import TrustedDevice  # Import to register the model
 from models.logging import RequestLog, SecurityLog, WebsocketSecurityLog  # Import to register log tables
 from models.client_release import ClientReleaseSubmission  # Import to register release review model
@@ -423,6 +427,23 @@ with app.app_context():
     except Exception as e:
         print(f"[WARNING] Could not migrate API tokens to DB: {e}")
 
+    # Ensure booking metadata columns exist for telescope scheduling
+    try:
+        from models.booking import ensure_telescope_booking_columns
+        ensure_telescope_booking_columns()
+        # Now run any model reflections that need the app context but
+        # avoid importing models that will import Server during module
+        # import time. This keeps import order safe.
+        try:
+            from models.tables import register_model_reflections
+            register_model_reflections(app)
+        except Exception:
+            # If reflections fail, log but continue; most installs don't
+            # require dynamic reflection.
+            pass
+    except Exception as e:
+        print(f"[WARNING] Could not ensure booking columns on telescopes: {e}")
+
 # Homepage Redirection
 @app.route("/")
 def index():
@@ -463,7 +484,7 @@ def admin_ws_disconnect(client_id):
 @app.route("/wiki")
 def wikiRedirect():
     return redirect(
-        "https://github.com/Alex-Grant-Parra/ASTRA/wiki",
+        "https://github.com/Alex-Grant-Parra/SELENO/wiki",
         code=301
     )
 

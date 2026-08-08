@@ -1,249 +1,51 @@
 {% extends 'base.html' %}
 
-{% block title %}Home - Telescope Control{% endblock %}
+{% block title %}Home - SELENO{% endblock %}
 
 {% block content %}
-<main class="video-hero" id="video-hero">
-
-    <!-- Section 1: Interface -->
-    <section class="video-section" id="section-interface">
-        <!-- Lazy video: source stored in data-src; preload disabled to avoid fetching everything at once -->
-        <video class="hero-video milky-video lazy-video" muted loop playsinline preload="none">
-            <source data-src="{{ url_for('static', filename='videos/milkyWay.mp4') }}" type="video/mp4">
-        </video>
-        <div class="section-overlay">
-            <div class="overlay-content">
-                <h2>Open the Interface</h2>
-                <p>Control your telescope in real-time.</p>
+<main class="home-dashboard">
+    <section class="home-hero">
+        <div class="home-hero-copy">
+            <p class="home-eyebrow">Observatory Command Center</p>
+            <h1>Everything you need for tonight's session.</h1>
+            <p class="home-subtitle">Launch capture workflows, monitor telescope status, plan sky targets, and manage bookings from one clean dashboard.</p>
+            <div class="home-hero-actions">
                 <a class="btn btn-primary" href="{{ url_for('interface.interface') }}">Open Interface</a>
+                <a class="btn btn-ghost" href="{{ url_for('star_map.star_map') }}">Star Map</a>
             </div>
+        </div>
+        <div class="home-hero-media" aria-hidden="true">
+            <video class="home-hero-video" muted loop autoplay playsinline preload="metadata">
+                <source src="{{ url_for('static', filename='videos/milkyWay.mp4') }}" type="video/mp4">
+            </video>
         </div>
     </section>
 
-    <!-- Section 2: Star map -->
-    <section class="video-section" id="section-starmap">
-        <video class="hero-video jupiter-video quarter lazy-video" muted loop playsinline preload="none">
-            <source data-src="{{ url_for('static', filename='videos/jupiter.mp4') }}" type="video/mp4">
-        </video>
-        <div class="section-overlay">
-            <div class="overlay-content">
-                <h2>Star Map</h2>
-                <p>Explore the sky and plan your observations.</p>
-                <a class="btn btn-outline-light" href="{{ url_for('star_map.star_map') }}">View Star Map</a>
-            </div>
-        </div>
+    <section class="home-grid" aria-label="Primary navigation">
+        <a class="home-card" href="{{ url_for('interface.interface') }}">
+            <h2>Interface</h2>
+            <p>Live view, camera controls, telescope targeting, and tracking tools.</p>
+        </a>
+        <a class="home-card" href="{{ url_for('book.book_page') }}">
+            <h2>Book</h2>
+            <p>Reserve telescope time, review bookings, and manage owner requests.</p>
+        </a>
+        <a class="home-card" href="{{ url_for('album.album') }}">
+            <h2>Album</h2>
+            <p>Browse and manage astrophotography captured during your sessions.</p>
+        </a>
+        <a class="home-card" href="{{ url_for('map.map_page') }}">
+            <h2>World Map</h2>
+            <p>Check weather and sky brightness layers before you plan observations.</p>
+        </a>
+        <a class="home-card" href="{{ url_for('downloads.downloads_home') }}">
+            <h2>Downloads</h2>
+            <p>Access current releases and client packages for your environment.</p>
+        </a>
+        <a class="home-card" href="{{ url_for('contact.support_home') }}">
+            <h2>Support</h2>
+            <p>Open support tickets and get help when something needs attention.</p>
+        </a>
     </section>
-
-    <!-- Section 3: Album -->
-    <section class="video-section" id="section-album">
-        <video class="hero-video lazy-video" muted loop playsinline preload="none">
-            <source data-src="{{ url_for('static', filename='videos/crabNebula.mp4') }}" type="video/mp4">
-        </video>
-        <div class="section-overlay">
-            <div class="overlay-content">
-                <h2>Gallery</h2>
-                <p>Browse captured images and videos.</p>
-                <a class="btn btn-outline-light" href="{{ url_for('album.album') }}">Open Album</a>
-            </div>
-        </div>
-    </section>
-
-    <!-- Section 4: More -->
-    <section class="video-section" id="section-about">
-        <video class="hero-video lazy-video" muted loop playsinline preload="none">
-            <source data-src="{{ url_for('static', filename='videos/n11.mp4') }}" type="video/mp4">
-        </video>
-        <div class="section-overlay">
-            <div class="overlay-content">
-                <h2>More</h2>
-                <p>Learn more about the project or grab the latest release.</p>
-                <div class="d-flex flex-wrap gap-2">
-                    <a class="btn btn-outline-light" href="{{ url_for('about.about') }}">About</a>
-                    <a class="btn btn-outline-light" href="{{ url_for('downloads.downloads_home') }}">Downloads</a>
-                </div>
-            </div>
-        </div>
-    </section>
-
 </main>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-// Set CSS var for navbar height so sections fill remaining viewport
-document.addEventListener('DOMContentLoaded', function(){
-    var nav = document.querySelector('.navbar');
-    var navHeight = nav ? nav.getBoundingClientRect().height : 56;
-    document.documentElement.style.setProperty('--nav-height', navHeight + 'px');
-    // Enable smooth scroll and snap behavior for keyboard/trackpad
-    document.documentElement.style.scrollBehavior = 'smooth';
-});
-</script>
-<!-- Service worker registration and autoplay handling -->
-<script>
-if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register("{{ url_for('static', filename='js/service-worker.js') }}")
-        .then(() => console.log('Service worker registered for video caching'))
-        .catch((e) => console.warn('SW registration failed', e));
-}
-
-
-// function showPlayOverlay(videos) {
-//     let overlay = document.getElementById('play-overlay');
-//     if (!overlay) {
-//         overlay = document.createElement('div');
-//         overlay.id = 'play-overlay';
-//         overlay.innerHTML = '<button id="play-overlay-btn" class="btn btn-lg btn-primary">Tap to play</button>';
-//         overlay.style.position = 'fixed';
-//         overlay.style.left = '50%';
-//         overlay.style.top = '50%';
-//         overlay.style.transform = 'translate(-50%, -50%)';
-//         overlay.style.zIndex = '9999';
-//         document.body.appendChild(overlay);
-//         document.getElementById('play-overlay-btn').addEventListener('click', function(){
-//             videos.forEach(v => { v.play().catch(()=>{}); });
-//             overlay.remove();
-//         });
-//     }
-// }
-
-// Autoplay handled by IntersectionObserver lazy-loader below (safer: loads source then plays)
-</script>
-<script>
-// Lazy-load videos and only play videos when visible to reduce CPU load
-(function(){
-    const lazyVideos = document.querySelectorAll('video.lazy-video');
-    let playingVideo = null;
-    let prefetchStarted = false;
-
-    function bufferedAheadSeconds(video) {
-        try {
-            const b = video.buffered;
-            if (b.length) {
-                const end = b.end(b.length - 1);
-                return Math.max(0, end - video.currentTime);
-            }
-        } catch (e) {}
-        return 0;
-    }
-
-    function getNotLoadedVideos() {
-        return Array.from(lazyVideos).filter(v => {
-            const s = v.querySelector('source[data-src]');
-            return s && !s.src;
-        });
-    }
-
-    function startPrefetchQueue() {
-        if (prefetchStarted) return;
-        prefetchStarted = true;
-        const queue = getNotLoadedVideos();
-        let i = 0;
-        function loadNext() {
-            if (i >= queue.length) return;
-            const v = queue[i++];
-            const src = v.querySelector('source[data-src]');
-            if (src && !src.src) {
-                src.src = src.getAttribute('data-src');
-                // Only call load() so browser fetches but we avoid immediate playback
-                try { v.load(); } catch (e) {}
-            }
-            // Stagger next load to avoid network spikes
-            setTimeout(loadNext, 600);
-        }
-        loadNext();
-    }
-
-    function maybeStartPrefetchFrom(video) {
-        if (prefetchStarted || !video) return;
-
-        function checkAndMaybe() {
-            // Consider readyState HAVE_ENOUGH_DATA (4) or at least 5s buffered ahead
-            if (video.readyState >= 4 || bufferedAheadSeconds(video) >= 5) {
-                startPrefetchQueue();
-                cleanup();
-            }
-        }
-
-        function onProgress() { checkAndMaybe(); }
-        function onTime() { checkAndMaybe(); }
-        function onCanPlayThrough() { checkAndMaybe(); }
-
-        function cleanup() {
-            video.removeEventListener('progress', onProgress);
-            video.removeEventListener('timeupdate', onTime);
-            video.removeEventListener('canplaythrough', onCanPlayThrough);
-        }
-
-        video.addEventListener('progress', onProgress);
-        video.addEventListener('timeupdate', onTime);
-        video.addEventListener('canplaythrough', onCanPlayThrough);
-        // Check immediately in case condition already met
-        checkAndMaybe();
-    }
-
-    if ('IntersectionObserver' in window) {
-        const io = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                const vid = entry.target;
-                if (entry.isIntersecting) {
-                    // Load source if not loaded
-                    const src = vid.querySelector('source[data-src]');
-                    if (src && !src.src) {
-                        src.src = src.getAttribute('data-src');
-                        vid.load();
-                    }
-
-                    // If nothing else is playing, start this one
-                    if (!playingVideo) {
-                        const p = vid.play();
-                        if (p !== undefined) p.catch(()=>{});
-                        playingVideo = vid;
-                        // Kick off prefetch once this primary video has buffered enough
-                        maybeStartPrefetchFrom(vid);
-                    }
-                } else {
-                    // Pause when not visible
-                    if (!vid.paused) {
-                        vid.pause();
-                        if (playingVideo === vid) playingVideo = null;
-                    }
-                }
-            });
-        }, { threshold: 0.5 });
-
-        lazyVideos.forEach(v => io.observe(v));
-    } else {
-        // Fallback: load and play first video and prefetch others once buffered
-        if (lazyVideos.length) {
-            const v = lazyVideos[0];
-            const src = v.querySelector('source[data-src]');
-            if (src) {
-                src.src = src.getAttribute('data-src');
-                try { v.load(); } catch (e) {}
-                v.play().catch(()=>{});
-                playingVideo = v;
-                maybeStartPrefetchFrom(v);
-            }
-        }
-    }
-
-    // Ensure only one video plays at a time and update prefetch trigger when a new video starts
-    document.addEventListener('play', (e) => {
-        const target = e.target;
-        if (target.tagName !== 'VIDEO') return;
-        if (playingVideo && playingVideo !== target) {
-            try { playingVideo.pause(); } catch (err) {}
-        }
-        playingVideo = target;
-        // If prefetch hasn't started yet, check buffer on the newly playing video
-        maybeStartPrefetchFrom(target);
-    }, true);
-})();
-</script>
-<style>
-/* Play overlay small inline style so it exists without editing main CSS */
-#play-overlay button { padding: 1rem 1.5rem; font-size: 1.125rem; }
-#play-overlay { background: rgba(0,0,0,0.45); border-radius: 8px; padding: 0.5rem; }
-</style>
 {% endblock %}

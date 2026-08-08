@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}My Telescopes{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="mb-0">My Telescopes</h2>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('book.owner_bookings_page') }}">Owner Booking Queue</a>
+    </div>
+    <p class="text-muted">Register a telescope to connect it to the server. Each new telescope requires admin approval before it can connect.</p>
+
+    {% if generated_token %}
+    <div class="card border-success mb-4">
+        <div class="card-header bg-success text-white">
+            <strong>New Telescope Token</strong> — Copy and store this now, it will not be shown again.
+        </div>
+        <div class="card-body">
+            <p class="mb-2">Token for <strong>{{ generated_name }}</strong>:</p>
+            <div class="input-group">
+                <input id="new-token-value" type="text" class="form-control font-monospace" readonly value="{{ generated_token }}" />
+                <button class="btn btn-outline-success" type="button" onclick="copyToken()">Copy</button>
+            </div>
+            <p class="mt-2 text-muted small">This telescope is pending admin approval. You will be able to use the token once approved.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Register new telescope -->
+    <div class="card mb-4">
+        <div class="card-header">Register a New Telescope</div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('telescopes.register_telescope') }}" class="row g-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <div class="col-sm-6">
+                    <input name="name" class="form-control" placeholder="Telescope name (e.g. Backyard Scope)" required maxlength="100" />
+                </div>
+                <div class="col-sm-auto">
+                    <button class="btn btn-primary" type="submit">Register &amp; Generate Token</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Existing telescopes -->
+    <div class="card">
+        <div class="card-header bg-dark text-white">Your Telescopes</div>
+        <div class="card-body">
+            {% if telescopes %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>Token Prefix</th>
+                            <th>Registered</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in telescopes %}
+                        <tr>
+                            <td>{{ t.telescope_id }}</td>
+                            <td>
+                                {% if t.is_disabled %}
+                                    <span class="badge bg-danger">Disabled by Admin</span>
+                                {% elif not t.is_approved %}
+                                    <span class="badge bg-warning text-dark">Pending Approval</span>
+                                {% else %}
+                                    <span class="badge bg-success">Active</span>
+                                {% endif %}
+                            </td>
+                            <td><code>{{ t.token_prefix }}...</code></td>
+                            <td><small>{{ t.token_created_at.strftime('%Y-%m-%d %H:%M') if t.token_created_at else '—' }}</small></td>
+                            <td>
+                                <div class="d-flex gap-2">
+                                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('book.telescope_booking_settings', telescope_id=t.id) }}">Settings</a>
+                                    <form method="post" action="{{ url_for('telescopes.revoke_my_telescope', telescope_id=t.id) }}" onsubmit="return confirm('Remove telescope &quot;{{ t.telescope_id }}&quot;? This cannot be undone.');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <p class="text-muted">You have no telescopes registered yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function copyToken() {
+    const el = document.getElementById('new-token-value');
+    if (!el) return;
+    el.select();
+    el.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(el.value)
+        .then(() => alert('Token copied to clipboard.'))
+        .catch(() => alert('Copy failed. Please copy manually.'));
+}
+</script>
+{% endblock %}

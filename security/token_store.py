@@ -88,9 +88,29 @@ def revoke_token_by_id(token_id):
     rec = get_token_by_id(token_id)
     if not rec:
         return None
+    # Capture name before deletion so we can disconnect active clients
+    telescope_name = getattr(rec, 'telescope_id', None)
+
     # Delete the entire telescope record instead of just clearing the token
     db.session.delete(rec)
     db.session.commit()
+
+    # Best-effort: disconnect any active websocket client with this telescope name
+    try:
+        from app.WebsocketServer import disconnect_client_by_id
+        if telescope_name:
+            try:
+                disconnect_client_by_id(telescope_name, reason='token_revoked')
+            except Exception:
+                pass
+            try:
+                disconnect_client_by_id(f"{telescope_name}_liveview", reason='token_revoked')
+            except Exception:
+                pass
+    except Exception:
+        # If websocket helper isn't available or fails, ignore silently
+        pass
+
     return rec
 
 
@@ -103,6 +123,12 @@ def verify_token(raw_token: str, *, required_scope=None, client_ip=None, client_
     rec = Telescope.query.filter_by(token_hash=digest).first()
     if not rec:
         return None, 'unknown_token'
+
+    if not rec.is_approved:
+        return None, 'pending_approval'
+
+    if rec.is_disabled:
+        return None, 'telescope_disabled'
 
     return rec, None
 
