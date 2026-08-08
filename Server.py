@@ -258,6 +258,13 @@ try:
 except Exception as e:
     print(f"CSRF token endpoint not available: {e}")
 
+@app.route('/sitemap.xml')
+def sitemap():
+    return Response(
+        open(os.path.join(BASE_DIR, 'static', 'sitemap.xml')).read(),
+        mimetype='application/xml'
+    )
+
 # Debugging - Print all registered routes
 print("\nRegistered Routes:")
 for rule in app.url_map.iter_rules():
