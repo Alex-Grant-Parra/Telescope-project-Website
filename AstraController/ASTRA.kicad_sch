@@ -4021,7 +4021,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "RF_Module:ESP32-WROOM-32E"
+		(symbol "RF_Module:ESP32-WROOM-32UE"
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -4038,7 +4038,7 @@
 					(justify left)
 				)
 			)
-			(property "Value" "ESP32-WROOM-32E"
+			(property "Value" "ESP32-WROOM-32UE"
 				(at 1.27 34.29 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -4049,7 +4049,7 @@
 					(justify left)
 				)
 			)
-			(property "Footprint" "RF_Module:ESP32-WROOM-32E"
+			(property "Footprint" "RF_Module:ESP32-WROOM-32UE"
 				(at 16.51 -34.29 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -4071,7 +4071,7 @@
 					)
 				)
 			)
-			(property "Description" "RF Module, ESP32-D0WD-V3 SoC, without PSRAM, Wi-Fi 802.11b/g/n, Bluetooth, BLE, 32-bit, 2.7-3.6V, onboard antenna, SMD"
+			(property "Description" "RF Module, ESP32-D0WD-V3 SoC, without PSRAM, Wi-Fi 802.11b/g/n, Bluetooth, BLE, 32-bit, 2.7-3.6V, external antenna, SMD"
 				(at 0 0 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -4082,7 +4082,7 @@
 					)
 				)
 			)
-			(property "ki_keywords" "RF Radio BT ESP ESP32 Espressif onboard PCB antenna"
+			(property "ki_keywords" "RF Radio BT ESP ESP32 Espressif external U.FL antenna"
 				(at 0 0 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -4093,7 +4093,7 @@
 					)
 				)
 			)
-			(property "ki_fp_filters" "ESP32?WROOM?32E*"
+			(property "ki_fp_filters" "ESP32?WROOM?32UE*"
 				(at 0 0 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -4104,7 +4104,7 @@
 					)
 				)
 			)
-			(symbol "ESP32-WROOM-32E_0_1"
+			(symbol "ESP32-WROOM-32UE_0_1"
 				(rectangle
 					(start -12.7 33.02)
 					(end 12.7 -33.02)
@@ -4117,7 +4117,7 @@
 					)
 				)
 			)
-			(symbol "ESP32-WROOM-32E_1_1"
+			(symbol "ESP32-WROOM-32UE_1_1"
 				(pin power_in line
 					(at 0 35.56 270)
 					(length 2.54)
@@ -5702,6 +5702,12 @@
 		(uuid "31a007f2-f63f-4988-bcd1-4fecd1225062")
 	)
 	(junction
+		(at 262.89 152.4)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "340de4a9-094c-47f6-9f28-b5abbceaafad")
+	)
+	(junction
 		(at 129.54 142.24)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5784,6 +5790,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "a7075892-13b7-488e-b0c4-c5d7a4522705")
+	)
+	(junction
+		(at 262.89 144.78)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "b57186ca-6a16-4433-8650-26371072e263")
 	)
 	(junction
 		(at 68.58 67.31)
@@ -6091,6 +6103,16 @@
 	)
 	(wire
 		(pts
+			(xy 262.89 142.24) (xy 262.89 144.78)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2d21ba58-3799-4dba-a83c-414ec2428054")
+	)
+	(wire
+		(pts
 			(xy 218.44 76.2) (xy 226.06 76.2)
 		)
 		(stroke
@@ -6168,6 +6190,16 @@
 			(type default)
 		)
 		(uuid "3477ae55-44f0-4904-8875-064eeaa82fac")
+	)
+	(wire
+		(pts
+			(xy 259.08 152.4) (xy 262.89 152.4)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "349717b5-15fe-447a-8c58-04badc770879")
 	)
 	(wire
 		(pts
@@ -6541,6 +6573,16 @@
 	)
 	(wire
 		(pts
+			(xy 262.89 152.4) (xy 266.7 152.4)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5e671d9b-620f-4798-857a-23b482a6b96f")
+	)
+	(wire
+		(pts
 			(xy 218.44 154.94) (xy 226.06 154.94)
 		)
 		(stroke
@@ -6568,6 +6610,16 @@
 			(type default)
 		)
 		(uuid "627b20f1-35c1-4f94-9029-ce5e160063f9")
+	)
+	(wire
+		(pts
+			(xy 262.89 144.78) (xy 266.7 144.78)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "62b70a41-54bb-48bb-90af-b24baadfc905")
 	)
 	(wire
 		(pts
@@ -7161,6 +7213,16 @@
 	)
 	(wire
 		(pts
+			(xy 262.89 152.4) (xy 262.89 154.94)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a644ad17-3f25-4aeb-9654-a9a04d12fef9")
+	)
+	(wire
+		(pts
 			(xy 223.52 83.82) (xy 223.52 91.44)
 		)
 		(stroke
@@ -7608,6 +7670,16 @@
 			(type default)
 		)
 		(uuid "db64f8c6-0bd5-471a-a82f-3bd8a6cf4385")
+	)
+	(wire
+		(pts
+			(xy 259.08 144.78) (xy 262.89 144.78)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "dc781202-bcd2-403d-bdca-edbd409656fa")
 	)
 	(wire
 		(pts
@@ -9026,84 +9098,6 @@
 		)
 	)
 	(symbol
-		(lib_id "power:+3.3V")
-		(at 259.08 144.78 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "098e08de-dbb1-45b8-bdd2-9735eae4b52c")
-		(property "Reference" "#PWR060"
-			(at 259.08 148.59 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "+3.3V"
-			(at 259.08 139.7 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 259.08 144.78 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 259.08 144.78 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
-			(at 259.08 144.78 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "2ca64562-d6c0-429d-88da-02e6d46cd219")
-		)
-		(instances
-			(project "ASTRA"
-				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
-					(reference "#PWR060")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "power:GND")
 		(at 20.32 48.26 0)
 		(unit 1)
@@ -9211,7 +9205,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
 			(at 151.13 78.232 90)
 			(hide yes)
 			(show_name no)
@@ -9235,6 +9229,17 @@
 		)
 		(property "Description" "Resistor"
 			(at 151.13 80.01 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 151.13 80.01 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -9292,7 +9297,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 54.3052 78.74 0)
 			(hide yes)
 			(show_name no)
@@ -9325,6 +9330,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 53.34 74.93 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "2755ee0f-846c-4124-9afb-d2558905ffb3")
 		)
@@ -9335,6 +9351,84 @@
 			(project "ASTRA"
 				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
 					(reference "C10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 262.89 154.94 0)
+		(mirror y)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "1acabb15-19ba-4c81-ad1e-16a99bfa0596")
+		(property "Reference" "#PWR063"
+			(at 262.89 161.29 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 262.89 160.02 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 262.89 154.94 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 262.89 154.94 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 262.89 154.94 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "dcdcac9e-60ca-4f98-85bc-5527a2082598")
+		)
+		(instances
+			(project "ASTRA"
+				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
+					(reference "#PWR063")
 					(unit 1)
 				)
 			)
@@ -9371,7 +9465,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
 			(at 102.87 135.382 90)
 			(hide yes)
 			(show_name no)
@@ -9404,6 +9498,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 102.87 137.16 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "8dc33f57-b82b-4448-8242-be56a9b49da8")
 		)
@@ -9414,84 +9519,6 @@
 			(project "ASTRA"
 				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
 					(reference "R3")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:GND")
-		(at 259.08 152.4 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "1ee4f500-fdb9-4262-86de-f1251a4972c4")
-		(property "Reference" "#PWR063"
-			(at 259.08 158.75 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "GND"
-			(at 259.08 157.48 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 259.08 152.4 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 259.08 152.4 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 259.08 152.4 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "ed48245f-c82b-4c51-8bbf-07409e843edd")
-		)
-		(instances
-			(project "ASTRA"
-				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
-					(reference "#PWR063")
 					(unit 1)
 				)
 			)
@@ -9764,7 +9791,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 68.2752 118.11 0)
 			(hide yes)
 			(show_name no)
@@ -9787,6 +9814,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor"
+			(at 67.31 114.3 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 67.31 114.3 0)
 			(hide yes)
 			(show_name no)
@@ -9975,7 +10013,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -10024,6 +10062,17 @@
 			)
 		)
 		(property "Description" "RJ connector, 8P8C (8 positions 8 connected)"
+			(at 208.28 149.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 208.28 149.86 0)
 			(hide yes)
 			(show_name no)
@@ -10152,7 +10201,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -10212,6 +10261,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 236.22 148.59 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "639d4908-cdbc-4659-9ab8-901a85a0e12a")
 		)
@@ -10251,7 +10311,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -10312,6 +10372,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 255.27 123.19 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "ffa4562f-572e-42f4-b09c-3e195ddab814")
 		)
@@ -10360,7 +10431,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 252.4252 26.67 0)
 			(hide yes)
 			(show_name no)
@@ -10383,6 +10454,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor"
+			(at 251.46 22.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 251.46 22.86 0)
 			(hide yes)
 			(show_name no)
@@ -10672,7 +10754,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_0805_2012Metric_Pad1.15x1.40mm_HandSolder"
+		(property "Footprint" "LED_SMD:LED_0805_2012Metric"
 			(at 124.46 139.7 0)
 			(hide yes)
 			(show_name no)
@@ -10706,6 +10788,17 @@
 			)
 		)
 		(property "Sim.Pins" "1=K 2=A"
+			(at 124.46 139.7 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 124.46 139.7 0)
 			(hide yes)
 			(show_name no)
@@ -10764,7 +10857,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 73.3552 74.93 0)
 			(hide yes)
 			(show_name no)
@@ -10787,6 +10880,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor"
+			(at 72.39 71.12 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 72.39 71.12 0)
 			(hide yes)
 			(show_name no)
@@ -11159,7 +11263,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 233.3752 71.12 0)
 			(hide yes)
 			(show_name no)
@@ -11182,6 +11286,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor"
+			(at 232.41 67.31 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 232.41 67.31 0)
 			(hide yes)
 			(show_name no)
@@ -11317,7 +11432,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
 			(at 102.87 130.302 90)
 			(hide yes)
 			(show_name no)
@@ -11341,6 +11456,17 @@
 		)
 		(property "Description" "Resistor"
 			(at 102.87 132.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 102.87 132.08 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -11474,7 +11600,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
 			(at 151.13 82.042 90)
 			(hide yes)
 			(show_name no)
@@ -11498,6 +11624,17 @@
 		)
 		(property "Description" "Resistor"
 			(at 151.13 83.82 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 151.13 83.82 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -11902,6 +12039,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" "C9055"
+			(at 41.91 71.12 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "5"
 			(uuid "c42a9f7f-63a7-4441-9009-d3cab55ed26c")
 		)
@@ -12248,7 +12396,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -12298,6 +12446,17 @@
 			)
 		)
 		(property "Description" "Push button switch, generic, two pins"
+			(at 124.46 114.3 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 124.46 114.3 0)
 			(hide yes)
 			(show_name no)
@@ -12382,6 +12541,17 @@
 		)
 		(property "Description" "USB serial converter, crystal-less, UART, SOIC-16"
 			(at 48.006 -0.508 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 49.53 35.56 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12481,7 +12651,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 98.7552 88.9 0)
 			(hide yes)
 			(show_name no)
@@ -12504,6 +12674,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor"
+			(at 97.79 85.09 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 97.79 85.09 0)
 			(hide yes)
 			(show_name no)
@@ -12562,7 +12743,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 57.15 18.0848 0)
 			(hide yes)
 			(show_name no)
@@ -12586,6 +12767,17 @@
 		)
 		(property "Description" "Unpolarized capacitor"
 			(at 53.34 19.05 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 53.34 19.05 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12852,7 +13044,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -13044,6 +13236,17 @@
 				(justify bottom)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 200.66 83.82 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "4"
 			(uuid "2b4df2fc-8d89-4e65-9208-b03fbe49635d")
 		)
@@ -13140,7 +13343,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 233.3752 26.67 0)
 			(hide yes)
 			(show_name no)
@@ -13163,6 +13366,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor"
+			(at 232.41 22.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 232.41 22.86 0)
 			(hide yes)
 			(show_name no)
@@ -13273,7 +13487,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -13326,6 +13540,17 @@
 		)
 		(property "Description" "16-bit I/O expander, I2C, interrupts, w pull-ups, SPDIP-28"
 			(at 59.69 147.32 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 59.69 147.32 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13434,7 +13659,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -13485,6 +13710,17 @@
 			)
 		)
 		(property "Description" "RJ connector, 8P8C (8 positions 8 connected)"
+			(at 257.81 87.63 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 257.81 87.63 0)
 			(hide yes)
 			(show_name no)
@@ -13685,6 +13921,98 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:C")
+		(at 29.21 49.53 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "7f8e5013-d266-4567-8dc0-3d60e6837f46")
+		(property "Reference" "C17"
+			(at 29.718 46.99 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "47uF"
+			(at 29.972 52.07 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_1206_3216Metric"
+			(at 30.1752 53.34 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 29.21 49.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Unpolarized capacitor"
+			(at 29.21 49.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 29.21 49.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "5e1e36c9-2401-4f26-a282-b957c871de7b")
+		)
+		(pin "2"
+			(uuid "e1ce30df-fe2a-4fbb-81fd-3069ebd84d44")
+		)
+		(instances
+			(project "ASTRA"
+				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
+					(reference "C17")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:+3.3V")
 		(at 59.69 121.92 0)
 		(unit 1)
@@ -13793,7 +14121,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
 			(at 102.87 140.462 90)
 			(hide yes)
 			(show_name no)
@@ -13826,6 +14154,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 102.87 142.24 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "6878363d-744c-4c5d-af36-c32351d1bc82")
 		)
@@ -13848,7 +14187,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -13908,6 +14247,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 124.46 121.92 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "b13a9d1f-a8aa-45db-986d-f87998cc8c50")
 		)
@@ -13954,7 +14304,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
 			(at 102.87 132.842 90)
 			(hide yes)
 			(show_name no)
@@ -13978,6 +14328,17 @@
 		)
 		(property "Description" "Resistor"
 			(at 102.87 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 102.87 134.62 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14033,7 +14394,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
 			(at 102.87 137.922 90)
 			(hide yes)
 			(show_name no)
@@ -14057,6 +14418,17 @@
 		)
 		(property "Description" "Resistor"
 			(at 102.87 139.7 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 102.87 139.7 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14114,7 +14486,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 92.71 47.2948 0)
 			(hide yes)
 			(show_name no)
@@ -14138,6 +14510,17 @@
 		)
 		(property "Description" "Unpolarized capacitor"
 			(at 88.9 48.26 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 88.9 48.26 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14319,6 +14702,176 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:C")
+		(at 266.7 148.59 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "a4fb3cfd-a431-435c-a02e-e54cec7112a1")
+		(property "Reference" "C18"
+			(at 270.764 146.558 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "1uF"
+			(at 271.018 150.876 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 267.6652 152.4 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 266.7 148.59 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Unpolarized capacitor"
+			(at 266.7 148.59 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 266.7 148.59 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "88051d01-576f-47a6-ad1e-8069e6a9a09d")
+		)
+		(pin "2"
+			(uuid "ca6f4a78-130f-4405-8753-613eb95bbf87")
+		)
+		(instances
+			(project "ASTRA"
+				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
+					(reference "C18")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:+3.3V")
+		(at 262.89 142.24 0)
+		(mirror y)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "a7ddcdab-74d4-45ca-be96-8942282be910")
+		(property "Reference" "#PWR060"
+			(at 262.89 146.05 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+3.3V"
+			(at 262.89 137.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 262.89 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 262.89 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
+			(at 262.89 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "9d0d15f5-349a-4107-8e8f-daa50ab14724")
+		)
+		(instances
+			(project "ASTRA"
+				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
+					(reference "#PWR060")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:+5V")
 		(at 246.38 109.22 90)
 		(unit 1)
@@ -14430,7 +14983,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 93.98 29.5148 0)
 			(hide yes)
 			(show_name no)
@@ -14454,6 +15007,17 @@
 		)
 		(property "Description" "Unpolarized capacitor"
 			(at 90.17 30.48 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 90.17 30.48 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14799,7 +15363,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -14859,6 +15423,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 124.46 116.84 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "59b91c50-3949-4125-9f34-5385590fe53b")
 		)
@@ -14886,7 +15461,7 @@
 		(dnp no)
 		(uuid "b26d1914-4780-48aa-ab18-f97609cf9b43")
 		(property "Reference" "C13"
-			(at 262.128 146.304 0)
+			(at 262.89 146.558 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -14907,7 +15482,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 260.0452 152.4 0)
 			(hide yes)
 			(show_name no)
@@ -14940,6 +15515,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 259.08 148.59 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "9f3ef0d9-60e7-4540-a5dc-7b162d1b4b51")
 		)
@@ -14961,7 +15547,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -15010,6 +15596,17 @@
 			)
 		)
 		(property "Description" "USB Type A connector"
+			(at 21.59 33.02 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 21.59 33.02 0)
 			(hide yes)
 			(show_name no)
@@ -15312,7 +15909,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 37.7952 53.34 0)
 			(hide yes)
 			(show_name no)
@@ -15335,6 +15932,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor"
+			(at 36.83 49.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 36.83 49.53 0)
 			(hide yes)
 			(show_name no)
@@ -15471,7 +16079,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 248.6152 71.12 0)
 			(hide yes)
 			(show_name no)
@@ -15494,6 +16102,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor"
+			(at 247.65 67.31 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 247.65 67.31 0)
 			(hide yes)
 			(show_name no)
@@ -15605,7 +16224,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -15665,6 +16284,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 124.46 109.22 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "68d606c3-91ff-4848-8b79-eaa6e632ebdf")
 		)
@@ -15686,7 +16316,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -15747,6 +16377,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 257.81 43.18 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "5"
 			(uuid "78be590d-fc21-4d76-8472-9fcc995bd3cd")
 		)
@@ -15786,7 +16427,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -15846,6 +16487,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 88.9 39.37 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "b105cea3-17bb-44f1-85f0-6dd1670d7202")
 		)
@@ -15862,7 +16514,7 @@
 		)
 	)
 	(symbol
-		(lib_id "RF_Module:ESP32-WROOM-32E")
+		(lib_id "RF_Module:ESP32-WROOM-32UE")
 		(at 118.11 60.96 0)
 		(unit 1)
 		(body_style 1)
@@ -15872,8 +16524,8 @@
 		(in_pos_files yes)
 		(dnp no)
 		(fields_autoplaced yes)
-		(uuid "cbe55b21-6be6-41e5-8dee-780b7846be22")
-		(property "Reference" "U2"
+		(uuid "ca7d349f-0a84-4f9e-ae0e-fc8a31d60f02")
+		(property "Reference" "U5"
 			(at 120.2533 22.86 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -15884,7 +16536,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "ESP-32S"
+		(property "Value" "ESP32-WROOM-32UE"
 			(at 120.2533 25.4 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -15895,7 +16547,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "RF_Module:ESP32-WROOM-32E"
+		(property "Footprint" "RF_Module:ESP32-WROOM-32UE"
 			(at 134.62 95.25 0)
 			(hide yes)
 			(show_name no)
@@ -15917,7 +16569,18 @@
 				)
 			)
 		)
-		(property "Description" "RF Module, ESP32-D0WD-V3 SoC, without PSRAM, Wi-Fi 802.11b/g/n, Bluetooth, BLE, 32-bit, 2.7-3.6V, onboard antenna, SMD"
+		(property "Description" "RF Module, ESP32-D0WD-V3 SoC, without PSRAM, Wi-Fi 802.11b/g/n, Bluetooth, BLE, 32-bit, 2.7-3.6V, external antenna, SMD"
+			(at 118.11 60.96 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 118.11 60.96 0)
 			(hide yes)
 			(show_name no)
@@ -15929,117 +16592,117 @@
 			)
 		)
 		(pin "20"
-			(uuid "88b056f3-ae7a-4cf1-87cb-26d5a04c3929")
-		)
-		(pin "13"
-			(uuid "38b79d6d-6ddb-4bdb-87e0-297956720759")
-		)
-		(pin "14"
-			(uuid "f7081574-8164-4f94-8794-2c51d5e40f57")
-		)
-		(pin "27"
-			(uuid "292f1cc9-0e3f-4c15-a056-32ad59be5f9a")
-		)
-		(pin "4"
-			(uuid "14052144-2452-469c-9774-bdbf6e9d3aba")
-		)
-		(pin "2"
-			(uuid "75f00882-0243-4ac9-89e9-517cb31be9c7")
-		)
-		(pin "6"
-			(uuid "69a0b8df-878e-46ab-b85b-1b38c329cd14")
-		)
-		(pin "10"
-			(uuid "fb86e88a-0e28-4418-9da0-1a00b1a645e9")
-		)
-		(pin "19"
-			(uuid "2ac70418-a3fa-47fa-91c3-1e48bf4f7799")
-		)
-		(pin "26"
-			(uuid "561dca13-2af4-4437-ae34-2c021311dda3")
-		)
-		(pin "35"
-			(uuid "75314aef-fe29-47c6-b9b6-c53c5b93657b")
-		)
-		(pin "37"
-			(uuid "b9f2320e-4316-4ad0-93b0-6b825e92e84d")
-		)
-		(pin "3"
-			(uuid "72160342-6491-4dba-815b-08a2c2e1d8ca")
-		)
-		(pin "5"
-			(uuid "50843b6e-07a0-406e-b354-d4b18bc1b84b")
-		)
-		(pin "11"
-			(uuid "b62814df-4e65-450c-9daf-b712be29ac07")
-		)
-		(pin "9"
-			(uuid "ee9287b0-731b-4c7a-ac8f-1ddcca9c5da4")
-		)
-		(pin "12"
-			(uuid "0c237427-8513-4c7a-a25f-39803493eb83")
-		)
-		(pin "8"
-			(uuid "5f0cde23-74f3-4f58-a681-749e1fcb9edb")
-		)
-		(pin "17"
-			(uuid "93408324-5f37-4e87-8673-5926f0b1511e")
-		)
-		(pin "18"
-			(uuid "7be0c61e-8e7c-482c-9b79-20e41a2a8664")
-		)
-		(pin "21"
-			(uuid "21b1fc57-8a66-4dd8-8806-3b0af74330c6")
-		)
-		(pin "7"
-			(uuid "f1d849cd-1c75-4afd-aed4-5f2e0c520577")
-		)
-		(pin "16"
-			(uuid "e8adb89f-5212-40ea-a28a-9bf874b163d6")
-		)
-		(pin "22"
-			(uuid "833673e2-0145-4157-af0c-f9a24bf5a0bb")
+			(uuid "f76d27dd-79b8-4675-865f-430c5ff018df")
 		)
 		(pin "23"
-			(uuid "fc0d453f-8f20-4b26-b5f0-baeede5d9ac8")
+			(uuid "efb419d6-f0a0-4ff5-b35b-214882018189")
 		)
 		(pin "24"
-			(uuid "45929c22-0a78-4ade-9c1e-1a41f6887a0c")
-		)
-		(pin "25"
-			(uuid "d7cbcd28-b6dd-480f-a63c-6e1857b79bd3")
-		)
-		(pin "28"
-			(uuid "2c7cd015-e86e-4494-8294-824ab795e884")
+			(uuid "5d00e2b2-a251-44a7-8666-bb78077ec9a4")
 		)
 		(pin "29"
-			(uuid "a4be1c52-7e6b-4d7e-8c87-1d5b9fd7f4a1")
+			(uuid "9da1a9db-1496-4297-a8e1-643b1413ed52")
 		)
-		(pin "30"
-			(uuid "d5e84e69-1651-4059-a249-60a0b255906d")
+		(pin "2"
+			(uuid "3fb295be-3a11-458e-8a9d-5275c3cc5e35")
 		)
-		(pin "31"
-			(uuid "d53bfb79-9de1-463e-a678-a9574ff1e501")
+		(pin "7"
+			(uuid "1ba973f1-4712-458f-9892-470ca8d997e3")
+		)
+		(pin "5"
+			(uuid "c6391376-608d-4423-842e-07d8966c16d9")
+		)
+		(pin "16"
+			(uuid "82606803-8d00-4c7e-89b9-156891f92a2f")
+		)
+		(pin "25"
+			(uuid "68a779b3-eb9d-4d2a-968f-1b862f1cf9f9")
+		)
+		(pin "11"
+			(uuid "757be69b-f96c-459c-b2e5-2b5729ece932")
+		)
+		(pin "13"
+			(uuid "62ccbe8e-fcb5-4077-b605-4fbb3b980b79")
+		)
+		(pin "21"
+			(uuid "49b02c44-f4f2-4607-ac5b-711954cf2a92")
+		)
+		(pin "27"
+			(uuid "45c97fc9-c9be-4d33-b028-ed3bf78a9de1")
+		)
+		(pin "3"
+			(uuid "081b5c60-8587-4757-9478-5e447a986ee3")
+		)
+		(pin "10"
+			(uuid "7a10cbdd-a064-4772-b6b8-e6178014e788")
+		)
+		(pin "8"
+			(uuid "a37ea2f5-4a48-4c04-9a61-dee79d65f6cb")
+		)
+		(pin "4"
+			(uuid "b52946a7-b05d-45a6-90cf-35b5ef324bd3")
+		)
+		(pin "9"
+			(uuid "6f67b410-f6ce-4ca2-a1f1-233f1cc631a3")
+		)
+		(pin "12"
+			(uuid "1c9b3cfb-175d-493f-a0bd-336e627e6fec")
+		)
+		(pin "14"
+			(uuid "102b624c-c28a-4a1a-b93a-a9bb66422ffc")
+		)
+		(pin "6"
+			(uuid "82229879-b6ff-4492-986b-2426efb1afef")
+		)
+		(pin "17"
+			(uuid "e304454c-a608-40c4-bc50-7d709d63c8c4")
+		)
+		(pin "19"
+			(uuid "942fbe74-ed9b-4ea2-b5eb-8692087805dd")
+		)
+		(pin "18"
+			(uuid "d3039af6-1d04-471c-b700-1f4ca6f9c3f9")
+		)
+		(pin "22"
+			(uuid "a41ee201-0f0a-4920-ac2d-187d742339bf")
+		)
+		(pin "26"
+			(uuid "6352a08b-ab3c-4499-be70-9e01acb4043a")
+		)
+		(pin "28"
+			(uuid "10ebefd4-0b16-42fd-9326-bf83db609410")
 		)
 		(pin "32"
-			(uuid "10a5c8e8-7182-4ce9-a0df-62ebee46a627")
+			(uuid "793b4a5f-da6d-48a9-94a3-d115d49e3bfc")
 		)
 		(pin "33"
-			(uuid "85faef38-1d1b-4482-a9b8-94aa417492b4")
+			(uuid "868ff327-47be-460a-a3cc-4818dded29fd")
 		)
-		(pin "34"
-			(uuid "19ba2418-c27b-4224-a6b1-c40515b1b85a")
+		(pin "35"
+			(uuid "5267e28e-7b6d-4a6b-abce-e2722fdb34a9")
 		)
 		(pin "36"
-			(uuid "99db0ab0-af06-418c-9954-6ac3039066b8")
+			(uuid "a2f97371-21ce-4dc9-ad67-a9e70f4cb073")
+		)
+		(pin "30"
+			(uuid "f6a902ac-3a7c-423b-bbfe-85fba6863a67")
+		)
+		(pin "31"
+			(uuid "20a4365a-b1d8-4e33-8d10-bee0df35eaf0")
+		)
+		(pin "34"
+			(uuid "cbd85cca-5bc7-4d6f-ae29-3a01dc874386")
 		)
 		(pin "[1,15,38,39]"
-			(uuid "da5ffb23-db78-4074-8544-1496cad5441b")
+			(uuid "46da50d1-0e3f-472f-bdd6-844dd798d90c")
+		)
+		(pin "37"
+			(uuid "b0de04d6-127d-446b-a5bd-a930073f2f39")
 		)
 		(instances
 			(project "ASTRA"
 				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
-					(reference "U2")
+					(reference "U5")
 					(unit 1)
 				)
 			)
@@ -16547,7 +17210,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
 			(at 90.17 19.812 90)
 			(hide yes)
 			(show_name no)
@@ -16571,6 +17234,17 @@
 		)
 		(property "Description" "Resistor"
 			(at 90.17 21.59 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 90.17 21.59 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -16626,7 +17300,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_0805_2012Metric_Pad1.15x1.40mm_HandSolder"
+		(property "Footprint" "LED_SMD:LED_0805_2012Metric"
 			(at 124.46 132.08 0)
 			(hide yes)
 			(show_name no)
@@ -16670,6 +17344,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 124.46 132.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "43332005-82f4-4484-90ab-c7f6cc006e10")
 		)
@@ -16691,7 +17376,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -16742,6 +17427,17 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 255.27 106.68 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 255.27 106.68 0)
 			(hide yes)
 			(show_name no)
@@ -16806,7 +17502,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 65.7352 74.93 0)
 			(hide yes)
 			(show_name no)
@@ -16839,6 +17535,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 64.77 71.12 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "5f572b81-ee60-4df4-a383-6770050f4a61")
 		)
@@ -16861,7 +17568,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -16911,6 +17618,17 @@
 			)
 		)
 		(property "Description" "Push button switch, generic, two pins"
+			(at 124.46 119.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 124.46 119.38 0)
 			(hide yes)
 			(show_name no)
@@ -17021,7 +17739,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -17071,6 +17789,17 @@
 			)
 		)
 		(property "Description" "Polarized capacitor"
+			(at 243.84 22.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 243.84 22.86 0)
 			(hide yes)
 			(show_name no)
@@ -17364,7 +18093,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_0805_2012Metric_Pad1.15x1.40mm_HandSolder"
+		(property "Footprint" "LED_SMD:LED_0805_2012Metric"
 			(at 124.46 134.62 0)
 			(hide yes)
 			(show_name no)
@@ -17398,6 +18127,17 @@
 			)
 		)
 		(property "Sim.Pins" "1=K 2=A"
+			(at 124.46 134.62 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 124.46 134.62 0)
 			(hide yes)
 			(show_name no)
@@ -17588,7 +18328,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -17648,6 +18388,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 124.46 111.76 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "f51fed47-08b1-435e-b7e0-861306ddd314")
 		)
@@ -17658,87 +18409,6 @@
 			(project "ASTRA"
 				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
 					(reference "SW5")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:C_Polarized")
-		(at 29.21 49.53 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "ea58cb72-9f47-4bd4-95a0-831c93ee4e8b")
-		(property "Reference" "C17"
-			(at 33.02 47.498 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(property "Value" "47uF"
-			(at 28.956 52.07 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(property "Footprint" "Capacitor_THT:CP_Radial_D10.0mm_P5.00mm"
-			(at 30.1752 53.34 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 29.21 49.53 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Polarized capacitor"
-			(at 29.21 49.53 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "12edf4bd-0bb2-423d-a6dd-5fa48c7796af")
-		)
-		(pin "2"
-			(uuid "2c415931-296d-4e7f-981d-dd053f6bfef7")
-		)
-		(instances
-			(project "ASTRA"
-				(path "/b5ed9a09-c593-4f23-9cbf-a235c2c98de3"
-					(reference "C17")
 					(unit 1)
 				)
 			)
@@ -17830,7 +18500,7 @@
 		(body_style 1)
 		(exclude_from_sim no)
 		(in_bom yes)
-		(on_board yes)
+		(on_board no)
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "ee73967e-e1a2-4454-9e11-4c8dc11a408d")
@@ -17856,7 +18526,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 157.1752 187.96 0)
 			(hide yes)
 			(show_name no)
@@ -17879,6 +18549,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor"
+			(at 156.21 184.15 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 156.21 184.15 0)
 			(hide yes)
 			(show_name no)
@@ -18012,7 +18693,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_0805_2012Metric_Pad1.15x1.40mm_HandSolder"
+		(property "Footprint" "LED_SMD:LED_0805_2012Metric"
 			(at 124.46 137.16 0)
 			(hide yes)
 			(show_name no)
@@ -18046,6 +18727,17 @@
 			)
 		)
 		(property "Sim.Pins" "1=K 2=A"
+			(at 124.46 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 124.46 137.16 0)
 			(hide yes)
 			(show_name no)
@@ -18390,8 +19082,8 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(in_pos_files yes)
 		(dnp no)
 		(fields_autoplaced yes)
@@ -18441,6 +19133,17 @@
 			)
 		)
 		(property "Description" "RJ connector, 8P8C (8 positions 8 connected)"
+			(at 109.22 185.42 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 109.22 185.42 0)
 			(hide yes)
 			(show_name no)
@@ -18646,8 +19349,8 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(in_pos_files yes)
 		(dnp no)
 		(uuid "fa540950-9e26-4707-8866-45853eb1816a")
@@ -18706,6 +19409,17 @@
 				)
 			)
 		)
+		(property "LCSC Part #" ""
+			(at 147.32 182.88 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "9"
 			(uuid "d5ab4462-e3a5-46c4-9782-d0ccc7672e07")
 		)
@@ -18748,7 +19462,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -18938,6 +19652,17 @@
 					(size 1.27 1.27)
 				)
 				(justify bottom)
+			)
+		)
+		(property "LCSC Part #" ""
+			(at 200.66 39.37 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
 			)
 		)
 		(pin "4"
@@ -19191,7 +19916,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_0805_2012Metric_Pad1.15x1.40mm_HandSolder"
+		(property "Footprint" "LED_SMD:LED_0805_2012Metric"
 			(at 124.46 142.24 0)
 			(hide yes)
 			(show_name no)
@@ -19225,6 +19950,17 @@
 			)
 		)
 		(property "Sim.Pins" "1=K 2=A"
+			(at 124.46 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC Part #" ""
 			(at 124.46 142.24 0)
 			(hide yes)
 			(show_name no)
