@@ -12,6 +12,13 @@ from app.telescopeLink import Telescope, current_telescope  # Updated import
 
 interface_bp = Blueprint("interface", __name__, url_prefix="/interface")
 
+
+def _require_telescope_control_access():
+    from flask_login import current_user
+    if getattr(current_user, 'is_limited', False):
+        return jsonify({"status": "error", "message": "Limited accounts cannot control telescopes."}), 403
+    return None
+
 _CELESTIAL_DEFAULT_VMAGS = {
     "sun": -26.74,
     "moon": -12.70,
@@ -30,6 +37,10 @@ def update_camera():
     from flask_login import current_user
     if not current_user.is_authenticated:
         return jsonify({"status": "error", "message": "Must be logged in to control telescope"}), 401
+
+    guard = _require_telescope_control_access()
+    if guard:
+        return guard
     
     data = request.json or {}
     response = {"status": "success", "message": "Settings updated"}
@@ -245,6 +256,11 @@ def take_photo():
         from flask_login import current_user
         if not current_user.is_authenticated:
             return jsonify({"status": "error", "message": "Must be logged in to take photos"}), 401
+
+        guard = _require_telescope_control_access()
+        if guard:
+            return guard
+
         current_id = current_user.get_id()
         telescope_id = (request.json or {}).get("telescopeId") or (request.json or {}).get("telescope_id") or (session.get('selected_telescope') or {}).get('telescope_id')
         if not telescope_id:

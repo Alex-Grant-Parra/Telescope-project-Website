@@ -11,6 +11,13 @@ from app.telescopeLink import Telescope
 
 star_map_bp = Blueprint("star_map", __name__)
 
+
+def _require_telescope_control_access():
+    from flask_login import current_user
+    if getattr(current_user, 'is_limited', False):
+        return jsonify({"status": "error", "message": "Limited accounts cannot control telescopes."}), 403
+    return None
+
 _CELESTIAL_DEFAULT_VMAGS = {
     "sun": -26.74,
     "moon": -12.70,
@@ -361,6 +368,10 @@ def track_star():
             "error": "Must be logged in",
             "message": "Must be logged in to control telescope"
         }), 401
+
+    guard = _require_telescope_control_access()
+    if guard:
+        return guard
     
     data = request.get_json()
     ra = data.get("ra")
@@ -450,6 +461,10 @@ def get_tracking_status():
 
 @star_map_bp.route("/stop_tracking", methods=["POST"])
 def stop_tracking():
+    guard = _require_telescope_control_access()
+    if guard:
+        return guard
+
     # Stop tracking the current object
     # Check if a telescope is selected
     selected_telescope = session.get('selected_telescope')
